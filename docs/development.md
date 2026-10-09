@@ -17,7 +17,7 @@ pnpm dev
 
 Use Codex's checked-in `.codex/environments/environment.toml` for automatic worktree setup and Run/Stop/Reset/Verify/Status actions. The same commands work from a terminal. Setup uses `node scripts/dev/setup.mjs` so installation works before dependencies exist. No personal `.env` is required.
 
-The launcher requires process inspection, loopback sockets and Docker access. A coding-agent sandbox may need permission to run it; denial of process inspection fails closed. Logs live in the instance's `logs/` directory, and `pnpm dev:status --json` reports safe endpoints and errors. After changing launcher code or dependencies, stop and start again; app source changes reload automatically.
+The launcher requires process inspection, loopback sockets and Docker access. A coding-agent sandbox may need permission to run it; denial of process inspection fails closed. Logs live in the instance's `logs/` directory, and `pnpm dev:status --json` reports safe endpoints and errors. After changing launcher code or dependencies, stop and start again; app source changes reload automatically. After restarting Docker, Run restores the development service and reconnects the preview without reseeding, including when Docker assigns a different database port.
 
 ## Everyday flow
 
@@ -129,7 +129,7 @@ The integration test releases its owned resources in final cleanup, retaining ev
 
 ## Verification and evidence
 
-`pnpm verify` runs typechecking, an isolated build, unit tests and the workflow integration suite. It writes `report.json`, `checks.log`, screenshots and cleanup results under the printed evidence directory. Tests exercise two simultaneous worktrees plus a verification instance, cross-database access denial, database/file/client persistence, renderer hot reload, reset/token rotation, native launch/stop, supervisor crash recovery and disposal. Protected server configuration is excluded from Vite's served paths. The test helper in `tests/integration/workflow.test.ts` drives real Electron windows with Playwright.
+`pnpm verify` runs typechecking, an isolated build, unit tests and the workflow integration suite. It writes `report.json`, `checks.log`, screenshots and cleanup results under the printed evidence directory. Tests exercise two simultaneous worktrees plus a verification instance, cross-database access denial, database/file/client persistence, renderer hot reload, reset/token rotation, native launch/stop, supervisor crash recovery, database-container recreation and disposal. Protected server configuration is excluded from Vite's served paths. The test helper in `tests/integration/workflow.test.ts` drives real Electron windows with Playwright.
 
 Future product verification: keep deterministic regression checks and agent exploration distinct in reports. Extend the driver with conversation, recorded input/run/context/output inspection, attachment and voice controls as those features land. Observation endpoints must remain authenticated and development-only.
 

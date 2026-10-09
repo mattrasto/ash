@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import postgres from 'postgres';
 import { _electron, type ElectronApplication } from 'playwright';
 import { devRoot, exec, atomic, json, exists, childEnvironment, id, alive, sleep } from '../../scripts/dev/io.ts';
-import { workspace, createInstance, readInstance, type Workspace } from '../../scripts/dev/workspace.ts';
+import { workspace, createInstance, instancePath, type Workspace } from '../../scripts/dev/workspace.ts';
 import { startInstance, stopInstance, resetInstance, disposeInstance, runtime } from '../../scripts/dev/lifecycle.ts';
 import { buildMain } from '../../scripts/dev/build.ts';
 import { ServerConfig, type Instance } from '../../packages/shared/src/index.ts';
@@ -174,6 +174,17 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       try { assert.equal((await check`SELECT 1 FROM pg_roles WHERE rolname IN (${disposable.ownerRole}, ${disposable.runtimeRole})`).length, 0); }
       finally { await check.end(); }
     });
+    await t.test('recreating development infrastructure reconnects existing previews without reseeding', async () => {
+      const cluster = await json<Cluster>(join(root, 'cluster.json'));
+      const name = `ash-dev-${cluster.id}`;
+      assert.equal((await exec('docker', ['container', 'inspect', '--format', '{{index .Config.Labels "dev.ash.cluster"}}', name])).stdout.trim(), cluster.id);
+      await exec('docker', ['rm', '-f', name]);
+      assert.equal((await createInstance(wa)).id, a.id);
+      await Promise.all([startInstance(wa, a.id, {headless:true}), startInstance(wb, b.id, {headless:true}), startInstance(wa, verify.id, {headless:true})]);
+      assert.equal((await state(a)).note, '');
+      assert.equal((await state(b)).note, 'Feature B');
+      assert.equal((await state(verify)).note, 'Verification');
+    });
     await t.test('verification disposal leaves the human preview data intact', async () => {
       await disposeInstance(wa, verify.id); instances.splice(instances.findIndex(i => i.id === verify.id), 1);
       assert.equal(await exists(verify.root), false); assert.equal((await state(b)).note, 'Feature B');
@@ -182,23 +193,38 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
     for (const app of apps) await app.close().catch(() => {});
     const cleanupErrors: string[] = [];
     for (const owned of instances) {
-      try { await disposeInstance(owned.ws, owned.id); } catch (e) { cleanupErrors.push((e as Error).message); }
+      try {
+        if (await exists(join(instancePath(owned.ws, owned.id), 'instance.json'))) {
+          await stopInstance(owned.ws, owned.id);
+          await disposeInstance(owned.ws, owned.id);
+        }
+      } catch (e) { cleanupErrors.push((e as Error).message); }
     }
     foreign.close();
     const clusterPath = join(root, 'cluster.json');
     if (await exists(clusterPath)) {
       const cluster = await json<Cluster>(clusterPath);
-      const db = connect(cluster);
-      try {
-        const rows = await db`SELECT datname FROM pg_database WHERE datname LIKE 'ash_d_%'`;
-        if (rows.length) cleanupErrors.push(`${rows.length} databases remain after disposal`);
-        const roles = await db`SELECT 1 FROM pg_roles WHERE rolname LIKE 'ash_r_%' OR rolname LIKE 'ash_o_%'`;
-        if (roles.length) cleanupErrors.push(`${roles.length} instance roles remain after disposal`);
-      } finally { await db.end(); }
       const name = `ash-dev-${cluster.id}`;
-      const label = (await exec('docker', ['inspect', '--format', '{{index .Config.Labels "dev.ash.cluster"}}', name])).stdout.trim();
-      assert.equal(label, cluster.id);
-      await exec('docker', ['rm', '-f', name]); await exec('docker', ['volume', 'rm', name]);
+      let containerExists = false;
+      try {
+        const label = (await exec('docker', ['container', 'inspect', '--format', '{{index .Config.Labels "dev.ash.cluster"}}', name])).stdout.trim();
+        assert.equal(label, cluster.id); containerExists = true;
+      } catch (e) { if (!/No such (object|container)/i.test((e as {stderr?:string}).stderr ?? '')) cleanupErrors.push((e as Error).message); }
+      if (containerExists) {
+        const db = connect(cluster);
+        try {
+          const rows = await db`SELECT datname FROM pg_database WHERE datname LIKE 'ash_d_%'`;
+          if (rows.length) cleanupErrors.push(`${rows.length} databases remain after disposal`);
+          const roles = await db`SELECT 1 FROM pg_roles WHERE rolname LIKE 'ash_r_%' OR rolname LIKE 'ash_o_%'`;
+          if (roles.length) cleanupErrors.push(`${roles.length} instance roles remain after disposal`);
+        } catch (e) { cleanupErrors.push((e as Error).message); }
+        finally { await db.end(); }
+        await exec('docker', ['rm', '-f', name]);
+      }
+      try {
+        const label = (await exec('docker', ['volume', 'inspect', '--format', '{{index .Labels "dev.ash.cluster"}}', name])).stdout.trim();
+        assert.equal(label, cluster.id); await exec('docker', ['volume', 'rm', name]);
+      } catch (e) { if (!(e as {stderr?:string}).stderr?.includes('no such volume')) cleanupErrors.push((e as Error).message); }
     }
     for (const path of [aPath,bPath]) await exec('git', ['worktree', 'remove', '--force', path], {cwd:source}).catch(e => cleanupErrors.push(e.message));
     await atomic(join(evidence,'workflow.json'), { evidence, cleanupErrors, completedAt: new Date().toISOString() });

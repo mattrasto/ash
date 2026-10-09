@@ -18,9 +18,9 @@ export async function ensureCluster(root: string, checkout: string): Promise<Clu
     await atomic(path, cluster);
     const name = `ash-dev-${cluster.id}`;
     try {
-      const { stdout } = await exec('docker', ['inspect', '--format', '{{index .Config.Labels "dev.ash.cluster"}}', name]);
+      const { stdout } = await exec('docker', ['container', 'inspect', '--format', '{{index .Config.Labels "dev.ash.cluster"}}', name]);
       if (stdout.trim() !== cluster.id) throw new Error('Development container ownership mismatch');
-    } catch (e) { if (!(e as {stderr?: string}).stderr?.includes('No such object')) throw e; }
+    } catch (e) { if (!/No such (object|container)/i.test((e as {stderr?: string}).stderr ?? '')) throw e; }
     await exec('docker', ['compose', '-f', join(checkout, 'compose.yaml'), '-p', name, 'up', '-d', '--wait'], {
       env: { ...process.env, ASH_DEV_CLUSTER_ID: cluster.id, ASH_DEV_PG_PASSWORD: cluster.password }, timeout: 120_000,
     });
@@ -43,7 +43,7 @@ export async function ensureCluster(root: string, checkout: string): Promise<Clu
 export async function checkedCluster(instance: Instance) {
   const cluster = await json<Cluster>(join(instance.devRoot, 'cluster.json'));
   if (cluster.id !== instance.clusterId) throw new Error('Cluster ownership mismatch');
-  const { stdout } = await exec('docker', ['inspect', '--format', '{{index .Config.Labels "dev.ash.cluster"}}', `ash-dev-${cluster.id}`]);
+  const { stdout } = await exec('docker', ['container', 'inspect', '--format', '{{index .Config.Labels "dev.ash.cluster"}}', `ash-dev-${cluster.id}`]);
   if (stdout.trim() !== cluster.id) throw new Error('Container ownership mismatch');
   const db = connect(cluster);
   try {

@@ -2,7 +2,7 @@ import { mkdir, realpath } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { Instance, Fixture, SCHEMA_VERSION } from '../../packages/shared/src/index.ts';
 import { atomic, exists, guardedPath, id, json, withLock, exec } from './io.ts';
-import { checkedCluster, ensureCluster, provision, assertDatabaseOwner } from './database.ts';
+import { ensureCluster, provision, assertDatabaseOwner } from './database.ts';
 
 export interface Workspace { version: 1; id: string; checkout: string; label: string; devRoot: string; previewId: string }
 export async function workspace(checkout: string, devRoot: string): Promise<Workspace> {
@@ -43,7 +43,8 @@ export async function createInstance(ws: Workspace, profile: 'preview' | 'verify
     await guardedPath(ws.devRoot, root);
     if (await exists(join(root, 'instance.json'))) {
       const prior = await readInstance(ws, instanceId);
-      const cluster = await checkedCluster(prior);
+      const cluster = await ensureCluster(ws.devRoot, ws.checkout);
+      if (cluster.id !== prior.clusterId) throw new Error('Cluster ownership mismatch');
       if (!await assertDatabaseOwner(prior, cluster) || !await exists(join(root, 'server.json'))) throw new Error('Instance setup is incomplete; reset it explicitly');
       return prior;
     }

@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16@sha256:5a65324fe84dc41709ff914e90b07f3e2f577073ed27bf917d4873aca0c9ec51
     container_name: ash-dev-${ASH_DEV_CLUSTER_ID}
+    network_mode: bridge
     labels:
       dev.ash.cluster: ${ASH_DEV_CLUSTER_ID}
     environment:

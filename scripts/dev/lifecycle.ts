@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { Instance, Fixture, ServerConfig } from '../../packages/shared/src/index.ts';
 import { atomic, exists, json, id, withLock, processRef, alive, stopProcess, sleep, childEnvironment, type ProcessRef } from './io.ts';
 import { type Workspace, readInstance, directories } from './workspace.ts';
-import { assertDatabaseOwner, checkedCluster, dropDatabase, provision } from './database.ts';
+import { assertDatabaseOwner, checkedCluster, ensureCluster, dropDatabase, provision } from './database.ts';
 
 export interface Runtime {
   phase: 'starting' | 'ready' | 'stopped' | 'failed'; instanceId: string; generation: string;
@@ -40,13 +40,30 @@ async function recover(instance: Instance, state: Runtime) {
 export async function startInstance(ws: Workspace, instanceId: string, options: { headless?: boolean; windowed?: boolean; background?: boolean } = {}) {
   return withLock(ws.devRoot, `instance-${instanceId}`, async () => {
     const instance = await readInstance(ws, instanceId);
-    const cluster = await checkedCluster(instance);
+    const cluster = await ensureCluster(ws.devRoot, ws.checkout);
+    if (cluster.id !== instance.clusterId) throw new Error('Cluster ownership mismatch');
     if (!await assertDatabaseOwner(instance, cluster)) throw new Error('Missing instance database; reset explicitly');
+    const configPath = join(instance.root, 'server.json');
+    const config = ServerConfig.parse(await json(configPath));
+    const databaseUrl = new URL(config.databaseUrl);
+    if (databaseUrl.port !== String(cluster.port)) {
+      databaseUrl.port = String(cluster.port);
+      await atomic(configPath, {...config, databaseUrl:databaseUrl.toString()});
+    }
     const prior = await runtime(instance);
     if (prior && await alive(prior.supervisor)) {
       if (prior.phase !== 'ready') throw new Error('Instance is not ready; inspect status or stop it');
-      if (!options.headless) await control(instance, 'open', options);
-      return prior;
+      let healthy = false;
+      try {
+        const response = await fetch(`${prior.serverUrl}/health`, {headers:{authorization:`Bearer ${config.token}`},signal:AbortSignal.timeout(2000)});
+        const health = await response.json() as {instanceId?:string;generation?:string};
+        healthy = response.ok && health.instanceId === instance.id && health.generation === instance.generation;
+      } catch {}
+      if (healthy) {
+        if (!options.headless) await control(instance, 'open', options);
+        return (await runtime(instance))!;
+      }
+      await stopUnlocked(instance);
     }
     if (prior) await recover(instance, prior);
     const log = await open(join(instance.root, 'logs/supervisor.log'), 'a', 0o600);
