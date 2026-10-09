@@ -1,0 +1,110 @@
+import postgres from 'postgres';
+import { join } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { type Instance, SCHEMA_VERSION } from '../../packages/shared/src/index.ts';
+import { atomic, exec, exists, id, json, secret, withLock } from './io.ts';
+
+export interface Cluster { id: string; password: string; port: number }
+export function databaseUrl(cluster: Cluster, database = 'postgres', role = 'ash_admin', password = cluster.password) {
+  return `postgres://${role}:${password}@127.0.0.1:${cluster.port}/${database}`;
+}
+export function connect(cluster: Cluster, database = 'postgres') {
+  return postgres(databaseUrl(cluster, database), { max: 1, connect_timeout: 5, onnotice: () => {} });
+}
+export async function ensureCluster(root: string, checkout: string): Promise<Cluster> {
+  return withLock(root, 'cluster', async () => {
+    const path = join(root, 'cluster.json');
+    const cluster = await exists(path) ? await json<Cluster>(path) : { id: id(), password: secret(), port: 0 };
+    await atomic(path, cluster);
+    const name = `ash-dev-${cluster.id}`;
+    try {
+      const { stdout } = await exec('docker', ['inspect', '--format', '{{index .Config.Labels "dev.ash.cluster"}}', name]);
+      if (stdout.trim() !== cluster.id) throw new Error('Development container ownership mismatch');
+    } catch (e) { if (!(e as {stderr?: string}).stderr?.includes('No such object')) throw e; }
+    await exec('docker', ['compose', '-f', join(checkout, 'compose.yaml'), '-p', name, 'up', '-d', '--wait'], {
+      env: { ...process.env, ASH_DEV_CLUSTER_ID: cluster.id, ASH_DEV_PG_PASSWORD: cluster.password }, timeout: 120_000,
+    });
+    const { stdout } = await exec('docker', ['port', name, '5432/tcp']);
+    const match = stdout.trim().match(/^127\.0\.0\.1:(\d+)$/);
+    if (!match) throw new Error('Development database is not bound exclusively to loopback');
+    cluster.port = Number(match[1]);
+    await atomic(path, cluster);
+    const db = connect(cluster);
+    try {
+      await db`CREATE TABLE IF NOT EXISTS ash_dev_cluster (id text PRIMARY KEY)`;
+      const rows = await db`SELECT id FROM ash_dev_cluster`;
+      if (rows.length && rows[0].id !== cluster.id) throw new Error('Development database cluster identity mismatch');
+      if (!rows.length) await db`INSERT INTO ash_dev_cluster VALUES (${cluster.id})`;
+      await db.unsafe('REVOKE ALL ON DATABASE postgres FROM PUBLIC');
+    } finally { await db.end(); }
+    return cluster;
+  });
+}
+export async function checkedCluster(instance: Instance) {
+  const cluster = await json<Cluster>(join(instance.devRoot, 'cluster.json'));
+  if (cluster.id !== instance.clusterId) throw new Error('Cluster ownership mismatch');
+  const { stdout } = await exec('docker', ['inspect', '--format', '{{index .Config.Labels "dev.ash.cluster"}}', `ash-dev-${cluster.id}`]);
+  if (stdout.trim() !== cluster.id) throw new Error('Container ownership mismatch');
+  const db = connect(cluster);
+  try {
+    const rows = await db`SELECT id FROM ash_dev_cluster`;
+    if (rows[0]?.id !== cluster.id) throw new Error('Cluster identity mismatch');
+  } finally { await db.end(); }
+  return cluster;
+}
+function ident(value: string) {
+  if (!/^[a-z][a-z0-9_]*$/.test(value)) throw new Error('Unsafe SQL identifier');
+  return `"${value}"`;
+}
+const marker = (instance: Instance) => `ash-dev:${instance.clusterId}:${instance.id}`;
+export async function assertDatabaseOwner(instance: Instance, cluster: Cluster) {
+  const db = connect(cluster);
+  try {
+    const rows = await db`SELECT shobj_description(oid, 'pg_database') AS marker, pg_get_userbyid(datdba) AS owner FROM pg_database WHERE datname = ${instance.database}`;
+    if (!rows.length) return false;
+    if (rows[0].marker !== marker(instance) || rows[0].owner !== instance.ownerRole) throw new Error('Database ownership mismatch; refusing mutation');
+    return true;
+  } finally { await db.end(); }
+}
+export async function provision(instance: Instance, cluster: Cluster) {
+  const admin = connect(cluster);
+  const password = secret();
+  try {
+    await admin.begin(async tx => {
+      await tx.unsafe(`CREATE ROLE ${ident(instance.ownerRole)} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE`);
+      await tx.unsafe(`CREATE ROLE ${ident(instance.runtimeRole)} LOGIN PASSWORD '${password}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT`);
+      for (const role of [instance.ownerRole, instance.runtimeRole]) await tx.unsafe(`COMMENT ON ROLE ${ident(role)} IS '${marker(instance)}'`);
+    });
+    await admin.unsafe(`CREATE DATABASE ${ident(instance.database)} OWNER ${ident(instance.ownerRole)}`);
+    await admin.unsafe(`COMMENT ON DATABASE ${ident(instance.database)} IS '${marker(instance)}'`);
+    await admin.unsafe(`REVOKE ALL ON DATABASE ${ident(instance.database)} FROM PUBLIC`);
+    await admin.unsafe(`GRANT CONNECT ON DATABASE ${ident(instance.database)} TO ${ident(instance.runtimeRole)}`);
+  } finally { await admin.end(); }
+  const db = connect(cluster, instance.database);
+  try {
+    await db.unsafe(`SET ROLE ${ident(instance.ownerRole)}`);
+    await db.unsafe('REVOKE CREATE ON SCHEMA public FROM PUBLIC');
+    await db`CREATE TABLE dev_meta (instance_id text PRIMARY KEY, generation text NOT NULL, schema_version integer NOT NULL)`;
+    await db`INSERT INTO dev_meta VALUES (${instance.id}, ${instance.generation}, ${SCHEMA_VERSION})`;
+    await db`CREATE TABLE dev_scratch (id integer PRIMARY KEY CHECK (id = 1), note text NOT NULL, count integer NOT NULL DEFAULT 0)`;
+    await db`INSERT INTO dev_scratch VALUES (1, ${instance.fixture === 'empty' ? '' : 'A little space to try things out.'}, 0)`;
+    await db.unsafe(`GRANT USAGE ON SCHEMA public TO ${ident(instance.runtimeRole)}`);
+    await db.unsafe(`GRANT SELECT ON dev_meta, dev_scratch TO ${ident(instance.runtimeRole)}`);
+    await db.unsafe(`GRANT UPDATE ON dev_scratch TO ${ident(instance.runtimeRole)}`);
+  } finally { await db.end(); }
+  await writeFile(join(instance.root, 'files/note.txt'), '', { mode: 0o600 });
+  await atomic(join(instance.root, 'server.json'), { instance, databaseUrl: databaseUrl(cluster, instance.database, instance.runtimeRole, password), token: secret() });
+}
+export async function dropDatabase(instance: Instance, cluster: Cluster) {
+  const databaseExists = await assertDatabaseOwner(instance, cluster);
+  const db = connect(cluster);
+  try {
+    const roles = await db`SELECT rolname, shobj_description(oid, 'pg_authid') AS marker FROM pg_roles WHERE rolname IN (${instance.runtimeRole}, ${instance.ownerRole})`;
+    if (roles.some(role => role.marker !== marker(instance))) throw new Error('Role ownership mismatch; refusing mutation');
+    if (databaseExists) {
+      await db`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = ${instance.database} AND pid <> pg_backend_pid()`;
+      await db.unsafe(`DROP DATABASE ${ident(instance.database)}`);
+    }
+    for (const role of roles) await db.unsafe(`DROP ROLE ${ident(role.rolname)}`);
+  } finally { await db.end(); }
+}

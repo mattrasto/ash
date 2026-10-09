@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:16@sha256:5a65324fe84dc41709ff914e90b07f3e2f577073ed27bf917d4873aca0c9ec51
+    container_name: ash-dev-${ASH_DEV_CLUSTER_ID}
+    labels:
+      dev.ash.cluster: ${ASH_DEV_CLUSTER_ID}
+    environment:
+      POSTGRES_USER: ash_admin
+      POSTGRES_PASSWORD: ${ASH_DEV_PG_PASSWORD}
+      POSTGRES_DB: postgres
+    ports:
+      - "127.0.0.1::5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ash_admin -d postgres"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+volumes:
+  pgdata:
+    name: ash-dev-${ASH_DEV_CLUSTER_ID}
+    labels:
+      dev.ash.cluster: ${ASH_DEV_CLUSTER_ID}

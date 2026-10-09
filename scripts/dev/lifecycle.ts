@@ -1,0 +1,109 @@
+import { spawn } from 'node:child_process';
+import { open, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { Instance, Fixture, ServerConfig } from '../../packages/shared/src/index.ts';
+import { atomic, exists, json, id, withLock, processRef, alive, stopProcess, sleep, childEnvironment, type ProcessRef } from './io.ts';
+import { type Workspace, readInstance, directories } from './workspace.ts';
+import { assertDatabaseOwner, checkedCluster, dropDatabase, provision } from './database.ts';
+
+export interface Runtime {
+  phase: 'starting' | 'ready' | 'stopped' | 'failed'; instanceId: string; generation: string;
+  supervisor: ProcessRef; children: ProcessRef[]; serverUrl?: string; webUrl?: string; controlUrl?: string;
+  source?: { commit: string; hash: string }; error?: string;
+}
+export async function runtime(instance: Instance) {
+  const path = join(instance.root, 'runtime.json');
+  if (!await exists(path)) return null;
+  const value = await json<Runtime>(path);
+  if (value.instanceId !== instance.id || value.generation !== instance.generation) throw new Error('Runtime identity mismatch');
+  return value;
+}
+export async function control(instance: Instance, action: string, options?: { windowed?: boolean; background?: boolean }) {
+  const state = await runtime(instance);
+  if (!state?.controlUrl || !await alive(state.supervisor)) throw new Error('Instance supervisor is not running');
+  const config = ServerConfig.parse(await json(join(instance.root, 'server.json')));
+  const query = new URLSearchParams();
+  if (options?.windowed) query.set('windowed', 'true');
+  if (options?.background) query.set('background', 'true');
+  const response = await fetch(`${state.controlUrl}/${action}?${query}`, { method: 'POST', headers: { authorization: `Bearer ${config.token}` }, signal: AbortSignal.timeout(30_000) });
+  if (!response.ok) throw new Error(`Instance control failed (${response.status})`);
+  return response.json();
+}
+async function recover(instance: Instance, state: Runtime) {
+  // A process group is ours only while its registered leader has the same start identity.
+  for (const ref of state.children) {
+    if (!ref.identity.includes(instance.root)) throw new Error('Process ownership record is outside this instance');
+    await stopProcess(ref, true);
+  }
+}
+export async function startInstance(ws: Workspace, instanceId: string, options: { headless?: boolean; windowed?: boolean; background?: boolean } = {}) {
+  return withLock(ws.devRoot, `instance-${instanceId}`, async () => {
+    const instance = await readInstance(ws, instanceId);
+    const cluster = await checkedCluster(instance);
+    if (!await assertDatabaseOwner(instance, cluster)) throw new Error('Missing instance database; reset explicitly');
+    const prior = await runtime(instance);
+    if (prior && await alive(prior.supervisor)) {
+      if (prior.phase !== 'ready') throw new Error('Instance is not ready; inspect status or stop it');
+      if (!options.headless) await control(instance, 'open', options);
+      return prior;
+    }
+    if (prior) await recover(instance, prior);
+    const log = await open(join(instance.root, 'logs/supervisor.log'), 'a', 0o600);
+    const require = createRequire(join(ws.checkout, 'package.json'));
+    const child = spawn(process.execPath, ['--import', require.resolve('tsx'), join(ws.checkout, 'scripts/dev/supervisor.ts'), join(instance.root, 'instance.json'),
+      ...(options.headless ? ['--headless'] : []), ...(options.windowed ? ['--windowed'] : []), ...(options.background ? ['--background'] : [])],
+    { cwd: ws.checkout, detached: true, stdio: ['ignore', log.fd, log.fd], env: childEnvironment(join(instance.root, 'tmp')) });
+    child.unref(); await log.close();
+    const ref = await processRef(child.pid!);
+    for (let i = 0; i < 600; i++) {
+      const current = await runtime(instance).catch(() => null);
+      if (current?.supervisor.pid === ref.pid && current.phase === 'ready') return current;
+      if (current?.supervisor.pid === ref.pid && current.phase === 'failed') throw new Error(current.error ?? 'Startup failed');
+      if (!await alive(ref)) throw new Error(`Launcher exited; see ${join(instance.root, 'logs/supervisor.log')}`);
+      await sleep(100);
+    }
+    await stopProcess(ref, true);
+    throw new Error(`Startup timed out; see ${join(instance.root, 'logs/supervisor.log')}`);
+  });
+}
+async function stopUnlocked(instance: Instance) {
+  const state = await runtime(instance);
+  if (!state) return;
+  if (await alive(state.supervisor)) {
+    if (!state.supervisor.identity.includes(instance.root)) throw new Error('Supervisor ownership mismatch');
+    try { await control(instance, 'stop'); } catch { await stopProcess(state.supervisor, true); }
+    for (let i = 0; i < 100 && await alive(state.supervisor); i++) await sleep(100);
+    if (await alive(state.supervisor)) await stopProcess(state.supervisor, true);
+  }
+  await recover(instance, state);
+  await atomic(join(instance.root, 'runtime.json'), { ...state, phase: 'stopped', children: [], controlUrl: undefined, serverUrl: undefined, webUrl: undefined });
+}
+export async function stopInstance(ws: Workspace, instanceId = ws.previewId) {
+  return withLock(ws.devRoot, `instance-${instanceId}`, async () => stopUnlocked(await readInstance(ws, instanceId)));
+}
+export async function resetInstance(ws: Workspace, instanceId = ws.previewId, fixture: Fixture = 'scratchpad') {
+  return withLock(ws.devRoot, `instance-${instanceId}`, async () => {
+    const instance = await readInstance(ws, instanceId);
+    const cluster = await checkedCluster(instance);
+    await assertDatabaseOwner(instance, cluster);
+    await stopUnlocked(instance);
+    await dropDatabase(instance, cluster);
+    await rm(instance.root, { recursive: true });
+    const fresh = { ...instance, fixture, generation: id() };
+    await directories(fresh.root);
+    await atomic(join(fresh.root, 'instance.json'), fresh);
+    await provision(fresh, cluster);
+    return fresh;
+  });
+}
+export async function disposeInstance(ws: Workspace, instanceId = ws.previewId) {
+  return withLock(ws.devRoot, `instance-${instanceId}`, async () => {
+    const instance = await readInstance(ws, instanceId);
+    const cluster = await checkedCluster(instance);
+    await assertDatabaseOwner(instance, cluster);
+    await stopUnlocked(instance);
+    await dropDatabase(instance, cluster);
+    await rm(instance.root, { recursive: true });
+  });
+}

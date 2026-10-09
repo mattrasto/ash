@@ -1,0 +1,30 @@
+version = 1
+name = "Ash development"
+
+[setup]
+script = "node scripts/dev/setup.mjs"
+
+[[actions]]
+name = "Run"
+icon = "run"
+command = "pnpm dev"
+
+[[actions]]
+name = "Stop"
+icon = "tool"
+command = "pnpm dev:stop"
+
+[[actions]]
+name = "Reset preview"
+icon = "tool"
+command = "pnpm dev:reset"
+
+[[actions]]
+name = "Verify"
+icon = "test"
+command = "pnpm verify"
+
+[[actions]]
+name = "Status"
+icon = "debug"
+command = "pnpm dev:status --json"

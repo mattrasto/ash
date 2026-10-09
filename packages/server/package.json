@@ -1,0 +1,4 @@
+{
+  "name": "@ash/server", "private": true, "version": "0.0.0", "type": "module",
+  "dependencies": { "@ash/shared": "workspace:*", "fastify": "5.8.5", "postgres": "3.4.8" }
+}

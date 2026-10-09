@@ -1,0 +1,36 @@
+{
+  "name": "ash",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@9.0.6",
+  "engines": {
+    "node": ">=22.1.0"
+  },
+  "scripts": {
+    "dev:setup": "node scripts/dev/setup.mjs",
+    "dev": "node --import tsx scripts/dev/cli.ts start",
+    "dev:status": "node --import tsx scripts/dev/cli.ts status",
+    "dev:stop": "node --import tsx scripts/dev/cli.ts stop",
+    "dev:reset": "node --import tsx scripts/dev/cli.ts reset",
+    "dev:dispose": "node --import tsx scripts/dev/cli.ts dispose",
+    "dev:verify": "node --import tsx scripts/dev/cli.ts explore",
+    "typecheck": "tsc --noEmit && svelte-check --workspace packages/client --tsconfig ../../tsconfig.json",
+    "build": "node --import tsx scripts/dev/build.ts",
+    "test": "node --import tsx --test tests/unit/*.test.ts",
+    "test:workflow": "node --import tsx --test --test-concurrency=1 tests/integration/*.test.ts",
+    "verify": "node --import tsx scripts/dev/verify.ts"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "5.1.1",
+    "@types/node": "22.19.17",
+    "electron": "39.8.5",
+    "esbuild": "0.25.12",
+    "playwright": "1.58.2",
+    "postgres": "3.4.8",
+    "svelte-check": "4.1.0",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "vite": "6.4.2"
+  }
+}
