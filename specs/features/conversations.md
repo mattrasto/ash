@@ -1,6 +1,6 @@
 # Conversations
 
-First-phase design · Unimplemented
+First-phase scope accepted · Deterministic chat slice implemented and verified
 
 [Source](../HUMAN_SPEC.md) · [Product principles](../product.md) · [Architecture](../../docs/architecture.md)
 
@@ -16,7 +16,9 @@ The accepted [artifact rules](artifacts.md#rules) refine membership and chains, 
 
 ## Scope
 
-Includes: text conversation, explicit topic organization, manual thread archive/pin, editable base instructions, run status, context/lineage inspection and verified backup restoration.
+Current delivery: deterministic text conversation, thread creation/selection, persisted messages and Run outcomes, cancellation/retry, reconnect/restart handling, and context/lineage inspection. Base instructions are captured with each request.
+
+Deferred from the broader design below: topic management, the instructions editor, archive/pin controls, live providers, and PITR operation/restore verification. Requirement and acceptance IDs remain stable for those later deliveries. [Implementation](../../docs/features/conversations.md) · [Test plan](../../docs/plans/persisted-chat-tests.md).
 
 Deferred: voice and Live Threads, automatic naming/organization/archiving, artifact moves and references, split/merge, context from other threads, semantic memory, attachments, external tools and inputs, task execution, mobile and self-modification. A live model call depends on the provider/data/cost choice in G09.
 

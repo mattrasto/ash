@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("ASH_MIGRATION_DATABASE_URL")
+}
+model Topic {
+  id            String       @id @db.Uuid
+  name          String
+  instructionId String?      @unique @map("instruction_id") @db.Uuid
+  createdAt     DateTime     @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime     @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime?    @map("deleted_at") @db.Timestamptz(6)
+  instruction   Instruction? @relation(fields: [instructionId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  memberships   ThreadTopic[]
+  @@map("topics")
+}
+model Thread {
+  id            String       @id @db.Uuid
+  title         String
+  instructionId String?      @unique @map("instruction_id") @db.Uuid
+  createdAt     DateTime     @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime     @map("updated_at") @db.Timestamptz(6)
+  isArchived    Boolean      @default(false) @map("is_archived")
+  isPinned      Boolean      @default(false) @map("is_pinned")
+  instruction   Instruction? @relation(fields: [instructionId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  memberships   ThreadTopic[]
+  artifacts     Artifact[]
+  runs          Run[]
+  @@map("threads")
+}
+model ThreadTopic {
+  threadId String @map("thread_id") @db.Uuid
+  topicId String @map("topic_id") @db.Uuid
+  linkedAt DateTime @map("linked_at") @db.Timestamptz(6)
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  @@id([threadId, topicId])
+  @@index([topicId])
+  @@map("thread_topics")
+}
+model Instruction {
+  id String @id @db.Uuid
+  key String? @unique
+  name String
+  text String
+  createdAt DateTime @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(6)
+  topic Topic?
+  thread Thread?
+  @@map("instructions")
+}
+model Artifact {
+  id String @id @db.Uuid
+  layer String
+  sourceId String? @map("source_id") @db.Uuid
+  threadId String? @map("thread_id") @db.Uuid
+  runId String? @map("run_id") @db.Uuid
+  actor String
+  payload Json @db.JsonB
+  createdAt DateTime @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(6)
+  source Artifact? @relation("source", fields: [sourceId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  children Artifact[] @relation("source")
+  thread Thread? @relation(fields: [threadId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  run Run? @relation("produced", fields: [runId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  inputs Run[] @relation("input")
+  @@index([sourceId])
+  @@index([runId])
+  @@index([threadId, createdAt, id])
+  @@map("artifacts")
+}
+model Run {
+  id String @id @db.Uuid
+  inputArtifactId String @map("input_artifact_id") @db.Uuid
+  threadId String @map("thread_id") @db.Uuid
+  retryOfId String? @map("retry_of_id") @db.Uuid
+  status String
+  state Json @db.JsonB
+  error Json? @db.JsonB
+  requestKey String @unique @map("request_key") @db.Uuid
+  requestHash String @map("request_hash")
+  createdAt DateTime @map("created_at") @db.Timestamptz(6)
+  startedAt DateTime? @map("started_at") @db.Timestamptz(6)
+  endedAt DateTime? @map("ended_at") @db.Timestamptz(6)
+  input Artifact @relation("input", fields: [inputArtifactId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  retryOf Run? @relation("retry", fields: [retryOfId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  retries Run[] @relation("retry")
+  artifacts Artifact[] @relation("produced")
+  @@index([inputArtifactId])
+  @@index([threadId])
+  @@index([retryOfId])
+  @@map("runs")
+}
+
+// Development-only tables are provisioned before product migrations and baselined.
+model DevMeta {
+  instanceId String @id @map("instance_id")
+  generation String
+  schemaVersion Int @map("schema_version")
+  @@ignore
+  @@map("dev_meta")
+}
+model DevScratch {
+  id Int @id
+  note String
+  count Int @default(0)
+  @@ignore
+  @@map("dev_scratch")
+}

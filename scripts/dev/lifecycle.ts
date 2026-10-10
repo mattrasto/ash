@@ -1,3 +1,4 @@
+import { migrateProduct } from './product-database.ts';
 import { spawn } from 'node:child_process';
 import { open, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -66,6 +67,7 @@ export async function startInstance(ws: Workspace, instanceId: string, options: 
       await stopUnlocked(instance);
     }
     if (prior) await recover(instance, prior);
+    await migrateProduct(instance, cluster);
     const log = await open(join(instance.root, 'logs/supervisor.log'), 'a', 0o600);
     const require = createRequire(join(ws.checkout, 'package.json'));
     const child = spawn(process.execPath, ['--import', require.resolve('tsx'), join(ws.checkout, 'scripts/dev/supervisor.ts'), join(instance.root, 'instance.json'),

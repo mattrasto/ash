@@ -1,10 +1,10 @@
 # Architecture
 
-Product design · Desktop bootstrap implemented. File layout: [repository structure](repository-structure.md).
+Deterministic chat and desktop bootstrap implemented. File layout: [repository structure](repository-structure.md).
 
 ## Stack and runtime
 
-The bootstrap uses TypeScript, Svelte, Electron, Node/Fastify and PostgreSQL. Prisma is planned for the product schema and is not installed yet.
+The bootstrap uses TypeScript, Svelte, Electron, Node/Fastify and PostgreSQL. Prisma implements the product schema; execution details are in the [chat implementation](features/conversations.md).
 
 Use one backend and one core database. The client handles presentation and native integration; the backend owns rules, context, model calls, execution and persistence. Keep credentials out of renderer contracts.
 
@@ -30,15 +30,15 @@ The [six-table data model](data-model.md) defines ownership, causal links, conte
 
 `specs/data/model.dbml` is the design diagram before implementation. Column notes must state purpose, population/null conditions and any allowed mutations. Keep JSON payload contracts in the [data model](data-model.md#artifact-payloads).
 
-When Prisma is introduced, keep its schema, committed migrations and the UML/DBML diagram synchronized in the same change. The Prisma schema describes intended application structure; migrations establish the database, including constraints that require additional SQL. Do not update one representation and leave the others stale.
+Keep its schema, committed migrations and the UML/DBML diagram synchronized in the same change. The Prisma schema describes intended application structure; migrations establish the database, including constraints that require additional SQL. Do not update one representation and leave the others stale.
 
 1. Update and validate the Prisma schema using the pinned version's tooling; generate and review the migration, including SQL-only constraints.
 2. Apply migrations to a clean, isolated development database.
 3. Generate DBML from that database with `db2dbml` and normalize its output. Preserve field usage notes; document constraints the diagram cannot represent.
-4. Compare tables, columns, nullability, keys and relationships with the Prisma schema and migration, then inspect the diagram in dbdiagram. Add an automated drift check when the schema/export tooling is introduced.
+4. Compare tables, columns, nullability, keys and relationships with the Prisma schema and migration, then inspect the diagram in dbdiagram. The chat integration suite checks schema drift.
 
-Select the Prisma version and document its verified commands when implementing persistence. References: [Prisma migrations](https://www.prisma.io/docs/orm/migrations/applying-a-migration), [DBML CLI](https://dbml.dbdiagram.io/cli/), [DBML syntax](https://dbml.dbdiagram.io/docs/).
+Pinned versions and migration commands: [schema operations](features/conversations.md#schema-operations). References: [Prisma migrations](https://www.prisma.io/docs/orm/migrations/applying-a-migration), [DBML CLI](https://dbml.dbdiagram.io/cli/), [DBML syntax](https://dbml.dbdiagram.io/docs/).
 
 ## Bootstrap and verification
 
-The [development workflow](development.md) implements workspace isolation, a synthetic desktop preview, startup/reset commands and lifecycle checks. Product integration remains pending under the [conversation acceptance examples](../specs/features/conversations.md).
+The [development workflow](development.md) implements workspace isolation, a synthetic desktop preview, startup/reset commands and lifecycle checks. Conversation coverage and deferred features are recorded in the [chat test plan](plans/persisted-chat-tests.md).

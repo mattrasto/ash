@@ -1,6 +1,6 @@
 # Data model
 
-Six-table design and PITR recovery accepted, 2026-10-09 · Physical details proposed · Unimplemented
+Six-table design accepted, 2026-10-09 · Schema and deterministic chat implemented; see [coverage](features/conversations.md) · PITR operation pending
 
 [DBML](../specs/data/model.dbml) · [Artifact rules](../specs/features/artifacts.md) · [Instruction rules](../specs/features/instructions.md) · [Open decisions](../specs/open-questions.md)
 

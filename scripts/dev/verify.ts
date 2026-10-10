@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { devRoot, id, fingerprint, atomic } from './io.ts';
 import { buildAll } from './build.ts';
+import { SCHEMA_VERSION, FIXTURE_VERSION } from '../../packages/shared/src/index.ts';
 
 const checkout = process.cwd();
 const evidence = join(await devRoot(), 'evidence', id());
@@ -28,6 +29,6 @@ try {
   if (after.hash !== before.hash || after.commit !== before.commit) throw new Error('Source changed during verification; result is invalid');
 } catch(e) {error=(e as Error).message;}
 await writeFile(join(evidence,'checks.log'),output);
-await atomic(join(evidence,'report.json'),{source:before,fixture:'scratchpad / empty',fixtureVersion:1,schemaVersion:1,model:'none',steps,passed:!error,error,completedAt:new Date().toISOString()});
+await atomic(join(evidence,'report.json'),{source:before,fixture:'scratchpad / empty',fixtureVersion:FIXTURE_VERSION,schemaVersion:SCHEMA_VERSION,productMigration:'202610100001_conversation_core',model:'deterministic/ash-test-v1',steps,passed:!error,error,completedAt:new Date().toISOString()});
 console.log(`Verification ${error?'FAILED':'PASSED'}: ${evidence}`);
 if(error){console.error(error);process.exitCode=1;}

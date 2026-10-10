@@ -1,6 +1,6 @@
 # Instructions
 
-Scope-specific ownership, current text and execution snapshots accepted, 2026-10-09 · Unimplemented
+Scope-specific ownership, current text and execution snapshots accepted, 2026-10-09 · Base instructions and snapshots implemented; editors deferred
 
 [Source](../HUMAN_SPEC.md) · [First journey](conversations.md) · [Data model](../../docs/data-model.md#instructions-and-captured-requests)
 

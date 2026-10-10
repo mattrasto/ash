@@ -1,6 +1,6 @@
 # Ash
 
-A private personal agent. Separate from Asha. The placeholder desktop app exercises the isolated development workflow; product features remain in design.
+A private personal agent. Separate from Asha. The desktop preview supports persisted chat and Artifact inspection with a deterministic test model.
 
 With Node 22, pnpm 9 and Docker running: `pnpm dev:setup`, then `pnpm dev`. Run `pnpm verify` for the automated workflow checks. See [development workflow](docs/development.md) for commands and prerequisites.
 
@@ -9,4 +9,5 @@ With Node 22, pnpm 9 and Docker running: `pnpm dev:setup`, then `pnpm dev`. Run 
 - [Architecture](docs/architecture.md)
 - [Data model](docs/data-model.md) · [DBML](specs/data/model.dbml)
 - [Development workflow](docs/development.md)
+- [Chat implementation](docs/features/conversations.md) · [Test plan](docs/plans/persisted-chat-tests.md)
 - [Project instructions](AGENTS.md)

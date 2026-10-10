@@ -1,4 +1,4 @@
-// Accepted design; physical details proposed. Not implemented.
+// Schema implemented in packages/server/prisma; constraints verified against migrated PostgreSQL.
 // Product rules: ../features/artifacts.md and ../features/instructions.md
 // Transactions, JSON contracts and SQL-only constraints: ../../docs/data-model.md
 Project ash {

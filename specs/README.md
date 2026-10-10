@@ -39,4 +39,4 @@ Sequencing is proposed. Source names refer to overview headings.
 
 ## First journey
 
-The [first-phase design](features/conversations.md) covers persistent, inspectable text conversation: create a topic/thread, exchange messages, change membership, inspect context and verify backup restoration. Resolve remaining G02–G07 and model-use choices in G09 before dependent implementation.
+Current delivery: [persisted deterministic text chat and Artifact inspection](features/conversations.md#scope). Topic management and instruction editing follow separately. [Implementation](../docs/features/conversations.md) · [Test plan](../docs/plans/persisted-chat-tests.md).

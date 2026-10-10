@@ -1,6 +1,6 @@
 # Repository structure
 
-Proposed product layout. The three-package desktop bootstrap exists; product feature folders and Prisma are planned.
+Product layout. Desktop bootstrap, Prisma persistence and deterministic conversation modules exist; unused feature folders remain proposed.
 
 ```text
 ash/
@@ -42,7 +42,7 @@ ash/
 │   │           └── ui/               # Reused visual components
 │   ├── server/
 │   │   ├── package.json
-│   │   ├── prisma/                   # Planned schema/migrations; layout follows the pinned Prisma version
+│   │   ├── prisma/                   # Product schema and committed migrations
 │   │   ├── src/
 │   │   │   ├── main.ts               # Process startup/shutdown
 │   │   │   ├── app.ts                # App assembly

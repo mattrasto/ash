@@ -1,6 +1,6 @@
 # Artifact ownership and history
 
-Rules accepted by the user, 2026-10-09 · Unimplemented
+Rules accepted by the user, 2026-10-09 · Direct text path implemented; other engine paths deferred
 
 [Source](../HUMAN_SPEC.md) · [Data model](../../docs/data-model.md)
 
@@ -43,7 +43,7 @@ Process inputs before their destination is known and reorganize visible conversa
 
 ## Remaining scope
 
-Moves and references remain deferred from the [first conversation journey](conversations.md#scope). The six-table model is accepted; physical details remain proposed until implemented and verified.
+Moves and references remain deferred from the [first conversation journey](conversations.md#scope). The six-table schema and direct text path are implemented; [coverage and remaining scope](../../docs/features/conversations.md).
 
 - **G03:** choose backup storage, retention, recovery targets and restore verification.
 - **Moves:** define behavior during active runs and effects on context that has not yet been captured.

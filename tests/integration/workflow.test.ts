@@ -47,6 +47,7 @@ async function desktop(instance: Instance) {
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     try { await page.getByTestId('connection').filter({ hasText: 'Connected' }).waitFor({timeout:15000}); }
     catch (e) { throw new Error(`${(e as Error).message}\nRenderer errors: ${errors.join('\n')}\n${(await page.locator('body').innerText()).slice(0,2000)}`); }
+    await page.getByRole('button', {name:'Development checks',exact:true}).click();
     return { app, page };
   } catch (e) { await app.close(); throw e; }
 }
@@ -110,7 +111,7 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       await da.page.getByText('File and client storage checks').click();
       await da.page.getByLabel('Compact scratchpad', {exact:false}).check();
       assert.equal(await db.page.evaluate(() => window.ashPreferences.getCompact()), false);
-      const renderer = join(a.checkout, 'packages/client/src/renderer/App.svelte');
+      const renderer = join(a.checkout, 'packages/client/src/renderer/features/development/Scratchpad.svelte');
       const original = await readFile(renderer, 'utf8');
       const originalTitle = await da.page.getByRole('heading', {level:1}).innerText();
       const changedTitle = 'Workflow hot reload check';

@@ -1,4 +1,5 @@
 import postgres from 'postgres';
+import { migrateProduct } from './product-database.ts';
 import { join } from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -113,6 +114,7 @@ export async function provision(instance: Instance, cluster: Cluster) {
     await db.unsafe(`GRANT SELECT ON dev_meta, dev_scratch TO ${ident(instance.runtimeRole)}`);
     await db.unsafe(`GRANT UPDATE ON dev_scratch TO ${ident(instance.runtimeRole)}`);
   } finally { await db.end(); }
+  await migrateProduct(instance, cluster);
   await writeFile(join(instance.root, 'files/note.txt'), '', { mode: 0o600 });
   await atomic(join(instance.root, 'server.json'), { instance, databaseUrl: databaseUrl(cluster, instance.database, instance.runtimeRole, password), token: secret() });
 }
