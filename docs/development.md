@@ -8,7 +8,7 @@ The current Electron/Svelte shell provides a database note/counter, a file note 
 
 ## Run the placeholder
 
-Prerequisites: macOS desktop session, Node 22.1 or later, pnpm 9 and running Docker Desktop. Versions are pinned in the lockfile and PostgreSQL image digest. `pnpm verify` opens temporary, windowed Electron apps; a graphical session is required. Linux/Windows and native macOS Spaces/focus behavior have not been verified.
+Prerequisites: macOS desktop session, Node 22.1 or later, pnpm 9 and running Docker Desktop. Versions are pinned in the lockfile and PostgreSQL image digest. `pnpm verify` opens temporary, windowed Electron apps; a graphical session is required. The [verified baseline](testing.md#verified-baseline) covers macOS automated and manual checks. Linux/Windows remain unverified.
 
 ```sh
 pnpm dev:setup
@@ -98,7 +98,7 @@ A versioned manifest records workspace/instance IDs, checkout and source fingerp
 
 Unexpected supervisor loss must leave recoverable ownership records; the next status/start reconciles surviving processes before replacing them. Hot reload preserves the instance's data. If a service restart changes its address, republish configuration and reconnect or relaunch the client. Foreign listeners are never killed.
 
-The shell has a workspace label, stable accent color and Dock badge. Human previews default to fullscreen; `--windowed` keeps a normal window. Verification windows are labeled distinctly and stay windowed; `--background` requests inactive display. Native Spaces/focus behavior needs manual verification. DevTools are available through Electron's menu. Closing the client leaves the backend available for reconnect testing; **Stop Preview** ends the entire instance.
+The shell has a workspace label, stable accent color and Dock badge. Human previews default to fullscreen; `--windowed` keeps a normal window. Verification windows are labeled distinctly and stay windowed; `--background` requests inactive display. Native Spaces/focus changes follow the [manual verification policy](testing.md#evidence-and-handoff). DevTools are available through Electron's menu. Closing the client leaves the backend available for reconnect testing; **Stop Preview** ends the entire instance.
 
 ## Commands
 
@@ -141,7 +141,7 @@ Later, Ash can attach a workspace ID and verification report to a Run and use th
 
 ## Workflow acceptance
 
-The placeholder verifies the current storage and lifecycle portions below. Conversation/PITR recovery (DEV-10), full worker parallelism, foreground-focus guarantees, exhaustive startup cancellation and orphan tooling remain deferred or unverified.
+The placeholder verifies the current storage and lifecycle portions below. Conversation/PITR recovery (DEV-10), full worker parallelism, exhaustive focus/startup cancellation coverage and orphan tooling remain deferred.
 
 | ID | Scenario and required result |
 | --- | --- |

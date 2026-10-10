@@ -1,8 +1,12 @@
 # Testing
 
-Approach accepted, 2026-10-09 · Initial harness implemented · Product scenarios and autonomous promotion deferred
+Approach accepted, 2026-10-09 · Initial harness implemented and verified · Product scenarios and autonomous promotion deferred
 
 Verify observable behavior at stable boundaries and through real user journeys. Repository commands own execution and evidence so Codex and, later, Ash can use the same workflow. Reports are agent diagnostics; the human receives a concise outcome and targeted manual checks when their judgment is needed.
+
+## Verified baseline
+
+Revision `8a9650c`, macOS arm64, 2026-10-09: full automated verification passed all 20 scenarios, including cleanup. The user confirmed the `desktop-experience` manual check passed: disposable preview, editing, compact mode, resizing, keyboard focus, app/Spaces switching and shutdown with the persistent preview preserved. This establishes the initial local baseline; future relevant changes still require the checks below.
 
 ## Coverage policy
 
