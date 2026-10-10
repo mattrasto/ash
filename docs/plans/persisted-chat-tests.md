@@ -1,8 +1,8 @@
 # Persisted chat test plan
 
-Scope accepted: deterministic text chat and Artifact/context inspection. [Verification results](../features/conversations.md#verification).
+Scope: persisted text chat, deterministic and OpenAI adapters, Artifact/context inspection. [Verification results](../features/conversations.md#verification).
 
-Product rules: [Conversations](../../specs/features/conversations.md), [Artifacts](../../specs/features/artifacts.md), [data model](../data-model.md). Topic management, instruction editing, archive/pin UI, live providers and PITR operation are outside this implementation slice. Existing accepted behavior for those features remains future work.
+Product rules: [Conversations](../../specs/features/conversations.md), [Artifacts](../../specs/features/artifacts.md), [data model](../data-model.md). Topic management, instruction editing, archive/pin UI, image support and PITR operation are outside this implementation slice. Existing accepted behavior for those features remains future work.
 
 ## Automated coverage
 
@@ -33,8 +33,30 @@ Product rules: [Conversations](../../specs/features/conversations.md), [Artifact
 
 ## Execution and evidence
 
-Run `pnpm verify` for typechecking, isolated builds, unit tests, real PostgreSQL checks and Electron interaction. Reports must identify source fingerprint, lockfile, schema/fixture versions, deterministic model mode, scenarios, failures/skips and screenshots. Verification uses disposable instances and does not reset the persistent preview.
+Run `pnpm verify` for typechecking, isolated builds, unit tests, real PostgreSQL checks and Electron interaction. Reports must identify source fingerprint, lockfile, schema/fixture versions, model mode, live call count, scenarios, failures/skips and screenshots. Verification uses disposable instances and does not reset the persistent preview.
 
 Review transaction boundaries, snapshot consistency, terminal-write guards, credential handling and cleanup separately after tests. Record actual results in [implementation notes](../features/conversations.md); do not treat this plan as evidence of a pass.
 
 PITR needs separate backup storage/retention decisions and an isolated restore drill with dispatch disabled. Restart persistence tests do not establish backup recovery. Live-model quality and provider spending are not exercised by the deterministic adapter.
+
+## OpenAI adapter
+
+| Scenario | Required result | Level |
+| --- | --- | --- |
+| Wire request | Frozen messages/model/options sent to Responses; `store:false`; no tools or implicit provider conversation. Only text/refusals and allowlisted identifiers/usage reach stored state. | SDK with mocked HTTP + PostgreSQL |
+| Provider outcomes | HTTP 401/403/404/429/500 and network failures make one attempt; raw errors/secrets are excluded. Incomplete/failed events, EOF and mismatched final text fail the Run. | Unit + PostgreSQL |
+| Stop and retry | Aborts reach transport; timeout includes streaming. Partial output freezes. Explicit retry preserves its captured request; follow-ups exclude incomplete answers. | Unit + PostgreSQL |
+| Live allowance | Concurrent reservations cannot exceed calls; expired sessions cannot dispatch. Reopen/reset retain counters. Sessions cannot cross instance ownership. | Unit + lifecycle integration |
+| Credential boundary | Default launch ignores inherited keys. Live key is absent from API/inspection and renderer. File is 0600; disposal removes it. | Unit + desktop/lifecycle integration |
+| Inspection | Desktop shows provider/model, reported usage and IDs. Test-response controls are hidden in live mode. Expired-session failure is visible before any network call. | Real Electron + expired backend session |
+
+### Live smoke test · pending
+
+After choosing the model, providing a backend development key and assigning a session allowance, use an empty disposable instance. Suggested allowance: five calls over ten minutes, 1,024 output tokens per call. This is a proposed allowance, not authorization to spend.
+
+1. Send a synthetic checklist request and follow-up; verify useful output and the exact captured context.
+2. Inspect provider IDs/model and available token usage; compare against the provider dashboard when available.
+3. Cancel a longer answer and explicitly retry once. Confirm partial/cancelled history and the separate retry Run.
+4. Reopen/restart and verify no extra call or replenished allowance. End the session and dispose the instance.
+
+Record the selected model, session ID, call slots consumed, reported usage, outcomes and source fingerprint. Do not claim an exact bill from missing usage or cancellation. Image generation and personal content are outside this check.

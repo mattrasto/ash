@@ -1,6 +1,6 @@
 # Persisted chat implementation
 
-Deterministic slice implemented and verified, 2026-10-09
+Deterministic and mocked OpenAI paths verified · Live verification pending
 
 Scope and behavior: [conversation spec](../../specs/features/conversations.md). Verification scenarios: [test plan](../plans/persisted-chat-tests.md).
 
@@ -8,7 +8,7 @@ Scope and behavior: [conversation spec](../../specs/features/conversations.md). 
 
 Run `pnpm dev:setup`, then `pnpm dev`. Create a named thread, send a message and follow up. **Inspect** opens the Artifact chain; select its request Act or Ash Surface to see captured model messages, instruction identity, selection/omissions, generation options and Run checkpoint. The inspector refreshes while the selected chain has active work.
 
-The **Test response settings** selector controls the deterministic adapter: normal, slow streaming, failure before output, failure after partial output, or an empty response. It is development behavior, saved in each model request. Explicit retries reuse the frozen message/context selection and use the current test setting. No provider credentials or external calls are used.
+The **Test response settings** selector controls the deterministic adapter: normal, slow streaming, failure before output, failure after partial output, or an empty response. It is development behavior, saved in each model request. Explicit deterministic retries reuse the frozen message/context selection and use the current test setting. The default launch makes no external calls. [OpenAI mode](#openai-mode) requires explicit configuration.
 
 **Development checks** retains the original scratchpad for database/file/client isolation checks. Chat drafts and pending delivery keys live in the isolated desktop's browser storage. Accepted messages and execution state live in PostgreSQL.
 
@@ -20,7 +20,7 @@ The **Test response settings** selector controls the deterministic adapter: norm
 | `scripts/dev/product-database.ts` | Guarded baseline/deploy, seeded base instructions and restricted runtime grants. |
 | `packages/server/src/modules/conversations/` | HTTP routes, submission transactions, streaming persistence, cancellation, retries and inspection. |
 | `packages/server/src/modules/context/select.ts` | Current-thread Surface selection and omission metadata. |
-| `packages/server/src/platform/models/deterministic.ts` | Reproducible streaming, controlled failure and cancellation. |
+| `packages/server/src/platform/models/` | Deterministic and OpenAI adapters, safe provider metadata, bounded live sessions. |
 | `packages/shared/src/contracts/conversations.ts` | Command validation, payload/checkpoint schemas and client contracts. |
 | `packages/client/src/renderer/features/conversations/Chat.svelte` | Thread list, transcript, composer, pending delivery and inspector. |
 
@@ -32,7 +32,7 @@ Submission uses a serializable transaction and thread lock. Conflicting transact
 
 The desktop polls saved snapshots every 150 ms while a response is active and every 800 ms otherwise. This is the initial incremental delivery transport; no durable event stream is added. A reconnect fetches state without dispatching work. Snapshots use a consistent database transaction so content and Run outcome agree.
 
-Context uses a 12,000-character budget and a 4,000-character input limit; this is an explicit test-model bound, not a token estimate. Selection follows CONV-R15. Older conversation groups are omitted together when they do not fit; the current message and base instructions must fit. The captured request records every selected source and excluded Surface.
+Context uses a 12,000-character budget and a 4,000-character input limit; this is an application bound for both adapters, not a token estimate. Selection follows CONV-R15. Older conversation groups are omitted together when they do not fit; the current message and base instructions must fit. The captured request records every selected source and excluded Surface.
 
 ## Schema operations
 
@@ -44,10 +44,39 @@ The schema test compares DBML-exported tables with the migrated database and che
 
 ## Limits
 
-Topic management, instruction editing, archive/pin controls, Artifact moves, live providers and generalized background execution remain deferred. A persisted checkpoint does not imply automatic continuation. PITR operation and restore drills remain pending; restart tests establish persistence, not recovery from lost database storage.
+Topic management, instruction editing, archive/pin controls, Artifact moves, image input/generation and generalized background execution remain deferred. A persisted checkpoint does not imply automatic continuation. PITR operation and restore drills remain pending; restart tests establish persistence, not recovery from lost database storage.
+
+## OpenAI mode
+
+Use a development API key with access to the chosen model. Put `OPENAI_API_KEY` in the launching terminal environment; do not place it in chat, source or a command-line argument. Normal `pnpm dev` and `pnpm verify` ignore inherited provider keys.
+
+Stop the existing preview before changing modes. Example with an explicitly selected model and allowance:
+
+```sh
+pnpm dev:stop
+pnpm dev --openai-model MODEL_ID --live-calls 5 --live-minutes 10 --max-output-tokens 1024 --reasoning-effort low
+```
+
+Replace `MODEL_ID` with an available Responses model. No live model is selected by default. Reasoning effort is optional and must be supported by that model. For disposable exploration, use the same flags with `pnpm dev:verify --fixture empty`.
+
+The launcher prints a session ID. After Stop/Run, use `pnpm dev --live-session SESSION_ID` (plus `--instance INSTANCE_ID` for disposable instances) to reuse its original allowance and expiry. Hot reload retains that session. Starting without live flags returns to the deterministic adapter. Each new `--openai-model` launch creates a new allowance; it is not a renewal of the prior session.
+
+`--live-calls` and `--live-minutes` are required. Output defaults to 1,024 tokens and each call has a 60-second deadline, shortened by session expiry. Input retains the [context bound](#execution-details). These limits bound work; they are not a dollar-denominated spending cap. Reasoning tokens count toward the output bound.
+
+A slot is reserved on disk before HTTP dispatch; failed or ambiguous attempts still consume it. Concurrent threads share the allowance. Session records live at `~/.ash-dev/workspaces/WORKSPACE_ID/model-sessions/SESSION_ID/`, outside resettable instance data. Restart/reset cannot replenish them. The launcher writes `credential` from its environment as a private 0600 file; only the backend reads it. Supervisor and renderer environments exclude provider credentials. Disposal removes that instance's session credentials and retains usage counters. Stop preserves credentials for resumption; removing a stopped session's `credential` revokes its local reuse.
+
+The backend uses the pinned OpenAI SDK and Responses API with `store:false`, no provider conversation ID and no enabled tools. It sends the saved message list and recorded options. SDK automatic retries are disabled. Each explicit OpenAI retry preserves provider/model/options as well as messages; its session must match the model and allow at least the original output limit. A different model requires a new submission.
+
+Streaming deltas and refusal text use the existing Surface persistence path. A completed provider event must agree with the streamed text. Incomplete, truncated, lost or failed streams produce a failed Run and retain partial output. Cancellation aborts the local HTTP stream; it cannot guarantee that provider work or billing stops immediately. The inspector exposes request/response IDs, resolved model, provider status and reported input/output/cached/reasoning tokens. Missing usage stays unknown.
+
+Ash remains the authoritative conversation store. `store:false` disables retained Responses application state; it does not promise zero provider retention. OpenAI documents separate abuse-monitoring and prompt-cache retention. Use synthetic content until the personal-data policy in [G06/G09](../../specs/open-questions.md) is settled. [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data).
+
+The Responses API supports image inputs and a built-in image-generation tool. Ash still needs attachment storage, image payloads and rendering before enabling them. [OpenAI images and vision](https://developers.openai.com/api/docs/guides/images-vision).
 
 ## Verification
 
-`pnpm verify` passed on 2026-10-09: typechecking, isolated build, 8 unit tests and 25 integration/desktop tests. Evidence: `~/.ash-dev/evidence/2ba6f2ea74eb63aa1c53b997/` (`report.json`, `checks.log`, `chat-server.log`, `chat-inspection.png`, `chat-reconnected.png`). The report records the tested source fingerprint and migration version.
+The deterministic baseline passed `pnpm verify` on 2026-10-09; evidence: `~/.ash-dev/evidence/2ba6f2ea74eb63aa1c53b997/`.
 
-A separate review pass checked transaction conflicts, immutable request/checkpoint handling, backend ownership, startup identity validation, late-output cancellation and uncertain-delivery keys. The running preview was also exercised through two messages and captured-context inspection. The migrated PostgreSQL schema was exported to DBML; automated comparisons found no structural drift. Deferred features above were not verified.
+`pnpm verify` passed for the OpenAI addition: typechecking, isolated build, 16 unit tests and 30 integration/desktop checks. Evidence: `~/.ash-dev/evidence/b33463a38bd2797b187959c5/` (`report.json`, `checks.log`, `openai-inspection.png`). The report records the source fingerprint and zero live calls. A separate review checked frozen requests, completion/failure handling, session reservations, credential propagation and disposal; the Electron screenshot confirms provider metadata is visible.
+
+Live model quality, account access and paid usage have not been tested. See the [test plan](../plans/persisted-chat-tests.md#openai-adapter).

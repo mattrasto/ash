@@ -44,13 +44,17 @@ Durable continuation lacks rules for cancellation, disconnection, crashes, dupli
 
 **Accepted first-phase design:** concurrency, outcomes, recovery and cancellation follow [CONV-R07–11](features/conversations.md#requirements). Checkpoints and explicit retries follow the [execution contract](../docs/data-model.md#execution-and-transactions).
 
-**Remaining:** retry model selection, provider-specific cancellation and deployment ownership. General continuation and waits need a separate execution design.
+**Initial OpenAI policy:** explicit retries preserve the original model/options; cancellation aborts the local stream without promising reversal of provider work.
+
+**Remaining:** changing models on retry and broader deployment ownership. General continuation and waits need a separate execution design.
 
 ### G09 — Privacy, observation and cost
 
 Private access does not specify provider data access, recording retention or spending. Logging “thinking” cannot assume access to private model reasoning.
 
-**Recommend initially:** choose one provider/model and call budget; use synthetic fixtures without observation. Captured model requests are part of the accepted model; set their retention and access policy before using personal data. Record input/output, execution metadata and available summaries.
+**Selected provider:** OpenAI, using Responses for text first and its image capabilities later. [Live-mode behavior](features/conversations.md#requirements) and [configuration](../docs/features/conversations.md#openai-mode).
+
+**Remaining:** choose the live model and test allowance. Use synthetic fixtures without observation; settle retention/access before personal-data use. Provider application storage is disabled, but separate provider retention policies still apply.
 
 Before observation/dreamtime: set capture scope, exclusions, pause controls, storage/spending limits and notification rules. Specify retention of filtered inputs and what source erasure does to recordings and derived memories.
 

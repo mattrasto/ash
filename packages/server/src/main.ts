@@ -2,6 +2,9 @@ import { ZodError } from '@ash/shared';
 import { connectProduct } from './platform/db/client.ts';
 import { Conversations, ConversationError } from './modules/conversations/service.ts';
 import { conversationRoutes } from './modules/conversations/routes.ts';
+import { deterministicModel } from './platform/models/deterministic.ts';
+import { openAIModel } from './platform/models/openai.ts';
+import { openSession } from './platform/models/session.ts';
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -23,7 +26,9 @@ const [owner] = await ownership`SELECT pg_try_advisory_lock(1095976961, 1) AS ac
 if (!owner.acquired) { ownership.release(); await ownerDb.end(); await db.end(); throw new Error('Another backend already owns this database'); }
 ownsDatabase = true;
 const product = connectProduct(config.databaseUrl);
-const conversations = new Conversations(product);
+const modelSessionId = process.argv[3];
+const model = modelSessionId ? openAIModel(await openSession(instance,modelSessionId)) : deterministicModel;
+const conversations = new Conversations(product,model);
 await conversations.recover();
 const app = Fastify({ logger: false });
 app.addHook('onRequest', async (request, reply) => {
@@ -40,6 +45,7 @@ app.get('/health', async () => {
 app.get('/api/info', async () => ({
   label: instance.label, workspaceId: instance.workspaceId, instanceId: instance.id,
   generation: instance.generation, profile: instance.profile, fixture: instance.fixture, schemaVersion: instance.schemaVersion,
+  model: await model.info(),
 }));
 async function state() {
   const [row] = await db`SELECT note, count FROM dev_scratch WHERE id = 1`;

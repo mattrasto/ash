@@ -61,6 +61,7 @@
   async function refresh() {
     try {
       info = await api<PreviewInfo>('info');
+      if (info.model?.provider === 'openai') mode = 'normal';
       threads = await api<ThreadView[]>('threads');
       if (!selected && threads.length) selected = threads[0].id;
       if (!creating && selected && !threads.some(thread => thread.id === selected)) { selected = threads[0]?.id ?? ''; conversation = null; }
@@ -135,11 +136,11 @@
   </aside>
   <div class="main-column">
     <header><div><span class="eyebrow">CONVERSATION</span><h1>{conversation?.thread.title ?? 'A place to think.'}</h1></div><span class="connection" data-testid="connection"><i class:offline={!connected}></i>{connected ? 'Connected' : 'Reconnecting…'}</span></header>
-    <div class="model-banner"><span class="model-dot"></span>Deterministic test model <span>· No external calls</span></div>
+    <div class="model-banner"><span class="model-dot"></span>{#if info?.model?.provider === 'openai'}OpenAI · {info.model.model}<span>· {info.model.session?.callsUsed ?? 0} / {info.model.session?.maxCalls ?? 0} calls · expires {new Date(info.model.session!.expiresAt).toLocaleTimeString()}</span>{:else}Deterministic test model <span>· No external calls</span>{/if}</div>
     {#if error}<div class="error" role="alert">{error}</div>{/if}
     <main class="transcript" bind:this={transcript} onscroll={() => stickToBottom = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 70}>
       {#if !conversation}<div class="empty"><span class="empty-glyph">✳</span><h2>Start a conversation.</h2><p>Create a thread to try persisted chat.<br>Each exchange keeps its context and Artifact trail.</p></div>
-      {:else if !conversation.artifacts.length}<div class="empty"><span class="empty-glyph">✳</span><h2>What’s on your mind?</h2><p>Try a message, then a follow-up.<br>The test model shows which conversation it received.</p></div>{/if}
+      {:else if !conversation.artifacts.length}<div class="empty"><span class="empty-glyph">✳</span><h2>What’s on your mind?</h2><p>Try a message, then a follow-up.<br>{info?.model?.provider === 'openai' ? 'This session sends conversation context to OpenAI.' : 'The test model shows which conversation it received.'}</p></div>{/if}
       {#each conversation?.artifacts ?? [] as artifact (artifact.id)}
         {@const payload = artifact.payload as MessagePayload}
         {@const run = associatedRun(artifact)}
@@ -160,7 +161,7 @@
           <label class="sr-only" for="message">Message</label><textarea id="message" placeholder="Message Ash…" rows="3" maxlength="4000" disabled={!!pending[selected]} value={drafts[selected] ?? ''} oninput={(event) => {drafts[selected] = event.currentTarget.value; saveLocal();}} onkeydown={(event) => {if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {event.preventDefault(); void send();}}}></textarea>
           <div class="composer-actions"><span>{active ? 'Response in progress · your draft is saved' : 'Enter to send · Shift + Enter for a new line'}</span>{#if active}<button type="button" onclick={() => runAction(active!,'cancel')}>Stop response</button>{:else}<button class="primary" disabled={submitting || !connected || (!pending[selected] && !(drafts[selected] ?? '').trim())}>{pending[selected] ? 'Retry sending' : 'Send message'}</button>{/if}</div>
         </form>
-        <details class="test-controls"><summary>Test response settings</summary><label for="mode">Response behavior</label><select id="mode" bind:value={mode}><option value="normal">Normal</option><option value="slow">Slow streaming</option><option value="fail">Fail after partial output</option><option value="fail-before">Fail before output</option><option value="empty">Empty response</option></select></details>
+        {#if info?.model?.provider !== 'openai'}<details class="test-controls"><summary>Test response settings</summary><label for="mode">Response behavior</label><select id="mode" bind:value={mode}><option value="normal">Normal</option><option value="slow">Slow streaming</option><option value="fail">Fail after partial output</option><option value="fail-before">Fail before output</option><option value="empty">Empty response</option></select></details>{/if}
       {/if}
     </div>
   </div>
@@ -172,6 +173,7 @@
         <div class="section"><h3>Artifact chain</h3>{#each inspection.artifacts as item (item.id)}<button class="chain-item" class:chosen={item.id === inspectedId} onclick={() => inspectedId = item.id}><strong>{item.layer} · {item.payload.type}</strong><code>{item.id}</code><small>Source: {item.sourceId ?? 'Input root'}</small></button>{/each}</div>
         {#if inspectionRun}<div class="section"><h3>Run · {inspectionRun.status}</h3><code>{inspectionRun.id}</code>{#if inspectionRun.retryOfId}<p>Retry of <code>{inspectionRun.retryOfId}</code></p>{/if}<p>Accepted {new Date(inspectionRun.createdAt).toLocaleTimeString()}<br>Started {inspectionRun.startedAt ? new Date(inspectionRun.startedAt).toLocaleTimeString() : 'Not started'}<br>Ended {inspectionRun.endedAt ? new Date(inspectionRun.endedAt).toLocaleTimeString() : 'Not settled'}</p><details><summary>Checkpoint</summary><pre>{JSON.stringify(inspectionRun.state,null,2)}</pre></details></div>{/if}
         {#if captured}<div class="section"><h3>Captured model request</h3><p>{captured.provider} / {captured.model}</p><p>{captured.selection.maxCharacters.toLocaleString()} character context limit · {captured.selection.omitted.length} omitted Artifacts</p>{#each captured.messages as message,index}<div class="context-message"><strong>{index + 1}. {message.role}</strong><p>{message.content}</p></div>{/each}<details><summary>Sources, instructions and omissions</summary><pre>{JSON.stringify(captured.selection,null,2)}</pre></details><details><summary>Generation options</summary><pre>{JSON.stringify(captured.options,null,2)}</pre></details></div>{/if}
+        {#if inspectionRun?.state.model}{@const execution = inspectionRun.state.model}<div class="section"><h3>Provider result</h3><p>{execution.model ?? captured?.model} · {execution.status ?? 'No terminal result recorded'}</p>{#if execution.usage}<p>{execution.usage.inputTokens.toLocaleString()} input tokens · {execution.usage.outputTokens.toLocaleString()} output tokens<br>{execution.usage.cachedInputTokens.toLocaleString()} cached input · {execution.usage.reasoningTokens.toLocaleString()} reasoning tokens</p>{:else}<p>Usage unavailable for this attempt.</p>{/if}{#if execution.requestId}<code>Request: {execution.requestId}</code>{/if}{#if execution.responseId}<code>Response: {execution.responseId}</code>{/if}</div>{/if}
         <details class="section"><summary>Artifact payload</summary><pre>{JSON.stringify(inspected?.payload,null,2)}</pre></details><button class="text-button" onclick={() => inspect(inspectedId)}>Refresh inspection</button>
       {:else}<p>Loading Artifact…</p>{/if}
     </aside>

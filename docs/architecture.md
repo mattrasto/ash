@@ -1,6 +1,6 @@
 # Architecture
 
-Deterministic chat and desktop bootstrap implemented. File layout: [repository structure](repository-structure.md).
+Persisted chat, deterministic/OpenAI adapters and desktop bootstrap implemented; live-provider verification pending. File layout: [repository structure](repository-structure.md).
 
 ## Stack and runtime
 

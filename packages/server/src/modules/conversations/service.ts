@@ -1,8 +1,9 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { Prisma, type Artifact, type PrismaClient, type Run } from '@prisma/client';
-import { InputPayload, MessagePayload, RequestPayload, RunState, RunError, RunStatus, isActive, type ArtifactView, type RunView, type ModelMode } from '@ash/shared';
+import { InputPayload, MessagePayload, RequestPayload, RunState, RunError, RunStatus, ModelExecution, isActive, type ArtifactView, type RunView, type ModelMode } from '@ash/shared';
 import { selectContext } from '../context/select.ts';
-import { deterministicModel, ModelFailure, type ModelAdapter } from '../../platform/models/deterministic.ts';
+import { deterministicModel } from '../../platform/models/deterministic.ts';
+import { ModelFailure, type ModelAdapter } from '../../platform/models/adapter.ts';
 
 type Tx = Prisma.TransactionClient;
 export class ConversationError extends Error {
@@ -105,13 +106,14 @@ export class Conversations {
             const instruction = await tx.instruction.findUniqueOrThrow({where:{key:'response'}});
             const artifacts = await tx.artifact.findMany({where:{threadId,layer:'surface'},orderBy:order});
             const runs = await tx.run.findMany({where:{threadId}});
-            request = RequestPayload.parse({type:'model_request',provider:'deterministic',model:'ash-test-v1',options:{mode:command.mode},...selectContext(artifacts,runs,instruction)});
+            request = RequestPayload.parse({type:'model_request',...this.model.configuration(command.mode),...selectContext(artifacts,runs,instruction)});
           } else {
             const previous = await tx.run.findUniqueOrThrow({where:{id:command.previousId}});
             if (isActive(previous.status)) throw new ConversationError(409, 'Wait for the previous Run to stop before retrying.');
             inputId = previous.inputArtifactId;
             const priorRequest = await tx.artifact.findUniqueOrThrow({where:{id:RunState.parse(previous.state).request_artifact_id}});
-            request = RequestPayload.parse({...RequestPayload.parse(priorRequest.payload),options:{mode:command.mode}});
+            const prior = RequestPayload.parse(priorRequest.payload);
+            request = RequestPayload.parse({...prior,...this.model.configuration(command.mode,prior)});
           }
           const runId = randomUUID(), requestId = randomUUID();
           const state = RunState.parse({request_artifact_id:requestId,response_artifact_id:null});
@@ -122,6 +124,7 @@ export class Conversations {
         }, {isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
         break;
       } catch (error) {
+        if (error instanceof ModelFailure) throw new ConversationError(409,error.message);
         const retryable = error instanceof Prisma.PrismaClientKnownRequestError && (['P2034','P2002'].includes(error.code) || (error.code === 'P2010' && ['40001','40P01'].includes(String(error.meta?.code))));
         if (!retryable) throw error;
         const duplicate = await this.db.run.findUnique({where:{requestKey}});
@@ -147,13 +150,25 @@ export class Conversations {
     try {
       const run = await this.db.run.findUniqueOrThrow({where:{id}});
       const request = await this.db.artifact.findUniqueOrThrow({where:{id:RunState.parse(run.state).request_artifact_id}});
-      for await (const chunk of this.model.stream(RequestPayload.parse(request.payload),signal)) {
-        if (!await this.writeResponse(id, chunk, false)) return;
+      for await (const event of this.model.stream(RequestPayload.parse(request.payload),signal)) {
+        if (typeof event === 'string') { if (!await this.writeResponse(id,event,false)) return; }
+        else if (!await this.writeMetadata(id,event)) return;
       }
       await this.writeResponse(id,'',true);
     } catch (error) {
       await this.db.run.updateMany({where:{id,status:'running'},data:{status:'failed',endedAt:new Date(),error:{code:error instanceof ModelFailure ? error.code : 'response_failed',message:error instanceof ModelFailure ? error.message : 'The response could not be completed.'}}});
     }
+  }
+  private async writeMetadata(id: string, metadata: ModelExecution) {
+    return this.db.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM runs WHERE id = ${id}::uuid FOR UPDATE`;
+      const run = await tx.run.findUniqueOrThrow({where:{id}});
+      if (run.status !== 'running') return false;
+      const state = RunState.parse(run.state);
+      state.model = ModelExecution.parse({...state.model,...metadata});
+      await tx.run.update({where:{id},data:{state}});
+      return true;
+    });
   }
   private async writeResponse(id: string, chunk: string, complete: boolean) {
     return this.db.$transaction(async tx => {

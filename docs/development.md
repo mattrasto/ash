@@ -1,10 +1,10 @@
 # Development workflow
 
-Workflow accepted, 2026-10-09 · Deterministic chat integrated
+Workflow accepted, 2026-10-09 · Persisted chat with opt-in OpenAI mode
 
 Give each feature a Git worktree, a persistent preview and disposable verification environments. Repository commands own the runtime; Codex supplies worktrees and launch actions. Ash can later invoke the same commands for [self-modification](../specs/HUMAN_SPEC.md#modifying-ashs-code).
 
-The Electron/Svelte shell opens [persisted deterministic chat](features/conversations.md). **Development checks** retains the database note/counter, file note and persisted client preference used by the workflow suite. Its `dev_meta` and `dev_scratch` tables remain development scaffolding. Live providers, PITR operation, signed packaging, personal-data imports and production rollout remain deferred.
+The Electron/Svelte shell opens [persisted deterministic chat](features/conversations.md). **Development checks** retains the database note/counter, file note and persisted client preference used by the workflow suite. Its `dev_meta` and `dev_scratch` tables remain development scaffolding. PITR operation, signed packaging, personal-data imports and production rollout remain deferred.
 
 ## Run the preview
 
@@ -145,7 +145,7 @@ Open **Development checks**, then run these in order using disposable sample edi
 
 Future product verification: keep deterministic regression checks and agent exploration distinct in reports. Extend the driver with conversation, recorded input/run/context/output inspection, attachment and voice controls as those features land. Observation endpoints must remain authenticated and development-only.
 
-The deterministic adapter supports streaming, controlled delay, failure and cancellation; live model quality remains a separate check after G09 establishes provider and data policy. Live verification requires explicit call/time limits belonging to the verification session and surviving instance restart/reset; report calls and available usage.
+The deterministic adapter supports streaming, controlled delay, failure and cancellation. [OpenAI mode](features/conversations.md#openai-mode) uses explicit model, call/time limits and a credential isolated from the client. Mocked Responses protocol tests run in ordinary verification; live quality/account access remains a separate bounded check. Report calls and available usage.
 
 Use the [chat test plan](plans/persisted-chat-tests.md) for this slice and the remaining [C01–C14](../specs/features/conversations.md#acceptance-examples) as their features land. The restore test follows the [backup and recovery design](data-model.md#backup-and-recovery): use synthetic data and restore a physical backup plus archived WAL into an isolated PostgreSQL instance, not the shared development cluster. Verify C10 with external dispatch disabled, then separately verify startup interruption handling. Add accepted artifact-move examples when that feature enters scope.
 
@@ -178,4 +178,4 @@ The storage/lifecycle suite and deterministic chat checks cover the implemented 
 | DEV-11 | Verify while a human uses the preview: preview state/focus is preserved, evidence identifies the tested source, and changing source invalidates the result. |
 | DEV-12 | Dispose resources and remove the checkout: no owned processes/databases remain; reports survive. Unexpected checkout removal exposes orphaned resources without deleting them automatically. |
 
-Add the conversation driver, restore checks and evidence as the first journey lands. Live-provider checks remain gated by G09; stronger execution isolation and rollout belong to G10.
+Add the conversation driver, restore checks and evidence as the first journey lands. Live-provider model/allowance and personal-data decisions remain in G09; stronger execution isolation and rollout belong to G10.

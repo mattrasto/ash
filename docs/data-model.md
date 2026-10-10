@@ -106,7 +106,7 @@ Build conversation context from Surface messages under [CONV-R05 and CONV-R15](.
 
 Select and record the call's provider, exact model identifier and generation options before committing that request. Dispatch must use those recorded values; choosing a different request requires another Artifact, not mutation of a frozen one. A saved request records prepared work, not proof that the provider accepted or completed it.
 
-Each call gets its own request Artifact, including explicit retries. A retry copies the previous frozen model-visible content instead of reading current instructions or conversation; its call record retains that retry's selected provider/model/options. The original input and `retry_of_id` retain the relationship to the earlier execution. Model selection on retry remains G07/G09.
+Each call gets its own request Artifact, including explicit retries. A retry copies the previous frozen model-visible content instead of reading current instructions or conversation; its call record retains that retry's selected provider/model/options. The original input and `retry_of_id` retain the relationship to the earlier execution. The initial live retry policy follows [CONV-R16](../specs/features/conversations.md#requirements).
 
 ## Run state and errors
 
@@ -134,7 +134,7 @@ Validate each reference's existence, layer, type and producing Run on write; JSO
 }
 ```
 
-Per-call diagnostics belong with the call's records. Omit credentials and raw provider dumps. Add JSON indexes only for actual queries.
+For the initial one-call Run, optional `state.model` holds allowlisted provider diagnostics: `requestId`, `responseId`, resolved `model`, provider `status`, and optional `usage` (input/output/total/cached-input/reasoning token counts). Missing usage is unknown. These fields may grow while running and freeze with the terminal checkpoint; no schema migration is needed. Multi-call workflows will need per-call records. Omit credentials and raw provider dumps. Add JSON indexes only for actual queries.
 
 Persisting state does not implement safe continuation. The initial restart behavior remains interruption and explicit retry under [execution and transactions](#execution-and-transactions).
 

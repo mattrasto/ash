@@ -39,4 +39,4 @@ Sequencing is proposed. Source names refer to overview headings.
 
 ## First journey
 
-Current delivery: [persisted deterministic text chat and Artifact inspection](features/conversations.md#scope). Topic management and instruction editing follow separately. [Implementation](../docs/features/conversations.md) · [Test plan](../docs/plans/persisted-chat-tests.md).
+Current delivery: [persisted text chat and Artifact inspection](features/conversations.md#scope). Topic management and instruction editing follow separately. [Implementation](../docs/features/conversations.md) · [Test plan](../docs/plans/persisted-chat-tests.md).

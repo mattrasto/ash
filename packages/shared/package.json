@@ -1,4 +1,12 @@
 {
-  "name": "@ash/shared", "private": true, "version": "0.0.0", "type": "module",
-  "exports": { ".": "./src/index.ts" }, "dependencies": { "zod": "3.23.8" }
+  "name": "@ash/shared",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "3.25.76"
+  }
 }

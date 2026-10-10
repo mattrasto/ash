@@ -1,6 +1,6 @@
 # Conversations
 
-First-phase scope accepted · Deterministic chat slice implemented and verified
+First-phase scope accepted · Deterministic chat verified · OpenAI adapter implemented; live verification pending
 
 [Source](../HUMAN_SPEC.md) · [Product principles](../product.md) · [Architecture](../../docs/architecture.md)
 
@@ -16,11 +16,11 @@ The accepted [artifact rules](artifacts.md#rules) refine membership and chains, 
 
 ## Scope
 
-Current delivery: deterministic text conversation, thread creation/selection, persisted messages and Run outcomes, cancellation/retry, reconnect/restart handling, and context/lineage inspection. Base instructions are captured with each request.
+Current delivery: text conversation with a deterministic default and explicitly configured OpenAI adapter, thread creation/selection, persisted messages and Run outcomes, cancellation/retry, reconnect/restart handling, and context/lineage inspection. Base instructions are captured with each request.
 
-Deferred from the broader design below: topic management, the instructions editor, archive/pin controls, live providers, and PITR operation/restore verification. Requirement and acceptance IDs remain stable for those later deliveries. [Implementation](../../docs/features/conversations.md) · [Test plan](../../docs/plans/persisted-chat-tests.md).
+Deferred from the broader design below: topic management, the instructions editor, archive/pin controls and PITR operation/restore verification. Requirement and acceptance IDs remain stable for those later deliveries. [Implementation](../../docs/features/conversations.md) · [Test plan](../../docs/plans/persisted-chat-tests.md).
 
-Deferred: voice and Live Threads, automatic naming/organization/archiving, artifact moves and references, split/merge, context from other threads, semantic memory, attachments, external tools and inputs, task execution, mobile and self-modification. A live model call depends on the provider/data/cost choice in G09.
+Deferred: voice and Live Threads, automatic naming/organization/archiving, artifact moves and references, split/merge, context from other threads, semantic memory, attachments, external tools and inputs, task execution, mobile and self-modification. OpenAI is the first live provider; model and live-test allowance remain to be selected under G09. Image support follows separately.
 
 ## User flow
 
@@ -48,6 +48,8 @@ Deferred: voice and Live Threads, automatic naming/organization/archiving, artif
 - **CONV-R13 — Backup recovery:** restore conversation data under [ART-R08](artifacts.md#rules). Restore verification must cover organization, Surface content/order, current instructions, captured requests and run outcomes at the chosen time. Do not automatically resume restored work.
 - **CONV-R14 — Manual visibility:** archive hides a Thread from the ordinary view while retaining archive access, content and context eligibility. Unarchive restores ordinary visibility. Pin/unpin is independent of archive state; pinning does not unarchive a Thread. Both states persist across client restarts. Automatic archive deadlines, revival and pin ordering remain deferred.
 - **CONV-R15 — Retry context:** later follow-ups include only the latest completed response for each Input. Failed, cancelled, interrupted, partial and superseded attempts remain visible but are omitted from model context. A failed retry does not displace an earlier completed response. If no response completed, include the user message without an answer. Existing captured requests remain unchanged.
+
+- **CONV-R16 — Live provider:** OpenAI is opt-in for development with explicit model, call allowance and session expiry. Default verification makes no external calls. Record provider identifiers and reported usage when available; missing usage is unknown. Incomplete provider output is a failed Run, not a completed reply. OpenAI retries preserve the captured provider/model/options and do not execute automatically.
 
 ## Acceptance examples
 

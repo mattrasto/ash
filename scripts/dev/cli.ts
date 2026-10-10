@@ -5,6 +5,7 @@ import { Fixture } from '../../packages/shared/src/index.ts';
 import { assertEnvironment, devRoot, alive, exists, sleep } from './io.ts';
 import { workspace, createInstance, readInstance, instancePath } from './workspace.ts';
 import { startInstance, stopInstance, resetInstance, disposeInstance, runtime } from './lifecycle.ts';
+import { configureLiveModel } from './live-model.ts';
 
 let jsonOutput = false;
 let logDirectory: string | undefined;
@@ -23,12 +24,15 @@ try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     workspace: { type: 'string' }, 'dev-root': { type: 'string' }, instance: { type: 'string' },
     fixture: { type: 'string' }, json: { type: 'boolean' }, headless: { type: 'boolean' }, windowed: { type: 'boolean' }, background: { type: 'boolean' }, detach: { type: 'boolean' },
+    'openai-model': {type:'string'}, 'live-session': {type:'string'}, 'live-calls': {type:'string'},
+    'live-minutes': {type:'string'}, 'max-output-tokens': {type:'string'}, 'reasoning-effort': {type:'string'},
   } });
   jsonOutput = values.json ?? false;
   assertEnvironment();
   const root = await devRoot(values['dev-root']);
   const ws = await workspace(resolve(values.workspace ?? process.cwd()), root);
   const command = positionals[0];
+  if (!['start','explore'].includes(command) && ['openai-model','live-session','live-calls','live-minutes','max-output-tokens','reasoning-effort'].some(key=>values[key as keyof typeof values] !== undefined)) throw new Error('Live model options require start or explore');
   const instanceId = values.instance ?? ws.previewId;
   const selected = values.instance ? await readInstance(ws, instanceId) : undefined;
   if (values.instance && ['setup', 'explore'].includes(command)) throw new Error(`${command} does not accept --instance`);
@@ -43,6 +47,12 @@ try {
       : selected ?? (await exists(join(instancePath(ws, ws.previewId), 'instance.json'))
         ? await readInstance(ws) : await createInstance(ws, 'preview', fixture));
     logDirectory = join(instance.root, 'logs');
+    const prior = await runtime(instance);
+    if (prior && await alive(prior.supervisor) && (values['openai-model'] || prior.modelSessionId !== values['live-session'])) throw new Error('Stop the running instance before changing its model session');
+    const modelSessionId = await configureLiveModel(instance,values).catch(async error => {
+      if (command === 'explore') await disposeInstance(ws,instance.id);
+      throw error;
+    });
     let cancelled = false;
     let cleaning = false;
     const cleanup = async () => {
@@ -56,7 +66,7 @@ try {
     // Record cancellation while startup holds the instance lock; cleanup follows once it releases.
     const cancelStartup = () => { cancelled = true; };
     for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, cancelStartup);
-    const state = await startInstance(ws, instance.id, values).catch(async error => {
+    const state = await startInstance(ws, instance.id, {...values,modelSessionId}).catch(async error => {
       await stopInstance(ws, instance.id);
       if (command === 'explore') await disposeInstance(ws, instance.id);
       throw error;
@@ -71,6 +81,7 @@ try {
         ? instance.profile === 'preview' ? 'Stop: pnpm dev:stop' : `Dispose: pnpm dev:dispose${target}`
         : command === 'explore' ? 'Ctrl+C to stop and discard this instance' : 'Ctrl+C to stop · data is kept',
       `Details: pnpm dev:status${target}`,
+      ...(modelSessionId ? [`OpenAI session: ${modelSessionId}`, `Resume with the same limits: pnpm dev${target} --live-session ${modelSessionId}`] : []),
     ]);
     if (!values.detach) {
       for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, cleanup);
@@ -88,7 +99,7 @@ try {
       const running = state ? await alive(state.supervisor) : false;
       const phase = state?.phase ?? 'stopped';
       result({ workspace: ws.label, instanceId: instance.id, profile: instance.profile, fixture: instance.fixture, phase, running,
-        serverUrl: state?.serverUrl, webUrl: state?.webUrl, error: state?.error },
+        serverUrl: state?.serverUrl, webUrl: state?.webUrl, error: state?.error, modelSessionId:state?.modelSessionId },
       `Ash · ${instance.label}`, [
         `State: ${!running && ['ready', 'starting'].includes(phase) ? 'Supervisor exited' : phase}`,
         `Profile: ${instance.profile} · Fixture: ${instance.fixture}`,

@@ -7,11 +7,13 @@ import { Instance, Fixture, ServerConfig } from '../../packages/shared/src/index
 import { atomic, exists, json, id, withLock, processRef, alive, stopProcess, sleep, childEnvironment, type ProcessRef } from './io.ts';
 import { type Workspace, readInstance, directories } from './workspace.ts';
 import { assertDatabaseOwner, checkedCluster, ensureCluster, dropDatabase, provision } from './database.ts';
+import { readSession, removeSessionCredentials } from '../../packages/server/src/platform/models/session.ts';
 
 export interface Runtime {
   phase: 'starting' | 'ready' | 'stopped' | 'failed'; instanceId: string; generation: string;
   supervisor: ProcessRef; children: ProcessRef[]; serverUrl?: string; webUrl?: string; controlUrl?: string;
   source?: { commit: string; hash: string }; error?: string;
+  modelSessionId?: string;
 }
 export async function runtime(instance: Instance) {
   const path = join(instance.root, 'runtime.json');
@@ -38,9 +40,10 @@ async function recover(instance: Instance, state: Runtime) {
     await stopProcess(ref, true);
   }
 }
-export async function startInstance(ws: Workspace, instanceId: string, options: { headless?: boolean; windowed?: boolean; background?: boolean } = {}) {
+export async function startInstance(ws: Workspace, instanceId: string, options: { headless?: boolean; windowed?: boolean; background?: boolean; modelSessionId?: string } = {}) {
   return withLock(ws.devRoot, `instance-${instanceId}`, async () => {
     const instance = await readInstance(ws, instanceId);
+    if (options.modelSessionId) await readSession(instance,options.modelSessionId);
     const cluster = await ensureCluster(ws.devRoot, ws.checkout);
     if (cluster.id !== instance.clusterId) throw new Error('Cluster ownership mismatch');
     if (!await assertDatabaseOwner(instance, cluster)) throw new Error('Missing instance database; reset explicitly');
@@ -53,6 +56,7 @@ export async function startInstance(ws: Workspace, instanceId: string, options: 
     }
     const prior = await runtime(instance);
     if (prior && await alive(prior.supervisor)) {
+      if (prior.modelSessionId !== options.modelSessionId) throw new Error('Stop the running instance before changing its model session');
       if (prior.phase !== 'ready') throw new Error('Instance is not ready; inspect status or stop it');
       let healthy = false;
       try {
@@ -71,6 +75,7 @@ export async function startInstance(ws: Workspace, instanceId: string, options: 
     const log = await open(join(instance.root, 'logs/supervisor.log'), 'a', 0o600);
     const require = createRequire(join(ws.checkout, 'package.json'));
     const child = spawn(process.execPath, ['--import', require.resolve('tsx'), join(ws.checkout, 'scripts/dev/supervisor.ts'), join(instance.root, 'instance.json'),
+      ...(options.modelSessionId ? ['--model-session',options.modelSessionId] : []),
       ...(options.headless ? ['--headless'] : []), ...(options.windowed ? ['--windowed'] : []), ...(options.background ? ['--background'] : [])],
     { cwd: ws.checkout, detached: true, stdio: ['ignore', log.fd, log.fd], env: childEnvironment(join(instance.root, 'tmp')) });
     child.unref(); await log.close();
@@ -122,6 +127,7 @@ export async function disposeInstance(ws: Workspace, instanceId = ws.previewId) 
     const cluster = await checkedCluster(instance);
     await assertDatabaseOwner(instance, cluster);
     await stopUnlocked(instance);
+    await removeSessionCredentials(instance);
     await dropDatabase(instance, cluster);
     await rm(instance.root, { recursive: true });
   });

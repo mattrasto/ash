@@ -17,7 +17,8 @@ const require = createRequire(join(instance.checkout, 'package.json'));
 const headless = process.argv.includes('--headless');
 const windowed = process.argv.includes('--windowed') || instance.profile !== 'preview';
 const background = process.argv.includes('--background');
-let state: Runtime = { phase: 'starting', instanceId: instance.id, generation: instance.generation, supervisor: await processRef(process.pid), children: [] };
+const modelSessionId = process.argv.includes('--model-session') ? process.argv[process.argv.indexOf('--model-session')+1] : undefined;
+let state: Runtime = { phase: 'starting', instanceId: instance.id, generation: instance.generation, supervisor: await processRef(process.pid), children: [], modelSessionId };
 let vite: ViteDevServer | undefined;
 let stopping = false;
 let restarting = false;
@@ -53,7 +54,7 @@ async function launchClient(options: { windowed?: boolean; background?: boolean 
   await ready;
 }
 async function startServices() {
-  const server = spawn(process.execPath, ['--import', require.resolve('tsx'), join(instance.checkout, 'packages/server/src/main.ts'), join(instance.root, 'server.json')], {
+  const server = spawn(process.execPath, ['--import', require.resolve('tsx'), join(instance.checkout, 'packages/server/src/main.ts'), join(instance.root, 'server.json'), ...(modelSessionId ? [modelSessionId] : [])], {
     cwd: instance.checkout, detached: true, stdio: ['ignore', log.fd, log.fd, 'ipc'], env: childEnvironment(join(instance.root, 'tmp')),
   });
   const ready = new Promise<string>((resolve, reject) => {

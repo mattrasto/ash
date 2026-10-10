@@ -29,6 +29,6 @@ try {
   if (after.hash !== before.hash || after.commit !== before.commit) throw new Error('Source changed during verification; result is invalid');
 } catch(e) {error=(e as Error).message;}
 await writeFile(join(evidence,'checks.log'),output);
-await atomic(join(evidence,'report.json'),{source:before,fixture:'scratchpad / empty',fixtureVersion:FIXTURE_VERSION,schemaVersion:SCHEMA_VERSION,productMigration:'202610100001_conversation_core',model:'deterministic/ash-test-v1',steps,passed:!error,error,completedAt:new Date().toISOString()});
+await atomic(join(evidence,'report.json'),{source:before,fixture:'scratchpad / empty',fixtureVersion:FIXTURE_VERSION,schemaVersion:SCHEMA_VERSION,productMigration:'202610100001_conversation_core',model:'deterministic/ash-test-v1 + mocked OpenAI Responses',liveProviderCalls:0,steps,passed:!error,error,completedAt:new Date().toISOString()});
 console.log(`Verification ${error?'FAILED':'PASSED'}: ${evidence}`);
 if(error){console.error(error);process.exitCode=1;}

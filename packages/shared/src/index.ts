@@ -30,6 +30,7 @@ export const ScratchChange = z.object({
 export interface PreviewInfo {
   label: string; workspaceId: string; instanceId: string; profile: string;
   fixture: string; generation: string; schemaVersion: number;
+  model?: import('./contracts/conversations.ts').ModelInfo;
 }
 
 export * from './contracts/conversations.ts';
