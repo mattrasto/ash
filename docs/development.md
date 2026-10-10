@@ -4,7 +4,7 @@ Workflow accepted, 2026-10-09 · Placeholder implementation · Product integrati
 
 Give each feature a Git worktree, a persistent preview and disposable verification environments. Repository commands own the runtime; Codex supplies worktrees and launch actions. Ash can later invoke the same commands for [self-modification](../specs/HUMAN_SPEC.md#modifying-ashs-code).
 
-The current Electron/Svelte shell provides a database note/counter, a file note and a persisted client preference. It exercises the workflow without introducing product tables or a model provider. Its `dev_meta` and `dev_scratch` tables are disposable scaffolding. The [first conversation journey](../specs/features/conversations.md), Artifact Log, replay, live providers, signed packaging, personal-data imports and production rollout remain deferred.
+The current Electron/Svelte shell provides a database note/counter, a file note and a persisted client preference. It exercises the workflow without introducing product tables or a model provider. Its `dev_meta` and `dev_scratch` tables are disposable scaffolding. The [first conversation journey](../specs/features/conversations.md), Artifact Log, PITR recovery, live providers, signed packaging, personal-data imports and production rollout remain deferred.
 
 ## Run the placeholder
 
@@ -68,7 +68,7 @@ Use one PostgreSQL container dedicated to Ash development, with a separate datab
 | Builds | Verification output is separate from preview output. Dependency changes and installs cannot race with verification in the same checkout. |
 | Credentials | Synthetic mode receives no provider or personal connector credentials. Explicit live mode receives only its selected development provider credential in the backend. Generated database/admin credentials never reach the renderer, reports or child tools. |
 
-Provisioning revokes default `PUBLIC` access to instance databases and grants access only to their designated roles; PostgreSQL grants database `CONNECT` to `PUBLIC` by default. The provisioner alone receives development-cluster administration access. The placeholder runtime can read its metadata and update its scratchpad; it cannot change schema. When product tables land, their grants must preserve the [history write restrictions](data-model.md#constraints-beyond-the-diagram). [PostgreSQL privileges](https://www.postgresql.org/docs/current/ddl-priv.html)
+Provisioning revokes default `PUBLIC` access to instance databases and grants access only to their designated roles; PostgreSQL grants database `CONNECT` to `PUBLIC` by default. The provisioner alone receives development-cluster administration access. The placeholder runtime can read its metadata and update its scratchpad; it cannot change schema. When product tables land, runtime writes must preserve the [Artifact and run constraints](data-model.md#constraints-beyond-dbml) and [edit/undo constraints](data-model.md#application-edits-and-undo). [PostgreSQL privileges](https://www.postgresql.org/docs/current/ddl-priv.html)
 
 All application-owned writes use a centrally provided instance storage interface. Child tools receive an explicit working directory, temporary directory and allowlisted environment; tools that require unrestricted home-directory access stay disabled in synthetic mode. Connectors, observation, system notifications and global shortcuts start disabled. Test doubles capture intended external actions for assertions.
 
@@ -76,9 +76,9 @@ This provides application data isolation for trusted local development. Processe
 
 ### Fixtures and personal data
 
-The placeholder has versioned `empty` and `scratchpad` fixtures. Seeding a new instance is automatic; starting an existing preview never reseeds it. Add `conversation` and failure/interruption scenarios with product features, seeded through application commands or validated recorded history. Freeze clock/ID sources where assertions require repeatability.
+The placeholder has versioned `empty` and `scratchpad` fixtures. Seeding a new instance is automatic; starting an existing preview never reseeds it. Add `conversation` and failure/interruption scenarios with product features, seeded through application commands or validated synthetic data. Freeze clock/ID sources where assertions require repeatability.
 
-Personal snapshots remain outside the initial workflow under [G06 and G09](../specs/open-questions.md). A later import must be explicit, sanitize sensitive content, exclude credentials and active execution leases, and leave external actions disabled. Copy database history and referenced files at a consistent boundary. Use a non-disruptive export, not a template clone that terminates the source's sessions. Import never overwrites a preview implicitly.
+Personal snapshots remain outside the initial workflow under [G06 and G09](../specs/open-questions.md). A later import must be explicit, sanitize sensitive content, exclude credentials, mark unfinished runs interrupted, and leave external actions disabled. Copy database state and referenced files at a consistent boundary. Use a non-disruptive export, not a template clone that terminates the source's sessions. Import never overwrites a preview implicitly.
 
 ## One launcher and configuration contract
 
@@ -121,7 +121,7 @@ Run from the target checkout; cleanup commands accept registered instance identi
 
 ### Reset and cleanup
 
-Reset removes the target's database/history/projections, files, settings, client state, pending jobs, logs and runtime credentials, then migrates and seeds fresh state. Preserve workspace identity, source changes, developer configuration and exported verification evidence. Rotate instance authentication so old clients cannot reconnect to reset state. Restarting is a separate operation.
+Reset removes the target's database, files, settings, client state, pending jobs, logs and runtime credentials, then migrates and seeds fresh state. Preserve workspace identity, source changes, developer configuration and exported verification evidence. Rotate instance authentication so old clients cannot reconnect to reset state. Restarting is a separate operation.
 
 Before destructive operations, verify the registered development-cluster identity, database ownership metadata and canonical instance directory; reject roots, symlink escapes, personal stores and mismatched IDs. A database-name suffix alone is insufficient. Disconnect only the target instance's sessions. Failed reset/disposal remains visibly incomplete and can be retried; never report ready after partial cleanup.
 
@@ -147,7 +147,7 @@ Future product verification: keep deterministic regression checks and agent expl
 
 The future deterministic model must support streaming, controlled delay, failure and cancellation. Record it as a test adapter; live model quality remains a separate check after G09 establishes provider and data policy. Live verification requires explicit call/time limits belonging to the verification session and surviving instance restart/reset; report calls and available usage.
 
-For the first journey, verify [C01–C12](../specs/features/conversations.md#acceptance-examples). The replay test follows the [data-model replay contract](data-model.md#replay-recovery-and-deletion): rebuild projections in a fresh database, compare state at the same history boundary, and assert zero model/tool/notification calls. Test recovery separately so replay cannot silently restart recorded work. Add accepted artifact-move examples when that feature enters scope.
+For the first journey, verify [C01–C14](../specs/features/conversations.md#acceptance-examples). The restore test follows the [backup and recovery design](data-model.md#backup-and-recovery): use synthetic data and restore a physical backup plus archived WAL into an isolated PostgreSQL instance, not the shared development cluster. Verify C10 with external dispatch disabled, then separately verify startup interruption handling. Add accepted artifact-move examples when that feature enters scope.
 
 Each report records source commit plus dirty-content fingerprint, lockfile, fixture and schema versions, commands/scenarios, outcomes, model mode, screenshots and relevant traces. Source changes during verification invalidate the result. Include failed/skipped checks and subjective judgments; a screenshot alone is not a pass. Store evidence outside disposable state and never include credentials. Recheck the integrated revision after merge, especially migrations and shared contracts; code integration never merges preview databases.
 
@@ -161,7 +161,7 @@ Later, Ash can attach a workspace ID and verification report to a Run and use th
 
 ## Workflow acceptance
 
-The placeholder verifies the current storage and lifecycle portions below. Conversation/replay (DEV-10), full worker parallelism, foreground-focus guarantees, exhaustive startup cancellation and orphan tooling remain deferred or unverified.
+The placeholder verifies the current storage and lifecycle portions below. Conversation/PITR recovery (DEV-10), full worker parallelism, foreground-focus guarantees, exhaustive startup cancellation and orphan tooling remain deferred or unverified.
 
 | ID | Scenario and required result |
 | --- | --- |
@@ -174,8 +174,8 @@ The placeholder verifies the current storage and lifecycle portions below. Conve
 | DEV-07 | Reset a populated preview: all mutable application state returns to the fixture, old client credentials fail, and source/evidence/sibling state is unchanged. A forged target or symlink escape is rejected. |
 | DEV-08 | Run with inherited personal connection/path/key settings: launcher rejects conflicts and synthetic children receive no personal credentials. Inspect written paths and captured external actions. |
 | DEV-09 | Rename a branch or start from detached HEAD: resource ownership remains stable. A copied workspace marker cannot take ownership of the original instance. |
-| DEV-10 | Replay recorded conversation history in a verification database: the defined projections match and external-call count is zero; recovery is checked separately. |
+| DEV-10 | Restore conversation data under C10 in an isolated PostgreSQL instance: state matches the selected recovery point, external-call count is zero, and startup does not redispatch restored work. |
 | DEV-11 | Verify while a human uses the preview: preview state/focus is preserved, evidence identifies the tested source, and changing source invalidates the result. |
 | DEV-12 | Dispose resources and remove the checkout: no owned processes/databases remain; reports survive. Unexpected checkout removal exposes orphaned resources without deleting them automatically. |
 
-Implement the launcher, synthetic preview and isolation/lifecycle checks first. Add the conversation driver, replay checks and evidence as the first journey lands. Live-provider checks remain gated by G09; stronger execution isolation and rollout belong to G10.
+Implement the launcher, synthetic preview and isolation/lifecycle checks first. Add the conversation driver, restore checks and evidence as the first journey lands. Live-provider checks remain gated by G09; stronger execution isolation and rollout belong to G10.

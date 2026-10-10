@@ -1,0 +1,117 @@
+// Accepted design; physical details proposed. Not implemented.
+// Product rules: ../features/artifacts.md and ../features/instructions.md
+// Transactions, JSON contracts and SQL-only constraints: ../../docs/data-model.md
+Project ash {
+  database_type: 'PostgreSQL'
+  Note: 'Six product tables. Recovery uses physical backups and archived WAL; application audit history is deferred.'
+}
+
+Table topics {
+  id uuid [pk, not null]
+  name text [not null]
+  instruction_id uuid [unique, note: 'This Topic owns the Instruction; null if none. Ownership is checked across Topics and Threads.']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  deleted_at timestamptz [note: 'Null while active; set on soft deletion.']
+
+  Note: 'Soft deletion removes memberships but retains the Instruction and Threads.'
+}
+
+Table threads {
+  id uuid [pk, not null]
+  title text [not null]
+  instruction_id uuid [unique, note: 'This Thread owns the Instruction; null if none. Ownership is checked across Topics and Threads.']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  is_archived boolean [not null, default: false, note: 'Hidden from the ordinary thread list; accessible in the archive.']
+  is_pinned boolean [not null, default: false, note: 'Pinned in the thread list. Does not override is_archived.']
+
+  Note: 'Normal text conversations; Topic membership is optional.'
+}
+
+Table thread_topics {
+  thread_id uuid [not null]
+  topic_id uuid [not null]
+  linked_at timestamptz [not null]
+
+  indexes {
+    (thread_id, topic_id) [pk]
+    topic_id
+  }
+  Note: 'Current Thread/Topic membership.'
+}
+
+Table artifacts {
+  id uuid [pk, not null, note: 'Stable across streaming and moves.']
+  layer text [not null, check: `layer IN ('input', 'filter', 'route', 'act', 'surface')`, note: 'Engine stage that produced the Artifact.']
+  source_id uuid [note: 'Immediate source; null for Input roots, required otherwise. Immutable.']
+  thread_id uuid [note: 'Surface: required current owner. Other layers: original processing association, or null if unknown.']
+  run_id uuid [note: 'Producing Run; null for user Input/Surface and pre-Act processing.']
+  actor text [not null, check: `actor IN ('user', 'ash', 'system')`, note: 'Attribution: user input/messages, Ash actions/replies, or system ingestion.']
+  payload jsonb [not null, note: 'Validated content with a type tag. Surface: speaker/content. Model request: messages/provider/model/options. Only active response content may grow.']
+  created_at timestamptz [not null, note: 'When first saved; immutable. Used with id for thread ordering.']
+  updated_at timestamptz [not null, note: 'When content or thread ownership last changed; initially created_at.']
+
+  indexes {
+    source_id
+    run_id
+    (thread_id, created_at, id)
+  }
+  checks {
+    `(layer = 'input' AND source_id IS NULL) OR (layer <> 'input' AND source_id IS NOT NULL)`
+    `source_id IS NULL OR source_id <> id`
+    `layer <> 'surface' OR thread_id IS NOT NULL`
+  }
+  Note: 'The Artifact Log. Payload contracts: docs/data-model.md#artifact-payloads.'
+}
+
+Table instructions {
+  id uuid [pk, not null]
+  key text [unique, note: 'Global prompt key, e.g. response; null for Topic/Thread instructions.']
+  name text [not null]
+  text text [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'One document per Topic, Thread or global prompt. Ownership checks: docs/data-model.md#instructions-and-captured-requests.'
+}
+
+Table runs {
+  id uuid [pk, not null, note: 'New for each execution, including explicit retries.']
+  input_artifact_id uuid [not null, note: 'Input that triggered the Run; reused by retries.']
+  thread_id uuid [not null, note: 'Execution target; unchanged by Surface moves.']
+  retry_of_id uuid [note: 'Previous settled Run for an explicit retry; null for the initial execution.']
+  status text [not null, check: `status IN ('queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted')`, note: 'Current execution state; starts queued.']
+  state jsonb [not null, note: 'Latest workflow checkpoint, including request/output references. Contract: docs/data-model.md#run-state-and-errors.']
+  error jsonb [note: 'Failure code, message and optional details; null when no failure is recorded.']
+  request_key uuid [unique, not null, note: 'Used to prevent duplicate run submissions. Reuse on delivery retry; replace on execution retry.']
+  request_hash text [not null, note: 'Detects reuse of request_key with different command content or target.']
+  created_at timestamptz [not null, note: 'When accepted and saved; immutable.']
+  started_at timestamptz [note: 'When execution starts; null while queued or if stopped before starting.']
+  ended_at timestamptz [note: 'Null while queued/running; set when settled.']
+
+  indexes {
+    input_artifact_id
+    thread_id
+    retry_of_id
+  }
+  checks {
+    `retry_of_id IS NULL OR retry_of_id <> id`
+    `(status IN ('queued', 'running') AND ended_at IS NULL) OR (status IN ('completed', 'failed', 'cancelled', 'interrupted') AND ended_at IS NOT NULL)`
+    `status NOT IN ('running', 'completed') OR started_at IS NOT NULL`
+    `jsonb_typeof(state) = 'object'`
+    `error IS NULL OR jsonb_typeof(error) = 'object'`
+  }
+  Note: 'Act workflow. First phase: one active response per Thread; interruption requires explicit retry.'
+}
+
+Ref: instructions.id - topics.instruction_id [delete: restrict]
+Ref: instructions.id - threads.instruction_id [delete: restrict]
+Ref: thread_topics.thread_id > threads.id [delete: restrict]
+Ref: thread_topics.topic_id > topics.id [delete: restrict]
+Ref: artifacts.source_id > artifacts.id [delete: restrict]
+Ref: artifacts.thread_id > threads.id [delete: restrict]
+Ref: artifacts.run_id > runs.id [delete: restrict]
+Ref: runs.input_artifact_id > artifacts.id [delete: restrict]
+Ref: runs.thread_id > threads.id [delete: restrict]
+Ref: runs.retry_of_id > runs.id [delete: restrict]

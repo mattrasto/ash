@@ -15,6 +15,7 @@ ash/
 │   └── data/model.dbml
 ├── docs/
 │   ├── architecture.md
+│   ├── data-model.md                # Ownership, context capture, Run state and recovery
 │   ├── repository-structure.md
 │   ├── development.md               # Setup, startup, reset, checks
 │   ├── decisions/<id>-<name>.md      # Choice, reason, consequences
@@ -39,18 +40,17 @@ ash/
 │   │           └── ui/               # Reused visual components
 │   ├── server/
 │   │   ├── package.json
-│   │   ├── drizzle.config.ts
-│   │   ├── migrations/
+│   │   ├── prisma/                   # Planned schema/migrations; layout follows the pinned Prisma version
 │   │   ├── src/
 │   │   │   ├── main.ts               # Process startup/shutdown
 │   │   │   ├── app.ts                # App assembly
 │   │   │   ├── modules/
 │   │   │   │   ├── conversations/    # Threads and conversation operations
 │   │   │   │   ├── organization/     # Topics and membership
-│   │   │   │   ├── artifacts/        # History, lineage, replay
-│   │   │   │   ├── runs/             # Execution and attempts
+│   │   │   │   ├── artifacts/        # Engine records, lineage and Surface content
+│   │   │   │   ├── runs/             # Execution and linked retries
 │   │   │   │   ├── context/          # Selection and inspection
-│   │   │   │   └── instructions/     # Defaults and revisions
+│   │   │   │   └── instructions/     # Editable documents owned by scopes
 │   │   │   └── platform/
 │   │   │       ├── config.ts
 │   │   │       ├── db/               # Connection, transactions, schema aggregation
@@ -71,7 +71,7 @@ ash/
 - Client and server import shared contracts; shared imports neither. Client cannot import server code.
 - Features own their operations, schema definitions and tests. Cross-feature calls use explicit interfaces; database schemas aggregate centrally.
 - Shared contains cross-process contracts and validation, not database tables, provider SDKs or runtime prompts.
-- Runtime instruction defaults live in their server feature; editable revisions live in the database.
+- Runtime instruction defaults live in their server feature; editable documents and owner references live in the database.
 - Unit tests sit beside implementation. Integration tests span server modules; end-to-end tests exercise the app.
 - Start features with a file and a test. Split routes, services and persistence when useful.
 - Keep secrets, runtime data and generated output out of Git. Custom apps have separate stores and repositories.

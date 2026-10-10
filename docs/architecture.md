@@ -4,49 +4,41 @@ Draft. File layout: [repository structure](repository-structure.md).
 
 ## Stack and runtime
 
-Recommend TypeScript, Svelte, Node/Fastify, PostgreSQL and Drizzle. Electron depends on the first desktop requirements (G02).
+Recommend TypeScript, Svelte, Node/Fastify and PostgreSQL, with Prisma planned for the product schema. Prisma is not installed yet. Electron depends on the first desktop requirements (G02).
 
 Use one backend and one core database. The client handles presentation and native integration; the backend owns rules, context, model calls, execution and persistence. Keep credentials out of renderer contracts.
 
 Run the backend independently of desktop windows. Laptop-off operation needs an always-on host; local-only applications still need a reachable device. Hosting remains open in [G02](../specs/open-questions.md).
 
-Asha's manifests and schema confirm this stack is already in use nearby. Its conversations/interactions/log-events model does not establish Ash's topic membership or replay contract. Ash has a [separate codebase](decisions/0001-separate-codebase.md); evaluate components individually for reuse.
+Asha's manifests and schema confirm this stack is already in use nearby. Its conversations/interactions/log-events model does not establish Ash's topic membership or recovery contract. Ash has a [separate codebase](decisions/0001-separate-codebase.md); evaluate components individually for reuse.
 
 ## Processing and persistence
 
 - Treat Listen/Input/Filter/Route/Act/Surface as logical stages within the backend.
-- Route explicit text input directly; record skipped stages without unnecessary model calls.
-- Record organization and instruction edits as inputs and state changes.
-- Append history and update immediate projections in one transaction when they must remain consistent.
-- Give submissions stable identities to prevent duplicates on transport retry. Replay by recorded sequence, not timestamps alone.
-- Persist run state and start with database-backed execution. Broader scheduling follows durable waits and background-work requirements.
-- Version event payloads and instruction revisions. Test old-event replay separately from database migrations.
+- Explicitly targeted text input bypasses Filter/Route; its Input retains the selected Thread.
+- Store current state directly; application audit history is deferred. Manual edits do not require engine Artifacts.
+- Capture model inputs before dispatch and retain Artifact source links for inspection.
+- Give commands stable identities to prevent duplicates on transport retry. A deliberate execution retry creates a linked Run.
+- Start with one backend owning database-backed execution; record interruptions instead of automatically repeating work. Broader scheduling and worker takeover require separate design.
+- Use the accepted [recovery contract](../specs/features/artifacts.md#rules) and verify restores separately from database migrations.
 
 ## First model
 
-Ownership and erasure depend on G03/G06. All entities belong to the user's Ash instance; deployment will determine authentication and device identity.
-
-| Entity | Relationships and lifecycle |
-| --- | --- |
-| Topic | Many threads through membership. Removing a topic unlinks threads rather than deleting them. |
-| Thread | Zero or more topics; owns current visible entries. Archive and erasure are separate operations. |
-| Thread–topic membership | Unique active pair; reconstruct changes from history. |
-| Artifact record | Input/action/surface/change with causal links, stage and payload version. Internal records may lack a thread. Retention follows G06. |
-| Current thread entry | One Surface Artifact in one current thread, with presentation order. Rebuild from recorded changes; a separate table is undecided. |
-| Run / attempt | Initiating input, target thread, outputs and settled outcome. Preserve retries distinctly; replay must not restart work or revive stale leases. |
-| Instruction revision | Runs identify the revision used. Retain historical revisions subject to G06. |
+The [six-table data model](data-model.md) defines ownership, causal links, context capture, Run checkpoints and recovery for the conversation core. The [DBML](../specs/data/model.dbml) contains tables, columns and foreign keys. Physical details and remaining product decisions are marked in the model.
 
 ## Schema workflow
 
-Start with `specs/data/model.dbml`: table boxes, all columns, foreign-key connections and brief ownership/deletion notes. Once implemented, migrations define database structure:
+`specs/data/model.dbml` is the design diagram before implementation. Column notes must state purpose, population/null conditions and any allowed mutations. Keep JSON payload contracts in the [data model](data-model.md#artifact-payloads).
 
-1. Review and commit SQL migrations.
-2. Apply them to a clean development database.
-3. Generate DBML with `db2dbml` and normalize its output.
-4. Check for drift and inspect the diagram in dbdiagram. Document constraints it cannot represent.
+When Prisma is introduced, keep its schema, committed migrations and the UML/DBML diagram synchronized in the same change. The Prisma schema describes intended application structure; migrations establish the database, including constraints that require additional SQL. Do not update one representation and leave the others stale.
 
-References: [Drizzle migrations](https://orm.drizzle.team/docs/migrations), [DBML CLI](https://dbml.dbdiagram.io/cli/), [DBML syntax](https://dbml.dbdiagram.io/docs/).
+1. Update and validate the Prisma schema using the pinned version's tooling; generate and review the migration, including SQL-only constraints.
+2. Apply migrations to a clean, isolated development database.
+3. Generate DBML from that database with `db2dbml` and normalize its output. Preserve field usage notes; document constraints the diagram cannot represent.
+4. Compare tables, columns, nullability, keys and relationships with the Prisma schema and migration, then inspect the diagram in dbdiagram. Add an automated drift check when the schema/export tooling is introduced.
+
+Select the Prisma version and document its verified commands when implementing persistence. References: [Prisma migrations](https://www.prisma.io/docs/orm/migrations/applying-a-migration), [DBML CLI](https://dbml.dbdiagram.io/cli/), [DBML syntax](https://dbml.dbdiagram.io/docs/).
 
 ## Bootstrap and verification
 
-Pin dependencies; provide startup, synthetic seed data, guarded reset and automated checks. Exercise [conversation acceptance examples](../specs/features/conversations.md) with a deterministic model, then a live-model smoke test after G09 is settled. Test interruption, duplicate delivery and replay without model/tool calls; inspect the full journey in the running app.
+The proposed [development workflow](development.md) defines workspace isolation, synthetic fixtures, startup/reset commands, process ownership and verification evidence. Its [workflow acceptance cases](development.md#workflow-acceptance) cover concurrent previews and tests. Product behavior follows the [conversation acceptance examples](../specs/features/conversations.md).
