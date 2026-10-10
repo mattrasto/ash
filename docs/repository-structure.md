@@ -18,6 +18,7 @@ ash/
 │   ├── data-model.md                # Ownership, context capture, Run state and recovery
 │   ├── repository-structure.md
 │   ├── development.md               # Workspace lifecycle, isolation and verification
+│   ├── testing.md                   # Testing policy, commands, evidence and extension points
 │   ├── decisions/<id>-<name>.md      # Choice, reason, consequences
 │   ├── features/<feature>.md         # Design, code map, test references
 │   └── plans/<milestone>.md          # Build sequence
@@ -65,7 +66,13 @@ ash/
 │   ├── dev/                          # Workspace launcher, provisioning, reset and verification
 │   └── ...                           # DBML export and other repository tooling
 ├── tests/
+│   ├── scenarios.ts                 # Requirement links and manual procedures
+│   ├── boundary/                    # Ownership invariants and CLI contracts
+│   ├── integration/                 # Real-worktree lifecycle journey
 │   ├── e2e/
+│   ├── support/                     # Shared drivers, fixtures and result capture
+│   ├── baselines/                   # Reviewed screenshot expectations
+│   ├── playwright.config.ts
 │   └── fixtures/                     # Synthetic data
 └── .github/workflows/                # CI, if hosted on GitHub
 ```
@@ -76,8 +83,8 @@ ash/
 - Features own their operations, schema definitions and tests. Cross-feature calls use explicit interfaces; database schemas aggregate centrally.
 - Shared contains cross-process contracts and validation, not database tables, provider SDKs or runtime prompts.
 - Runtime instruction defaults live in their server feature; editable documents and owner references live in the database.
-- Unit tests sit beside implementation. Integration tests span server modules; end-to-end tests exercise the app.
-- Start features with a file and a test. Split routes, services and persistence when useful.
+- Follow the [testing approach](testing.md). Feature integration tests exercise stable boundaries; end-to-end tests exercise the app. Shared verification infrastructure lives under `tests/`.
+- Start features with a file and an acceptance scenario. Split routes, services and persistence when useful.
 - Keep secrets, runtime data and generated output out of Git. Custom apps have separate stores and repositories.
 
 Database consistency and migration rules: [architecture](architecture.md). Development commands and resource ownership: [development workflow](development.md). Product and delivery constraints: [product](../specs/product.md).

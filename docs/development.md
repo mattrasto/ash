@@ -24,8 +24,8 @@ The launcher requires process inspection, loopback sockets and Docker access. A 
 1. Start a Codex chat in a new worktree for a feature. Automatic setup installs pinned dependencies, registers the workspace and prepares its preview data.
 2. Choose **Run Preview**. Open that feature's scratchpad with hot reload. Other feature previews keep running.
 3. Iterate in the same preview; restarts preserve its database, file and client preference. Reset explicitly when a clean fixture is useful. Product fixtures will replace the scratchpad as features land.
-4. Run automated checks and let the coding agent exercise a separate verification instance. Testing does not interrupt or rewrite the preview being inspected.
-5. Review the diff and verification evidence, then demonstrate the feature in its preview. Follow the [delivery agreement](../specs/product.md#confirmed-engineering-agreement) for review and integration.
+4. Follow the [testing workflow](testing.md): run automated checks and let the coding agent exercise a separate verification instance. Testing does not interrupt or rewrite the preview being inspected.
+5. The coding agent reviews the diff and evidence, then demonstrates the feature and presents any targeted manual checks. Follow the [delivery agreement](../specs/product.md#confirmed-engineering-agreement) for review and integration.
 6. Preserve source changes in a Git checkpoint or saved patch, including relevant untracked files. Dispose of development resources before archiving the checkout; retain verification evidence.
 
 ## Workspace and instance identity
@@ -111,9 +111,9 @@ Run from the target checkout; cleanup commands accept registered instance identi
 | Status | `pnpm dev:status` | Report identity, source, profile, readiness, safe endpoints and owned-resource state; include actionable startup errors. |
 | Stop Preview | `pnpm dev:stop` | Stop the preview and its children; retain application data. Never stop the shared database container. |
 | Reset Preview | `pnpm dev:reset` | Stop the preview, replace all mutable application state with `scratchpad`, and leave it stopped. Add `--fixture empty` for blank state. |
-| — | `pnpm test` | Run fast ownership, lock and environment unit tests. |
+| Quick Checks | `pnpm verify --profile quick` | Types and fast boundary checks; partial verification. |
 | — | `pnpm test:workflow` | Run isolated PostgreSQL, real-worktree and Electron integration checks. |
-| Run Tests | `pnpm verify` | Run typechecking, build validation and relevant automated acceptance checks in fresh instances; write a report. A narrower selection must be explicit in the report. |
+| Run Tests | `pnpm verify` | Full automated verification. Selection, suite commands and evidence: [testing](testing.md#commands). |
 | Run Ephemeral Preview | `pnpm dev:verify --fixture scratchpad` | Start a fresh windowed instance for exploration; return its ID and endpoints. Ctrl-C stops and disposes it. A detached session requires explicit disposal. |
 | — | `pnpm dev:dispose` | Stop and delete this workspace's preview, verification/test resources and credentials; retain source and exported evidence. |
 
@@ -129,27 +129,7 @@ The integration test releases its owned resources in final cleanup, retaining ev
 
 ## Verification and evidence
 
-### Manual checks
-
-Run these in order using disposable sample edits; reset deliberately removes the selected preview's data.
-
-1. **Persistence and reopening:** Run, save a scratchpad note and file note, add a marker, and enable **Compact scratchpad**. Close the app window and Run again, then Stop and Run. Both notes, the count and the preference should survive. Repeated Run should reuse the same preview.
-2. **Parallel features:** Open another Ash worktree based on the current `master` and Run it. Save different notes in A and B. Refresh or reopen each: labels distinguish the workspaces and each retains its own values. Stop A; B should still work.
-3. **Ephemeral preview:** With A open, choose **Run Ephemeral Preview**. The window should say verification and start with fresh sample data. Change its note, then Ctrl-C that terminal. The ephemeral preview closes and is discarded; A's saved values remain.
-4. **True reset:** Run `pnpm dev:reset --fixture empty` in A, then Run. Notes and file note should be blank, the counter zero and Compact off. B should retain its values. Reset leaves A stopped until Run.
-5. **Hot reload:** In A's `packages/client/src/renderer/App.svelte`, temporarily change the main heading to “Hot reload works.” The open A window should update while B stays unchanged. Revert the text; saved data should survive both updates.
-
-### Automated checks
-
-`pnpm verify` runs typechecking, an isolated build, unit tests and the workflow integration suite. It writes `report.json`, `checks.log`, screenshots and cleanup results under the printed evidence directory. Tests exercise two simultaneous worktrees plus a verification instance, cross-database access denial, database/file/client persistence, renderer hot reload, reset/token rotation, native launch/stop, supervisor crash recovery, Docker configuration changes, database-container recreation and disposal. Protected server configuration is excluded from Vite's served paths. The test helper in `tests/integration/workflow.test.ts` drives real Electron windows with Playwright.
-
-Future product verification: keep deterministic regression checks and agent exploration distinct in reports. Extend the driver with conversation, recorded input/run/context/output inspection, attachment and voice controls as those features land. Observation endpoints must remain authenticated and development-only.
-
-The future deterministic model must support streaming, controlled delay, failure and cancellation. Record it as a test adapter; live model quality remains a separate check after G09 establishes provider and data policy. Live verification requires explicit call/time limits belonging to the verification session and surviving instance restart/reset; report calls and available usage.
-
-For the first journey, verify [C01–C14](../specs/features/conversations.md#acceptance-examples). The restore test follows the [backup and recovery design](data-model.md#backup-and-recovery): use synthetic data and restore a physical backup plus archived WAL into an isolated PostgreSQL instance, not the shared development cluster. Verify C10 with external dispatch disabled, then separately verify startup interruption handling. Add accepted artifact-move examples when that feature enters scope.
-
-Each report records source commit plus dirty-content fingerprint, lockfile, fixture and schema versions, commands/scenarios, outcomes, model mode, screenshots and relevant traces. Source changes during verification invalidate the result. Include failed/skipped checks and subjective judgments; a screenshot alone is not a pass. Store evidence outside disposable state and never include credentials. Recheck the integrated revision after merge, especially migrations and shared contracts; code integration never merges preview databases.
+The [testing approach](testing.md) owns coverage policy, scenario selection, evidence, visual expectations and manual procedures. `pnpm verify` runs the full automated gate; quick and selected runs are explicitly partial. Use `pnpm dev:verify` for agent exploration or targeted human checks without changing the persistent preview.
 
 ## Codex now and Ash later
 

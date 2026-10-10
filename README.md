@@ -9,4 +9,5 @@ With Node 22, pnpm 9 and Docker running: `pnpm dev:setup`, then `pnpm dev`. Run 
 - [Architecture](docs/architecture.md)
 - [Data model](docs/data-model.md) · [DBML](specs/data/model.dbml)
 - [Development workflow](docs/development.md)
+- [Testing](docs/testing.md)
 - [Project instructions](AGENTS.md)

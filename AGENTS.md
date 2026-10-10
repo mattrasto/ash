@@ -17,4 +17,5 @@ Start with `specs/README.md`, `specs/product.md` and the relevant feature spec. 
 - Proceed with routine reversible work. Surface consequential scope, behavior, privacy, cost and production-risk decisions.
 - Use isolated development data, guarded reset commands and recoverable Git checkpoints.
 - With Docker running, `pnpm dev:setup` installs dependencies and prepares isolated data; `pnpm dev` opens the persistent desktop preview. Use `pnpm dev:stop` to stop it.
-- `pnpm verify` checks types, builds and runs unit plus real-worktree desktop tests. Commands, reset/disposal and prerequisites: [development workflow](docs/development.md).
+- Follow the [testing approach](docs/testing.md): no routine unit tests; prefer boundary integration and real-app scenarios. Use `pnpm verify --profile quick` while iterating and full `pnpm verify` before integration. Keep source unchanged during verification; review the diff and explore the actual app before handoff.
+- Verification reports serve agent diagnostics. Give the user concise outcomes and targeted manual checks when needed, not a report-reading task. Commands, reset/disposal and prerequisites: [development workflow](docs/development.md).

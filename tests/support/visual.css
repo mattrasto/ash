@@ -1,0 +1,5 @@
+/* Normalize only the random workspace accent, keeping the application layout intact. */
+.shell { --accent: #467451 !important; --tint: #eaf0e9 !important; }
+/* Hiding identity avoids mask-edge differences from variable-width random IDs. */
+.pill, .sidebar-bottom strong, footer span:last-child { visibility: hidden !important; }
+.sidebar-bottom strong { white-space: nowrap !important; }
