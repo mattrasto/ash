@@ -6,23 +6,41 @@ import { assertEnvironment, devRoot, alive, exists, sleep } from './io.ts';
 import { workspace, createInstance, readInstance } from './workspace.ts';
 import { startInstance, stopInstance, resetInstance, disposeInstance, runtime } from './lifecycle.ts';
 
+let jsonOutput = false;
+let logDirectory: string | undefined;
+const color = (code: number, value: string) => process.stdout.isTTY && !('NO_COLOR' in process.env) ? `\x1b[${code}m${value}\x1b[0m` : value;
+function note(message: string) { if (!jsonOutput) console.log(color(2, message)); }
+function result(value: unknown, message: string, details: string[] = []) {
+  if (jsonOutput) console.log(JSON.stringify(value, null, 2));
+  else {
+    console.log(`\n${color(32, '✓')} ${color(1, message)}`);
+    for (const detail of details) console.log(`  ${detail}`);
+    console.log();
+  }
+}
+
 try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     workspace: { type: 'string' }, 'dev-root': { type: 'string' }, instance: { type: 'string' },
     fixture: { type: 'string' }, json: { type: 'boolean' }, headless: { type: 'boolean' }, windowed: { type: 'boolean' }, background: { type: 'boolean' }, detach: { type: 'boolean' },
   } });
+  jsonOutput = values.json ?? false;
   assertEnvironment();
   const root = await devRoot(values['dev-root']);
   const ws = await workspace(resolve(values.workspace ?? process.cwd()), root);
   const command = positionals[0];
   const instanceId = values.instance ?? ws.previewId;
-  if (values.instance) await readInstance(ws, instanceId);
+  const selected = values.instance ? await readInstance(ws, instanceId) : undefined;
   if (values.instance && ['setup', 'explore'].includes(command)) throw new Error(`${command} does not accept --instance`);
   const fixture = Fixture.parse(values.fixture ?? 'scratchpad');
-  let result: unknown;
-  if (command === 'setup') result = await createInstance(ws, 'preview', fixture);
+  if (command === 'setup') {
+    note(`Preparing preview · ${ws.label}…`);
+    result(await createInstance(ws, 'preview', fixture), `Preview prepared · ${ws.label}`, ['Start: pnpm dev']);
+  }
   else if (command === 'start' || command === 'explore') {
+    note(`Starting ${command === 'explore' || (selected && selected.profile !== 'preview') ? 'verification' : 'preview'} · ${ws.label}…`);
     const instance = command === 'explore' ? await createInstance(ws, 'verify', fixture) : values.instance ? await readInstance(ws, instanceId) : await createInstance(ws, 'preview', fixture);
+    logDirectory = join(instance.root, 'logs');
     let cancelled = false;
     let cleaning = false;
     const cleanup = async () => {
@@ -30,6 +48,7 @@ try {
       cleaning = true;
       await stopInstance(ws, instance.id);
       if (command === 'explore') await disposeInstance(ws, instance.id);
+      note(command === 'explore' ? 'Verification stopped and discarded.' : `${instance.profile === 'preview' ? 'Preview' : 'Verification'} stopped. Data kept.`);
       process.exit(0);
     };
     // Record cancellation while startup holds the instance lock; cleanup follows once it releases.
@@ -42,23 +61,56 @@ try {
     });
     for (const signal of ['SIGINT', 'SIGTERM'] as const) process.off(signal, cancelStartup);
     if (cancelled) await cleanup();
-    result = { workspace: ws.label, ...state };
-    console.log(JSON.stringify(result, null, 2));
+    const target = instance.profile === 'preview' ? '' : ` --instance ${instance.id}`;
+    result({ workspace: ws.label, ...state }, `${instance.profile === 'preview' ? 'Preview' : 'Verification'} ready · ${instance.label}`, [
+      instance.profile === 'preview' ? 'Persistent data · hot reload enabled' : 'Disposable data · preview unchanged',
+      ...(values.headless ? [`Frontend: ${state.webUrl}`, `Backend:  ${state.serverUrl}`] : []),
+      values.detach
+        ? instance.profile === 'preview' ? 'Stop: pnpm dev:stop' : `Dispose: pnpm dev:dispose${target}`
+        : command === 'explore' ? 'Ctrl+C to stop and discard this instance' : 'Ctrl+C to stop · data is kept',
+      `Details: pnpm dev:status${target}`,
+    ]);
     if (!values.detach) {
       for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, cleanup);
       while (await alive(state.supervisor)) await sleep(1000);
       if (command === 'explore' && await exists(join(instance.root, 'instance.json'))) await disposeInstance(ws, instance.id);
+      note(command === 'explore' ? 'Verification stopped and discarded.' : `${instance.profile === 'preview' ? 'Preview' : 'Verification'} stopped. Data kept.`);
     }
     process.exit(0);
   } else if (command === 'status') {
-    if (!await exists(join(root, 'workspaces', ws.id, 'preview/instance.json')) && !values.instance) result = { workspace: ws.label, phase: 'not-set-up' };
-    else { const instance = await readInstance(ws, instanceId); const state = await runtime(instance); result = { workspace: ws.label, instanceId: instance.id, profile: instance.profile, fixture: instance.fixture, phase: state?.phase ?? 'stopped', running: state ? await alive(state.supervisor) : false, serverUrl: state?.serverUrl, webUrl: state?.webUrl, error: state?.error }; }
-  } else if (command === 'stop') { await stopInstance(ws, instanceId); result = { stopped: instanceId }; }
-  else if (command === 'reset') result = await resetInstance(ws, instanceId, fixture);
+    if (!await exists(join(root, 'workspaces', ws.id, 'preview/instance.json')) && !values.instance) {
+      result({ workspace: ws.label, phase: 'not-set-up' }, `Preview not set up · ${ws.label}`, ['Setup: pnpm dev:setup']);
+    } else {
+      const instance = selected ?? await readInstance(ws, instanceId);
+      const state = await runtime(instance);
+      const running = state ? await alive(state.supervisor) : false;
+      const phase = state?.phase ?? 'stopped';
+      result({ workspace: ws.label, instanceId: instance.id, profile: instance.profile, fixture: instance.fixture, phase, running,
+        serverUrl: state?.serverUrl, webUrl: state?.webUrl, error: state?.error },
+      `Ash · ${instance.label}`, [
+        `State: ${!running && ['ready', 'starting'].includes(phase) ? 'Supervisor exited' : phase}`,
+        `Profile: ${instance.profile} · Fixture: ${instance.fixture}`,
+        ...(running && state?.webUrl ? [`Frontend: ${state.webUrl}`, `Backend:  ${state.serverUrl}`] : []),
+        `Logs: ${join(instance.root, 'logs')}`,
+        ...(state?.error ? [`Error: ${state.error}`] : []),
+      ]);
+    }
+  } else if (command === 'stop') {
+    await stopInstance(ws, instanceId);
+    result({ stopped: instanceId }, `Stopped · ${selected?.label ?? ws.label}`, ['Data kept.']);
+  } else if (command === 'reset') {
+    note(`Resetting · ${selected?.label ?? ws.label}…`);
+    result(await resetInstance(ws, instanceId, fixture), `Reset complete · ${selected?.label ?? ws.label}`, [
+      `Fixture: ${fixture} · instance is stopped`, `Start: pnpm dev${values.instance ? ` --instance ${instanceId}` : ''}`,
+    ]);
+  }
   else if (command === 'dispose') {
     const ids = values.instance ? [instanceId] : [ws.previewId, ...await readdir(join(root, 'workspaces', ws.id, 'verify')).catch(() => [])];
     for (const target of ids) if (await exists(join(root, 'workspaces', ws.id, target === ws.previewId ? 'preview' : `verify/${target}`, 'instance.json'))) await disposeInstance(ws, target);
-    result = { disposed: ids };
+    result({ disposed: ids }, `Disposed · ${selected?.label ?? ws.label}`, ['Development data removed. Source and evidence kept.']);
   } else throw new Error('Expected setup, start, status, stop, reset, dispose or explore');
-  console.log(JSON.stringify(result, null, 2));
-} catch (e) { console.error((e as Error).message); process.exit(1); }
+} catch (e) {
+  console.error(`${jsonOutput ? '' : '✗ '}${(e as Error).message}`);
+  if (!jsonOutput && logDirectory) console.error(`  Logs: ${logDirectory}`);
+  process.exit(1);
+}

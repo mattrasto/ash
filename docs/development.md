@@ -15,7 +15,7 @@ pnpm dev:setup
 pnpm dev
 ```
 
-Use Codex's checked-in `.codex/environments/environment.toml` for automatic worktree setup and Run/Stop/Reset/Verify/Status actions. The same commands work from a terminal. Setup uses `node scripts/dev/setup.mjs` so installation works before dependencies exist. No personal `.env` is required.
+Use Codex's checked-in `.codex/environments/environment.toml` for automatic worktree setup and Run/Stop/Reset/Verify/Status actions. In the current Codex layout, hide the sidebar to reveal Actions. The same commands work from a terminal. Setup uses `node scripts/dev/setup.mjs` so installation works before dependencies exist. No personal `.env` is required.
 
 The launcher requires process inspection, loopback sockets and Docker access. A coding-agent sandbox may need permission to run it; denial of process inspection fails closed. Logs live in the instance's `logs/` directory, and `pnpm dev:status --json` reports safe endpoints and errors. After changing launcher code or dependencies, stop and start again; app source changes reload automatically. After restarting Docker, Run restores the development service and reconnects the preview without reseeding, including when Docker assigns a different database port.
 
@@ -102,7 +102,7 @@ The shell has a workspace label, stable accent color and Dock badge. Human previ
 
 ## Commands
 
-Run from the target checkout; cleanup commands accept registered instance identities, not arbitrary database URLs or deletion paths. Commands print JSON for adapters. Normal starts remain attached to the terminal; Ctrl-C stops the instance. `--detach` leaves it running until explicit Stop.
+Run from the target checkout; cleanup commands accept registered instance identities, not arbitrary database URLs or deletion paths. Commands show concise summaries by default; add `--json` for structured output. Use `pnpm --silent dev` to omit pnpm's script banner too; Codex actions already do this. Normal starts remain attached to the terminal; Ctrl-C stops the instance. `--detach` leaves it running until explicit Stop.
 
 | Command | Contract |
 | --- | --- |
@@ -128,6 +128,18 @@ Before destructive operations, verify the registered development-cluster identit
 The integration test releases its owned resources in final cleanup, retaining evidence. A force-killed test can leave temporary resources for manual recovery; automatic orphan recovery and a shared-infrastructure teardown command are deferred. Ordinary Stop and Dispose leave the shared development PostgreSQL container running. Codex archive is not assumed to run a cleanup hook.
 
 ## Verification and evidence
+
+### Manual checks
+
+Run these in order using disposable sample edits; reset deliberately removes the selected preview's data.
+
+1. **Persistence and reopening:** Run, save a scratchpad note and file note, add a marker, and enable **Compact scratchpad**. Close the app window and Run again, then Stop and Run. Both notes, the count and the preference should survive. Repeated Run should reuse the same preview.
+2. **Parallel features:** Open another Ash worktree based on the current `master` and Run it. Save different notes in A and B. Refresh or reopen each: labels distinguish the workspaces and each retains its own values. Stop A; B should still work.
+3. **Disposable verification:** With A open, run `pnpm dev:verify --fixture empty` in another terminal in A's checkout. The window should say verification and start empty. Change its note, then Ctrl-C that terminal. Verification closes and is discarded; A's saved values remain.
+4. **True reset:** Run `pnpm dev:reset --fixture empty` in A, then Run. Notes and file note should be blank, the counter zero and Compact off. B should retain its values. Reset leaves A stopped until Run.
+5. **Hot reload:** In A's `packages/client/src/renderer/App.svelte`, temporarily change “Room to build.” to “Hot reload works.” The open A window should update while B stays unchanged. Revert the text; saved data should survive both updates.
+
+### Automated checks
 
 `pnpm verify` runs typechecking, an isolated build, unit tests and the workflow integration suite. It writes `report.json`, `checks.log`, screenshots and cleanup results under the printed evidence directory. Tests exercise two simultaneous worktrees plus a verification instance, cross-database access denial, database/file/client persistence, renderer hot reload, reset/token rotation, native launch/stop, supervisor crash recovery, database-container recreation and disposal. Protected server configuration is excluded from Vite's served paths. The test helper in `tests/integration/workflow.test.ts` drives real Electron windows with Playwright.
 

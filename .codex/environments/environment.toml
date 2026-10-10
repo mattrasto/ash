@@ -7,24 +7,24 @@ script = "node scripts/dev/setup.mjs"
 [[actions]]
 name = "Run"
 icon = "run"
-command = "pnpm dev"
+command = "pnpm --silent dev"
 
 [[actions]]
 name = "Stop"
 icon = "tool"
-command = "pnpm dev:stop"
+command = "pnpm --silent dev:stop"
 
 [[actions]]
 name = "Reset preview"
 icon = "tool"
-command = "pnpm dev:reset"
+command = "pnpm --silent dev:reset"
 
 [[actions]]
 name = "Verify"
 icon = "test"
-command = "pnpm verify"
+command = "pnpm --silent verify"
 
 [[actions]]
 name = "Status"
 icon = "debug"
-command = "pnpm dev:status --json"
+command = "pnpm --silent dev:status"
