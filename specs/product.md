@@ -48,7 +48,7 @@ The user owns intent, priorities, experience and consequential tradeoffs. Codex 
 
 Deliver through acceptance criteria → small complete journey → automated checks and actual app interaction → a separate review pass → demonstration → documentation update. State what works, what was verified and what remains limited. Consider experienced human review before a consequential public launch.
 
-Keep one initial backend and one core database, organized by feature. Share contracts only where actually shared. The TypeScript/Svelte/Electron/Node/Fastify/PostgreSQL stack is provisional; Prisma is planned for the product schema.
+Keep one initial backend and one core database, organized by feature. Share contracts only where actually shared. The bootstrap uses TypeScript, Svelte, Electron, Node/Fastify and PostgreSQL; Prisma is planned for the product schema.
 
 Use DBML in Git and dbdiagram for table boxes showing all columns and foreign-key connections with minimal notation. Begin with ownership, relationships and deletion semantics. Follow the [Prisma/diagram synchronization workflow](../docs/architecture.md#schema-workflow). The accepted [six-table model](../docs/data-model.md) defines the initial scope.
 

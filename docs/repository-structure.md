@@ -1,6 +1,6 @@
 # Repository structure
 
-Draft. Three packages, organized by feature. Electron host folders depend on G02.
+Proposed product layout. The three-package desktop bootstrap exists; product feature folders and Prisma are planned.
 
 ```text
 ash/
@@ -17,7 +17,7 @@ ash/
 │   ├── architecture.md
 │   ├── data-model.md                # Ownership, context capture, Run state and recovery
 │   ├── repository-structure.md
-│   ├── development.md               # Setup, startup, reset, checks
+│   ├── development.md               # Workspace lifecycle, isolation and verification
 │   ├── decisions/<id>-<name>.md      # Choice, reason, consequences
 │   ├── features/<feature>.md         # Design, code map, test references
 │   └── plans/<milestone>.md          # Build sequence
@@ -27,7 +27,9 @@ ash/
 ├── tsconfig.base.json
 ├── .env.example
 ├── .gitignore
-├── compose.yaml                      # Development PostgreSQL
+├── .codex/                           # Codex setup/actions invoking repository commands
+├── .ash-dev/                         # Ignored checkout identity; runtime state is external
+├── compose.yaml                      # Shared development-only PostgreSQL
 ├── packages/
 │   ├── client/
 │   │   ├── package.json
@@ -59,7 +61,9 @@ ash/
 │   └── shared/
 │       ├── package.json
 │       └── src/contracts/            # Cross-process requests, responses, events
-├── scripts/                          # Setup, seed, reset, DBML export
+├── scripts/
+│   ├── dev/                          # Workspace launcher, provisioning, reset and verification
+│   └── ...                           # DBML export and other repository tooling
 ├── tests/
 │   ├── e2e/
 │   └── fixtures/                     # Synthetic data
@@ -76,4 +80,4 @@ ash/
 - Start features with a file and a test. Split routes, services and persistence when useful.
 - Keep secrets, runtime data and generated output out of Git. Custom apps have separate stores and repositories.
 
-Database consistency and migration rules: [architecture](architecture.md). Product and delivery constraints: [product](../specs/product.md).
+Database consistency and migration rules: [architecture](architecture.md). Development commands and resource ownership: [development workflow](development.md). Product and delivery constraints: [product](../specs/product.md).

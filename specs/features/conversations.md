@@ -31,7 +31,7 @@ Deferred: voice and Live Threads, automatic naming/organization/archiving, artif
 
 ## Requirements
 
-- **CONV-R01 — Interface:** text-only normal threads. The first interface is a minimal desktop client if G02 confirms it.
+- **CONV-R01 — Interface:** text-only normal threads in the existing desktop client. Hosting and further native requirements remain G02.
 - **CONV-R02 — Manual organization:** the user can create/rename topics and threads and explicitly link/unlink topics; starting a thread without a topic is allowed.
 - **CONV-R03 — Topic context boundary:** a topic link organizes the first-delivery UI. Context from other threads in that topic is deferred and documented as a temporary limitation (G05).
 - **CONV-R04 — Instruction edits:** the user can view/edit current base instructions under [INST-R03–04](instructions.md#rules). Ash does not edit instructions in this milestone.

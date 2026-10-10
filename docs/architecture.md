@@ -1,16 +1,16 @@
 # Architecture
 
-Draft. File layout: [repository structure](repository-structure.md).
+Product design · Desktop bootstrap implemented. File layout: [repository structure](repository-structure.md).
 
 ## Stack and runtime
 
-Recommend TypeScript, Svelte, Node/Fastify and PostgreSQL, with Prisma planned for the product schema. Prisma is not installed yet. Electron depends on the first desktop requirements (G02).
+The bootstrap uses TypeScript, Svelte, Electron, Node/Fastify and PostgreSQL. Prisma is planned for the product schema and is not installed yet.
 
 Use one backend and one core database. The client handles presentation and native integration; the backend owns rules, context, model calls, execution and persistence. Keep credentials out of renderer contracts.
 
 Run the backend independently of desktop windows. Laptop-off operation needs an always-on host; local-only applications still need a reachable device. Hosting remains open in [G02](../specs/open-questions.md).
 
-Asha's manifests and schema confirm this stack is already in use nearby. Its conversations/interactions/log-events model does not establish Ash's topic membership or recovery contract. Ash has a [separate codebase](decisions/0001-separate-codebase.md); evaluate components individually for reuse.
+Asha's conversations/interactions/log-events model does not establish Ash's topic membership or recovery contract. Ash has a [separate codebase](decisions/0001-separate-codebase.md); evaluate components individually for reuse.
 
 ## Processing and persistence
 
@@ -41,4 +41,4 @@ Select the Prisma version and document its verified commands when implementing p
 
 ## Bootstrap and verification
 
-The proposed [development workflow](development.md) defines workspace isolation, synthetic fixtures, startup/reset commands, process ownership and verification evidence. Its [workflow acceptance cases](development.md#workflow-acceptance) cover concurrent previews and tests. Product behavior follows the [conversation acceptance examples](../specs/features/conversations.md).
+The [development workflow](development.md) implements workspace isolation, a synthetic desktop preview, startup/reset commands and lifecycle checks. Product integration remains pending under the [conversation acceptance examples](../specs/features/conversations.md).
