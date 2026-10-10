@@ -15,14 +15,14 @@ pnpm dev:setup
 pnpm dev
 ```
 
-Use Codex's checked-in `.codex/environments/environment.toml` for automatic worktree setup and Run/Stop/Reset/Verify/Status actions. In the current Codex layout, hide the sidebar to reveal Actions. The same commands work from a terminal. Setup uses `node scripts/dev/setup.mjs` so installation works before dependencies exist. No personal `.env` is required.
+Use Codex's checked-in `.codex/environments/environment.toml` for automatic worktree setup and the [preview and test actions](#commands). In the current Codex layout, hide the sidebar to reveal Actions. The same commands work from a terminal. Setup uses `node scripts/dev/setup.mjs` so installation works before dependencies exist. No personal `.env` is required.
 
-The launcher requires process inspection, loopback sockets and Docker access. A coding-agent sandbox may need permission to run it; denial of process inspection fails closed. Logs live in the instance's `logs/` directory, and `pnpm dev:status --json` reports safe endpoints and errors. After changing launcher code or dependencies, stop and start again; app source changes reload automatically. After restarting Docker, Run restores the development service and reconnects the preview without reseeding, including when Docker assigns a different database port.
+The launcher requires process inspection, loopback sockets and Docker access. A coding-agent sandbox may need permission to run it; denial of process inspection fails closed. Logs live in the instance's `logs/` directory, and `pnpm dev:status --json` reports safe endpoints and errors. After changing launcher code or dependencies, stop and start again; app source changes reload automatically. Startup reuses the verified healthy database container unless its identity or Compose configuration changes. After restarting Docker, Run Preview restores the development service and reconnects the preview without reseeding, including when Docker assigns a different database port.
 
 ## Everyday flow
 
 1. Start a Codex chat in a new worktree for a feature. Automatic setup installs pinned dependencies, registers the workspace and prepares its preview data.
-2. Choose **Run**. Open that feature's scratchpad with hot reload. Other feature previews keep running.
+2. Choose **Run Preview**. Open that feature's scratchpad with hot reload. Other feature previews keep running.
 3. Iterate in the same preview; restarts preserve its database, file and client preference. Reset explicitly when a clean fixture is useful. Product fixtures will replace the scratchpad as features land.
 4. Run automated checks and let the coding agent exercise a separate verification instance. Testing does not interrupt or rewrite the preview being inspected.
 5. Review the diff and verification evidence, then demonstrate the feature in its preview. Follow the [delivery agreement](../specs/product.md#confirmed-engineering-agreement) for review and integration.
@@ -98,24 +98,24 @@ A versioned manifest records workspace/instance IDs, checkout and source fingerp
 
 Unexpected supervisor loss must leave recoverable ownership records; the next status/start reconciles surviving processes before replacing them. Hot reload preserves the instance's data. If a service restart changes its address, republish configuration and reconnect or relaunch the client. Foreign listeners are never killed.
 
-The shell has a workspace label, stable accent color and Dock badge. Human previews default to fullscreen; `--windowed` keeps a normal window. Verification windows are labeled distinctly and stay windowed; `--background` requests inactive display. Native Spaces/focus behavior needs manual verification. DevTools are available through Electron's menu. Closing the client leaves the backend available for reconnect testing; **Stop** ends the entire instance.
+The shell has a workspace label, stable accent color and Dock badge. Human previews default to fullscreen; `--windowed` keeps a normal window. Verification windows are labeled distinctly and stay windowed; `--background` requests inactive display. Native Spaces/focus behavior needs manual verification. DevTools are available through Electron's menu. Closing the client leaves the backend available for reconnect testing; **Stop Preview** ends the entire instance.
 
 ## Commands
 
 Run from the target checkout; cleanup commands accept registered instance identities, not arbitrary database URLs or deletion paths. Commands show concise summaries by default; add `--json` for structured output. Use `pnpm --silent dev` to omit pnpm's script banner too; Codex actions already do this. Normal starts remain attached to the terminal; Ctrl-C stops the instance. `--detach` leaves it running until explicit Stop.
 
-| Command | Contract |
-| --- | --- |
-| `pnpm dev:setup` | Install from the lockfile; ensure the pinned development database service is healthy; register workspace; create, migrate and seed its preview once. Idempotent and safe when workspaces set up concurrently. |
-| `pnpm dev` | Start/open the persistent preview with hot reload; default fixture is `scratchpad`. |
-| `pnpm dev:status --json` | Report identity, source, profile, readiness, safe endpoints and owned-resource state; include actionable startup errors. |
-| `pnpm dev:stop` | Stop the preview and its children; retain application data. Never stop the shared database container. |
-| `pnpm dev:reset --fixture empty` | Stop the preview, replace all mutable application state with `empty` or `scratchpad`, and leave it stopped. |
-| `pnpm test` | Run fast ownership, lock and environment unit tests. |
-| `pnpm test:workflow` | Run isolated PostgreSQL, real-worktree and Electron integration checks. |
-| `pnpm verify` | Run typechecking, build validation and relevant automated acceptance checks in fresh instances; write a report. A narrower selection must be explicit in the report. |
-| `pnpm dev:verify --fixture scratchpad` | Start a fresh windowed instance for exploration; return its ID and endpoints. Ctrl-C stops and disposes it. A detached session requires explicit disposal. |
-| `pnpm dev:dispose` | Stop and delete this workspace's preview, verification/test resources and credentials; retain source and exported evidence. |
+| Codex action | Command | Contract |
+| --- | --- | --- |
+| Automatic setup | `pnpm dev:setup` | Install from the lockfile; ensure the pinned development database service is healthy; register workspace; create, migrate and seed its preview once. Idempotent and safe when workspaces set up concurrently. |
+| Run Preview | `pnpm dev` | Start/open the persistent preview with hot reload; default fixture is `scratchpad`. |
+| Status | `pnpm dev:status` | Report identity, source, profile, readiness, safe endpoints and owned-resource state; include actionable startup errors. |
+| Stop Preview | `pnpm dev:stop` | Stop the preview and its children; retain application data. Never stop the shared database container. |
+| Reset Preview | `pnpm dev:reset` | Stop the preview, replace all mutable application state with `scratchpad`, and leave it stopped. Add `--fixture empty` for blank state. |
+| — | `pnpm test` | Run fast ownership, lock and environment unit tests. |
+| — | `pnpm test:workflow` | Run isolated PostgreSQL, real-worktree and Electron integration checks. |
+| Run Tests | `pnpm verify` | Run typechecking, build validation and relevant automated acceptance checks in fresh instances; write a report. A narrower selection must be explicit in the report. |
+| Run Ephemeral Preview | `pnpm dev:verify --fixture scratchpad` | Start a fresh windowed instance for exploration; return its ID and endpoints. Ctrl-C stops and disposes it. A detached session requires explicit disposal. |
+| — | `pnpm dev:dispose` | Stop and delete this workspace's preview, verification/test resources and credentials; retain source and exported evidence. |
 
 `--instance <id>` targets a registered instance for start/status/stop/reset/disposal; it cannot target a sibling workspace. `--headless` starts backend/frontend without Electron. `pnpm build` writes a local build to `dist/`; verification uses separate build output under its evidence directory.
 
@@ -135,13 +135,13 @@ Run these in order using disposable sample edits; reset deliberately removes the
 
 1. **Persistence and reopening:** Run, save a scratchpad note and file note, add a marker, and enable **Compact scratchpad**. Close the app window and Run again, then Stop and Run. Both notes, the count and the preference should survive. Repeated Run should reuse the same preview.
 2. **Parallel features:** Open another Ash worktree based on the current `master` and Run it. Save different notes in A and B. Refresh or reopen each: labels distinguish the workspaces and each retains its own values. Stop A; B should still work.
-3. **Disposable verification:** With A open, run `pnpm dev:verify --fixture empty` in another terminal in A's checkout. The window should say verification and start empty. Change its note, then Ctrl-C that terminal. Verification closes and is discarded; A's saved values remain.
+3. **Ephemeral preview:** With A open, choose **Run Ephemeral Preview**. The window should say verification and start with fresh sample data. Change its note, then Ctrl-C that terminal. The ephemeral preview closes and is discarded; A's saved values remain.
 4. **True reset:** Run `pnpm dev:reset --fixture empty` in A, then Run. Notes and file note should be blank, the counter zero and Compact off. B should retain its values. Reset leaves A stopped until Run.
-5. **Hot reload:** In A's `packages/client/src/renderer/App.svelte`, temporarily change “Room to build.” to “Hot reload works.” The open A window should update while B stays unchanged. Revert the text; saved data should survive both updates.
+5. **Hot reload:** In A's `packages/client/src/renderer/App.svelte`, temporarily change the main heading to “Hot reload works.” The open A window should update while B stays unchanged. Revert the text; saved data should survive both updates.
 
 ### Automated checks
 
-`pnpm verify` runs typechecking, an isolated build, unit tests and the workflow integration suite. It writes `report.json`, `checks.log`, screenshots and cleanup results under the printed evidence directory. Tests exercise two simultaneous worktrees plus a verification instance, cross-database access denial, database/file/client persistence, renderer hot reload, reset/token rotation, native launch/stop, supervisor crash recovery, database-container recreation and disposal. Protected server configuration is excluded from Vite's served paths. The test helper in `tests/integration/workflow.test.ts` drives real Electron windows with Playwright.
+`pnpm verify` runs typechecking, an isolated build, unit tests and the workflow integration suite. It writes `report.json`, `checks.log`, screenshots and cleanup results under the printed evidence directory. Tests exercise two simultaneous worktrees plus a verification instance, cross-database access denial, database/file/client persistence, renderer hot reload, reset/token rotation, native launch/stop, supervisor crash recovery, Docker configuration changes, database-container recreation and disposal. Protected server configuration is excluded from Vite's served paths. The test helper in `tests/integration/workflow.test.ts` drives real Electron windows with Playwright.
 
 Future product verification: keep deterministic regression checks and agent exploration distinct in reports. Extend the driver with conversation, recorded input/run/context/output inspection, attachment and voice controls as those features land. Observation endpoints must remain authenticated and development-only.
 
@@ -153,7 +153,7 @@ Each report records source commit plus dirty-content fingerprint, lockfile, fixt
 
 ## Codex now and Ash later
 
-Configure Codex's local environment setup to call `dev:setup`, with **Run**, **Stop**, **Reset**, **Verify** and **Status** actions calling the same commands. Keep generated `.codex` configuration in Git. Codex supports automatic worktree setup and project actions; `.worktreeinclude` can copy selected ignored local setup files. If needed, include only a designated development configuration file, never `.ash-dev/`, runtime databases, instance credentials or a general personal `.env`. [Local environments](https://learn.chatgpt.com/docs/environments/local-environment), [worktrees](https://learn.chatgpt.com/docs/environments/git-worktrees)
+Codex's local environment setup and [actions](#commands) call repository commands. Keep generated `.codex` configuration in Git. Codex supports automatic worktree setup and project actions; `.worktreeinclude` can copy selected ignored local setup files. If needed, include only a designated development configuration file, never `.ash-dev/`, runtime databases, instance credentials or a general personal `.env`. [Local environments](https://learn.chatgpt.com/docs/environments/local-environment), [worktrees](https://learn.chatgpt.com/docs/environments/git-worktrees)
 
 Use Codex's chat/worktree tools for feature routing and status instead of reproducing Asha's private Conductor-database and Accessibility integration. Recorded feedback should remain attached to its destination chat with the reproduction scenario and evidence.
 

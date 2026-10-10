@@ -12,7 +12,7 @@ import { workspace, createInstance, instancePath, type Workspace } from '../../s
 import { startInstance, stopInstance, resetInstance, disposeInstance, runtime } from '../../scripts/dev/lifecycle.ts';
 import { buildMain } from '../../scripts/dev/build.ts';
 import { ServerConfig, type Instance } from '../../packages/shared/src/index.ts';
-import { connect, type Cluster } from '../../scripts/dev/database.ts';
+import { connect, ensureCluster, type Cluster } from '../../scripts/dev/database.ts';
 
 const source = process.cwd();
 const require = createRequire(join(source, 'package.json'));
@@ -112,13 +112,15 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       assert.equal(await db.page.evaluate(() => window.ashPreferences.getCompact()), false);
       const renderer = join(a.checkout, 'packages/client/src/renderer/App.svelte');
       const original = await readFile(renderer, 'utf8');
+      const originalTitle = await da.page.getByRole('heading', {level:1}).innerText();
+      const changedTitle = 'Workflow hot reload check';
       try {
-        await writeFile(renderer, original.replace('Room to build.', 'Hot reload works.'));
-        await da.page.getByRole('heading', {name:'Hot reload works.'}).waitFor();
+        await writeFile(renderer, original.replace(/<h1>[\s\S]*?<\/h1>/, `<h1>${changedTitle}</h1>`));
+        await da.page.getByRole('heading', {name:changedTitle,exact:true}).waitFor();
         assert.equal(await da.page.getByLabel('A note for this preview').inputValue(), 'Saved from the desktop');
-        assert.equal(await db.page.getByRole('heading', {name:'Room to build.'}).count(), 1);
+        assert.equal(await db.page.getByRole('heading', {name:originalTitle,exact:true}).count(), 1);
       } finally { await writeFile(renderer, original); }
-      await da.page.getByRole('heading', {name:'Room to build.'}).waitFor();
+      await da.page.getByRole('heading', {name:originalTitle,exact:true}).waitFor();
       await da.page.screenshot({ path: join(evidence, 'feature-a.png') });
       await db.page.screenshot({ path: join(evidence, 'feature-b.png') });
       await da.app.close(); apps.splice(apps.indexOf(da.app), 1);
@@ -173,6 +175,25 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       const check = connect(cluster);
       try { assert.equal((await check`SELECT 1 FROM pg_roles WHERE rolname IN (${disposable.ownerRole}, ${disposable.runtimeRole})`).length, 0); }
       finally { await check.end(); }
+    });
+    await t.test('changed Docker configuration invalidates the startup cache', async () => {
+      await Promise.all([stopInstance(wa, a.id), stopInstance(wb, b.id), stopInstance(wa, verify.id)]);
+      const path = join(aPath, 'compose.yaml');
+      const original = await readFile(path, 'utf8');
+      const before = await ensureCluster(root, aPath);
+      const reused = await ensureCluster(root, aPath);
+      assert.equal(reused.containerId, before.containerId);
+      try {
+        await writeFile(path, original.replace('      dev.ash.cluster:', '      dev.ash.configuration-test: changed\n      dev.ash.cluster:'));
+        const updated = await ensureCluster(root, aPath);
+        const name = `ash-dev-${updated.id}`;
+        const actual = (await exec('docker', ['container', 'inspect', '--format', '{{index .Config.Labels "dev.ash.configuration-test"}}', name])).stdout.trim();
+        assert.equal(actual, 'changed');
+        assert.notEqual(updated.composeHash, before.composeHash);
+      } finally {
+        await writeFile(path, original);
+        await ensureCluster(root, aPath);
+      }
     });
     await t.test('recreating development infrastructure reconnects existing previews without reseeding', async () => {
       const cluster = await json<Cluster>(join(root, 'cluster.json'));

@@ -5,22 +5,27 @@ name = "Ash development"
 script = "node scripts/dev/setup.mjs"
 
 [[actions]]
-name = "Run"
+name = "Run Preview"
 icon = "run"
 command = "pnpm --silent dev"
 
 [[actions]]
-name = "Stop"
+name = "Run Ephemeral Preview"
+icon = "run"
+command = "pnpm --silent dev:verify"
+
+[[actions]]
+name = "Stop Preview"
 icon = "tool"
 command = "pnpm --silent dev:stop"
 
 [[actions]]
-name = "Reset preview"
+name = "Reset Preview"
 icon = "tool"
 command = "pnpm --silent dev:reset"
 
 [[actions]]
-name = "Verify"
+name = "Run Tests"
 icon = "test"
 command = "pnpm --silent verify"
 

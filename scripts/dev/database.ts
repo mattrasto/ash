@@ -1,10 +1,25 @@
 import postgres from 'postgres';
 import { join } from 'node:path';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { type Instance, SCHEMA_VERSION } from '../../packages/shared/src/index.ts';
 import { atomic, exec, exists, id, json, secret, withLock } from './io.ts';
 
-export interface Cluster { id: string; password: string; port: number }
+export interface Cluster { id: string; password: string; port: number; containerId?: string; composeHash?: string }
+interface ContainerState {
+  id: string; owner: string; running: boolean; health: string | null;
+  ports: Record<string, Array<{HostIp: string; HostPort: string}> | null>;
+}
+async function inspectContainer(name: string): Promise<ContainerState | undefined> {
+  try {
+    const { stdout } = await exec('docker', ['container', 'inspect', '--format',
+      '{"id":{{json .Id}},"owner":{{json (index .Config.Labels "dev.ash.cluster")}},"running":{{json .State.Running}},"health":{{if .State.Health}}{{json .State.Health.Status}}{{else}}null{{end}},"ports":{{json .NetworkSettings.Ports}}}', name]);
+    return JSON.parse(stdout);
+  } catch (e) {
+    if (/No such (object|container)/i.test((e as {stderr?: string}).stderr ?? '')) return undefined;
+    throw e;
+  }
+}
 export function databaseUrl(cluster: Cluster, database = 'postgres', role = 'ash_admin', password = cluster.password) {
   return `postgres://${role}:${password}@127.0.0.1:${cluster.port}/${database}`;
 }
@@ -14,30 +29,36 @@ export function connect(cluster: Cluster, database = 'postgres') {
 export async function ensureCluster(root: string, checkout: string): Promise<Cluster> {
   return withLock(root, 'cluster', async () => {
     const path = join(root, 'cluster.json');
-    const cluster = await exists(path) ? await json<Cluster>(path) : { id: id(), password: secret(), port: 0 };
-    await atomic(path, cluster);
+    const registered = await exists(path);
+    const cluster: Cluster = registered ? await json<Cluster>(path) : { id: id(), password: secret(), port: 0 };
+    if (!registered) await atomic(path, cluster);
     const name = `ash-dev-${cluster.id}`;
+    const composeHash = createHash('sha256').update(await readFile(join(checkout, 'compose.yaml'))).digest('hex');
+    let container = await inspectContainer(name);
+    if (container && container.owner !== cluster.id) throw new Error('Development container ownership mismatch');
+    const needsSetup = !container?.running || container.health !== 'healthy' || container.id !== cluster.containerId || composeHash !== cluster.composeHash;
+    if (needsSetup) {
+      await exec('docker', ['compose', '-f', join(checkout, 'compose.yaml'), '-p', name, 'up', '-d', '--wait'], {
+        env: { ...process.env, ASH_DEV_CLUSTER_ID: cluster.id, ASH_DEV_PG_PASSWORD: cluster.password }, timeout: 120_000,
+      });
+      container = await inspectContainer(name);
+    }
+    if (!container || container.owner !== cluster.id || !container.running || container.health !== 'healthy') throw new Error('Owned development database is not healthy');
+    const bindings = container.ports['5432/tcp'];
+    if (bindings?.length !== 1 || bindings[0].HostIp !== '127.0.0.1' || !/^\d+$/.test(bindings[0].HostPort)) throw new Error('Development database is not bound exclusively to loopback');
+    const port = Number(bindings[0].HostPort);
+    if (port < 1 || port > 65535) throw new Error('Invalid development database port');
+    const updated = { ...cluster, port, containerId: container.id, composeHash };
+    const db = connect(updated);
     try {
-      const { stdout } = await exec('docker', ['container', 'inspect', '--format', '{{index .Config.Labels "dev.ash.cluster"}}', name]);
-      if (stdout.trim() !== cluster.id) throw new Error('Development container ownership mismatch');
-    } catch (e) { if (!/No such (object|container)/i.test((e as {stderr?: string}).stderr ?? '')) throw e; }
-    await exec('docker', ['compose', '-f', join(checkout, 'compose.yaml'), '-p', name, 'up', '-d', '--wait'], {
-      env: { ...process.env, ASH_DEV_CLUSTER_ID: cluster.id, ASH_DEV_PG_PASSWORD: cluster.password }, timeout: 120_000,
-    });
-    const { stdout } = await exec('docker', ['port', name, '5432/tcp']);
-    const match = stdout.trim().match(/^127\.0\.0\.1:(\d+)$/);
-    if (!match) throw new Error('Development database is not bound exclusively to loopback');
-    cluster.port = Number(match[1]);
-    await atomic(path, cluster);
-    const db = connect(cluster);
-    try {
-      await db`CREATE TABLE IF NOT EXISTS ash_dev_cluster (id text PRIMARY KEY)`;
+      if (needsSetup) await db`CREATE TABLE IF NOT EXISTS ash_dev_cluster (id text PRIMARY KEY)`;
       const rows = await db`SELECT id FROM ash_dev_cluster`;
-      if (rows.length && rows[0].id !== cluster.id) throw new Error('Development database cluster identity mismatch');
-      if (!rows.length) await db`INSERT INTO ash_dev_cluster VALUES (${cluster.id})`;
-      await db.unsafe('REVOKE ALL ON DATABASE postgres FROM PUBLIC');
+      if (!rows.length && needsSetup) await db`INSERT INTO ash_dev_cluster VALUES (${cluster.id})`;
+      else if (rows.length !== 1 || rows[0].id !== cluster.id) throw new Error('Development database cluster identity mismatch');
+      if (needsSetup) await db.unsafe('REVOKE ALL ON DATABASE postgres FROM PUBLIC');
     } finally { await db.end(); }
-    return cluster;
+    if (needsSetup || cluster.port !== port) await atomic(path, updated);
+    return updated;
   });
 }
 export async function checkedCluster(instance: Instance) {

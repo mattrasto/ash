@@ -3,7 +3,7 @@ import { readdir } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { Fixture } from '../../packages/shared/src/index.ts';
 import { assertEnvironment, devRoot, alive, exists, sleep } from './io.ts';
-import { workspace, createInstance, readInstance } from './workspace.ts';
+import { workspace, createInstance, readInstance, instancePath } from './workspace.ts';
 import { startInstance, stopInstance, resetInstance, disposeInstance, runtime } from './lifecycle.ts';
 
 let jsonOutput = false;
@@ -39,7 +39,9 @@ try {
   }
   else if (command === 'start' || command === 'explore') {
     note(`Starting ${command === 'explore' || (selected && selected.profile !== 'preview') ? 'verification' : 'preview'} · ${ws.label}…`);
-    const instance = command === 'explore' ? await createInstance(ws, 'verify', fixture) : values.instance ? await readInstance(ws, instanceId) : await createInstance(ws, 'preview', fixture);
+    const instance = command === 'explore' ? await createInstance(ws, 'verify', fixture)
+      : selected ?? (await exists(join(instancePath(ws, ws.previewId), 'instance.json'))
+        ? await readInstance(ws) : await createInstance(ws, 'preview', fixture));
     logDirectory = join(instance.root, 'logs');
     let cancelled = false;
     let cleaning = false;
