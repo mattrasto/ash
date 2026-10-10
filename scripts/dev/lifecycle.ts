@@ -7,7 +7,7 @@ import { Instance, Fixture, ServerConfig } from '../../packages/shared/src/index
 import { atomic, exists, json, id, withLock, processRef, alive, stopProcess, sleep, childEnvironment, type ProcessRef } from './io.ts';
 import { type Workspace, readInstance, directories } from './workspace.ts';
 import { assertDatabaseOwner, checkedCluster, ensureCluster, dropDatabase, provision } from './database.ts';
-import { readSession, removeSessionCredentials } from '../../packages/server/src/platform/models/session.ts';
+import { readSession } from '../../packages/server/src/platform/models/session.ts';
 
 export interface Runtime {
   phase: 'starting' | 'ready' | 'stopped' | 'failed'; instanceId: string; generation: string;
@@ -127,7 +127,6 @@ export async function disposeInstance(ws: Workspace, instanceId = ws.previewId) 
     const cluster = await checkedCluster(instance);
     await assertDatabaseOwner(instance, cluster);
     await stopUnlocked(instance);
-    await removeSessionCredentials(instance);
     await dropDatabase(instance, cluster);
     await rm(instance.root, { recursive: true });
   });

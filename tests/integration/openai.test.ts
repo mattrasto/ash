@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdir, copyFile, rm, stat } from 'node:fs/promises';
+import { mkdir, copyFile, rm, readdir, readFile, writeFile, mkdtemp, chmod } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { _electron, type ElectronApplication } from 'playwright';
 import { ServerConfig, type ConversationView, type RunView, type RequestPayload, type InspectionView } from '../../packages/shared/src/index.ts';
-import { devRoot, json, id, atomic, childEnvironment, sleep } from '../../scripts/dev/io.ts';
+import { devRoot, json, id, atomic, childEnvironment, sleep, exec } from '../../scripts/dev/io.ts';
 import { workspace, createInstance } from '../../scripts/dev/workspace.ts';
 import { startInstance, stopInstance, disposeInstance, resetInstance, runtime } from '../../scripts/dev/lifecycle.ts';
 import { buildMain } from '../../scripts/dev/build.ts';
@@ -15,13 +16,26 @@ import { Conversations } from '../../packages/server/src/modules/conversations/s
 import { openAIModel } from '../../packages/server/src/platform/models/openai.ts';
 import { createSession, readSession, sessionDirectory, openSession, type Session } from '../../packages/server/src/platform/models/session.ts';
 import { sse, successEvents, providerResponse } from '../helpers/openai.ts';
+import { makeWorktree } from '../helpers/worktree.ts';
 
 async function until<T>(read:()=>Promise<T>,accept:(value:T)=>boolean):Promise<T> {
   for (let index=0;index<250;index++) {const value=await read();if(accept(value))return value;await sleep(40);}
   throw new Error('Timed out waiting for OpenAI test state');
 }
 test('OpenAI protocol through persisted Runs and desktop inspection (no external calls)',{timeout:120000},async t=>{
-  const ws=await workspace(process.cwd(),await devRoot());
+  const source=process.cwd();
+  const base=await mkdtemp(join(tmpdir(),'ash-openai-'));
+  const checkout=join(base,'checkout');
+  t.after(async()=>{
+    await exec('git',['worktree','remove','--force',checkout],{cwd:source});
+    await rm(base,{recursive:true,force:true});
+  });
+  await makeWorktree(source,checkout);
+  const envPath=join(checkout,'.env.local');
+  const envContent='OPENAI_API_KEY=synthetic-private-key\n';
+  // Only this disposable checkout receives the fake key. Never read or overwrite the developer's file.
+  await writeFile(envPath,envContent,{mode:0o644});
+  const ws=await workspace(checkout,await devRoot());
   const instance=await createInstance(ws,'test','empty');
   const evidence=process.env.ASH_TEST_EVIDENCE ?? join(ws.devRoot,'evidence',id());await mkdir(evidence,{recursive:true});
   const cfg=ServerConfig.parse(await json(join(instance.root,'server.json')));
@@ -29,7 +43,7 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
   const session:Session={version:1,id:id(),workspaceId:ws.id,instanceId:instance.id,model:'test-openai-model',
     options:{api:'responses',store:false,maxOutputTokens:1024,timeoutMs:60000},maxCalls:4,callsUsed:0,expiresAt:new Date(Date.now()-1000).toISOString()};
   // The real backend uses an expired session: it must reject before any network dispatch.
-  await createSession(instance,session,'synthetic-private-key');
+  await createSession(instance,session);
   let app:ElectronApplication|undefined;
   let behavior:'success'|'fail'|'slow'='success';let calls=0;let transportAborted=false;
   const bodies:unknown[]=[];
@@ -55,7 +69,19 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
     assert.equal(response.status,200,await response.clone().text());return response.json();
   }
   try {
+    await t.test('deterministic mode ignores the local key and the frontend cannot serve it',async()=>{
+      await startInstance(ws,instance.id,{headless:true});
+      const info=await api<{model:{provider:string}}>('info');
+      assert.equal(info.model.provider,'deterministic');
+      const running=(await runtime(instance))!;
+      const denied=await fetch(`${running.webUrl}/@fs${envPath}`);
+      assert.equal(denied.status,403);
+      assert.ok(!(await denied.text()).includes('synthetic-private-key'));
+      await stopInstance(ws,instance.id);
+      await chmod(envPath,0o600);
+    });
     await startInstance(ws,instance.id,{headless:true,modelSessionId:session.id});
+    assert.deepEqual(await readdir(sessionDirectory(instance,session.id)),['session.json']);
     await t.test('captured requests, provider identifiers, usage and duplicate delivery persist',async()=>{
       target=randomUUID();await service.createThread(target,'OpenAI protocol inspection');
       const key=randomUUID();
@@ -115,20 +141,22 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
       assert.deepEqual(await api<ConversationView>(`threads/${target}`),before);
       const info=await api<object>('info');assert.ok(!JSON.stringify(info).includes('synthetic-private-key'));
       const spent={...session,id:id(),expiresAt:new Date(Date.now()+60000).toISOString(),maxCalls:1};
-      await createSession(instance,spent,'synthetic-private-key');
+      await createSession(instance,spent);
       try {
         await (await openSession(instance,spent.id)).reserve();
         await db.$disconnect();
         const fresh=await resetInstance(ws,instance.id,'empty');
         await assert.rejects((await openSession(fresh,spent.id)).reserve(),/call allowance/);
         assert.equal((await readSession(fresh,spent.id)).callsUsed,1);
+        assert.equal(await readFile(envPath,'utf8'),envContent);
       } finally {await rm(sessionDirectory(instance,spent.id),{recursive:true,force:true});}
     });
   } finally {
     await app?.close();await service.stop().catch(()=>{});await db.$disconnect();
     await copyFile(join(instance.root,'logs/server.log'),join(evidence,'openai-server.log')).catch(()=>{});
     await disposeInstance(ws,instance.id);
-    await assert.rejects(stat(join(sessionDirectory(instance,session.id),'credential')),{code:'ENOENT'});
+    assert.equal(await readFile(envPath,'utf8'),envContent);
+    assert.deepEqual(await readdir(sessionDirectory(instance,session.id)),['session.json']);
     await rm(sessionDirectory(instance,session.id),{recursive:true,force:true});
   }
 });

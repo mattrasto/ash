@@ -24,6 +24,6 @@ export async function configureLiveModel(instance: Instance, options: LiveOption
     options:{api:'responses',store:false,maxOutputTokens:Number(options['max-output-tokens'] ?? 1024),timeoutMs:60000,
       ...(options['reasoning-effort'] ? {reasoningEffort:options['reasoning-effort']} : {})}});
   if (!session.success) throw new Error('Invalid live settings: choose a model, --live-calls 1–1000 and --max-output-tokens 16–16384');
-  await createSession(instance,session.data,process.env.OPENAI_API_KEY ?? '');
+  await createSession(instance,session.data);
   return session.data.id;
 }

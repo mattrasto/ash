@@ -47,12 +47,12 @@ PITR needs separate backup storage/retention decisions and an isolated restore d
 | Provider outcomes | HTTP 401/403/404/429/500 and network failures make one attempt; raw errors/secrets are excluded. Incomplete/failed events, EOF and mismatched final text fail the Run. | Unit + PostgreSQL |
 | Stop and retry | Aborts reach transport; timeout includes streaming. Partial output freezes. Explicit retry preserves its captured request; follow-ups exclude incomplete answers. | Unit + PostgreSQL |
 | Live allowance | Concurrent reservations cannot exceed calls; expired sessions cannot dispatch. Reopen/reset retain counters. Sessions cannot cross instance ownership. | Unit + lifecycle integration |
-| Credential boundary | Default launch ignores inherited keys. Live key is absent from API/inspection and renderer. File is 0600; disposal removes it. | Unit + desktop/lifecycle integration |
+| Credential boundary | Default launch ignores `.env.local` and inherited keys. Live mode reads only its key from an owner-only regular file. No session copy; API, inspection and frontend responses omit the key. Reset/disposal preserve the developer file. Tests use a fake key in a disposable checkout. | Unit + desktop/lifecycle integration |
 | Inspection | Desktop shows provider/model, reported usage and IDs. Test-response controls are hidden in live mode. Expired-session failure is visible before any network call. | Real Electron + expired backend session |
 
 ### Live smoke test · pending
 
-After choosing the model, providing a backend development key and assigning a session allowance, use an empty disposable instance. Suggested allowance: five calls over ten minutes, 1,024 output tokens per call. This is a proposed allowance, not authorization to spend.
+After choosing the model, providing a [backend development key](../features/conversations.md#openai-mode) and assigning a session allowance, use an empty disposable instance. Suggested allowance: five calls over ten minutes, 1,024 output tokens per call. This is a proposed allowance, not authorization to spend.
 
 1. Send a synthetic checklist request and follow-up; verify useful output and the exact captured context.
 2. Inspect provider IDs/model and available token usage; compare against the provider dashboard when available.

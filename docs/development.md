@@ -84,7 +84,7 @@ Personal snapshots remain outside the initial workflow under [G06 and G09](../sp
 
 `scripts/dev/` is the TypeScript lifecycle library and CLI; its launcher supervises child processes. Package scripts and Codex actions call it; a later Ash/MCP adapter can do the same. A bootstrap entry uses only Node built-ins until pinned dependencies are installed. Workspace lifecycle logic stays outside product feature modules; the application consumes validated runtime configuration.
 
-Resolve checked-in defaults, local development options and explicit command arguments in that order. The launcher generates instance identity, storage roots, database access, service addresses and an authentication token. Reject conflicting inherited `DATABASE_URL`, application-home or port settings instead of silently mixing configurations. Keep secrets in protected instance files; status output exposes only safe metadata.
+Resolve checked-in defaults, local development options and explicit command arguments in that order. The launcher generates instance identity, storage roots, database access, service addresses and an authentication token. Reject conflicting inherited `DATABASE_URL`, application-home or port settings instead of silently mixing configurations. Keep generated runtime secrets in protected instance files; the developer's OpenAI key uses [`.env.local`](features/conversations.md#openai-mode). Status output exposes only safe metadata.
 
 A versioned manifest records workspace/instance IDs, checkout and source fingerprint, profile, fixture version, schema version, service addresses, storage paths and lifecycle state. Backend, desktop launcher and test driver consume that resolved configuration or a safe subset. None independently hashes a name, appends a database suffix or adds a port offset.
 
@@ -115,7 +115,7 @@ Run from the target checkout; cleanup commands accept registered instance identi
 | — | `pnpm test:workflow` | Run isolated PostgreSQL, real-worktree and Electron integration checks. |
 | Run Tests | `pnpm verify` | Run typechecking, build validation and relevant automated acceptance checks in fresh instances; write a report. A narrower selection must be explicit in the report. |
 | Run Ephemeral Preview | `pnpm dev:verify --fixture scratchpad` | Start a fresh windowed instance for exploration; return its ID and endpoints. Ctrl-C stops and disposes it. A detached session requires explicit disposal. |
-| — | `pnpm dev:dispose` | Stop and delete this workspace's preview, verification/test resources and credentials; retain source and exported evidence. |
+| — | `pnpm dev:dispose` | Stop and delete this workspace's preview, verification/test resources and generated runtime credentials; retain source, developer configuration and exported evidence. |
 
 `--instance <id>` targets a registered instance for start/status/stop/reset/disposal; it cannot target a sibling workspace. `--headless` starts backend/frontend without Electron. `pnpm build` writes a local build to `dist/`; verification uses separate build output under its evidence directory.
 

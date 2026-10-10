@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, copyFile, rm, readFile, writeFile } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
@@ -13,6 +13,7 @@ import { startInstance, stopInstance, resetInstance, disposeInstance, runtime } 
 import { buildMain } from '../../scripts/dev/build.ts';
 import { ServerConfig, type Instance } from '../../packages/shared/src/index.ts';
 import { connect, ensureCluster, type Cluster } from '../../scripts/dev/database.ts';
+import { makeWorktree } from '../helpers/worktree.ts';
 
 const source = process.cwd();
 const require = createRequire(join(source, 'package.json'));
@@ -25,14 +26,6 @@ async function request(instance: Instance, path: string, body?: object, tokenOve
   });
 }
 async function state(instance: Instance) { const response = await request(instance, '/api/state'); assert.equal(response.status, 200); return response.json() as Promise<{note: string; count: number; fileNote: string}>; }
-async function makeWorktree(path: string) {
-  await exec('git', ['worktree', 'add', '--detach', path, 'HEAD'], { cwd: source });
-  const { stdout } = await exec('git', ['ls-files', '-co', '--exclude-standard', '-z'], { cwd: source });
-  for (const file of new Set(stdout.split('\0').filter(p => /^(packages\/|scripts\/|tests\/|package.json$|pnpm-lock.yaml$|pnpm-workspace.yaml$|tsconfig.json$|compose.yaml$|\.npmrc$|\.gitignore$)/.test(p)))) {
-    await mkdir(dirname(join(path, file)), { recursive: true }); await copyFile(join(source, file), join(path, file));
-  }
-  await exec('pnpm', ['install', '--offline', '--frozen-lockfile', '--prod=false'], { cwd: path, timeout: 120_000 });
-}
 async function desktop(instance: Instance) {
   const running = await runtime(instance);
   const entry = await buildMain(instance.checkout, join(instance.root, 'build'));
@@ -67,7 +60,7 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
   try {
     let setupComplete = false;
     await t.test('DEV-01 concurrent setup in real detached Git worktrees', async () => {
-      await makeWorktree(aPath); await makeWorktree(bPath);
+      await makeWorktree(source,aPath); await makeWorktree(source,bPath);
       [wa, wb] = await Promise.all([workspace(aPath, root), workspace(bPath, root)]);
       // Record intended ownership before provisioning so cleanup still runs on partial failure.
       instances.push({ws: wa, id: wa.previewId}, {ws: wb, id: wb.previewId});

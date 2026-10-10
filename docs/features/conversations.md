@@ -48,7 +48,9 @@ Topic management, instruction editing, archive/pin controls, Artifact moves, ima
 
 ## OpenAI mode
 
-Use a development API key with access to the chosen model. Put `OPENAI_API_KEY` in the launching terminal environment; do not place it in chat, source or a command-line argument. Normal `pnpm dev` and `pnpm verify` ignore inherited provider keys.
+Use a development API key with access to the chosen model. In the checkout root, copy `.env.example` to `.env.local`, run `chmod 600 .env.local`, and fill in `OPENAI_API_KEY`. The file is gitignored plaintext, readable only by its owner. The backend reads that entry only when explicitly launched in live mode; other entries are not loaded into the process environment. Normal `pnpm dev` and `pnpm verify` ignore this file and inherited provider keys.
+
+The key stays in `.env.local`; it is not copied into session storage or passed to supervisor/renderer environments. Stop and restart the backend to reload a changed key. Reset and disposal preserve this developer file. Remove its key while stopped to prevent local reuse.
 
 Stop the existing preview before changing modes. Example with an explicitly selected model and allowance:
 
@@ -63,7 +65,7 @@ The launcher prints a session ID. After Stop/Run, use `pnpm dev --live-session S
 
 `--live-calls` and `--live-minutes` are required. Output defaults to 1,024 tokens and each call has a 60-second deadline, shortened by session expiry. Input retains the [context bound](#execution-details). These limits bound work; they are not a dollar-denominated spending cap. Reasoning tokens count toward the output bound.
 
-A slot is reserved on disk before HTTP dispatch; failed or ambiguous attempts still consume it. Concurrent threads share the allowance. Session records live at `~/.ash-dev/workspaces/WORKSPACE_ID/model-sessions/SESSION_ID/`, outside resettable instance data. Restart/reset cannot replenish them. The launcher writes `credential` from its environment as a private 0600 file; only the backend reads it. Supervisor and renderer environments exclude provider credentials. Disposal removes that instance's session credentials and retains usage counters. Stop preserves credentials for resumption; removing a stopped session's `credential` revokes its local reuse.
+A slot is reserved on disk before HTTP dispatch; failed or ambiguous attempts still consume it. Concurrent threads share the allowance. Session records contain only settings and usage at `~/.ash-dev/workspaces/WORKSPACE_ID/model-sessions/SESSION_ID/`, outside resettable instance data. Restart, reset and disposal cannot replenish them.
 
 The backend uses the pinned OpenAI SDK and Responses API with `store:false`, no provider conversation ID and no enabled tools. It sends the saved message list and recorded options. SDK automatic retries are disabled. Each explicit OpenAI retry preserves provider/model/options as well as messages; its session must match the model and allow at least the original output limit. A different model requires a new submission.
 
@@ -77,6 +79,6 @@ The Responses API supports image inputs and a built-in image-generation tool. As
 
 The deterministic baseline passed `pnpm verify` on 2026-10-09; evidence: `~/.ash-dev/evidence/2ba6f2ea74eb63aa1c53b997/`.
 
-`pnpm verify` passed for the OpenAI addition: typechecking, isolated build, 16 unit tests and 30 integration/desktop checks. Evidence: `~/.ash-dev/evidence/b33463a38bd2797b187959c5/` (`report.json`, `checks.log`, `openai-inspection.png`). The report records the source fingerprint and zero live calls. A separate review checked frozen requests, completion/failure handling, session reservations, credential propagation and disposal; the Electron screenshot confirms provider metadata is visible.
+`pnpm verify` passed after moving the key to `.env.local`: typechecking, isolated build, 18 unit tests and 31 integration/desktop checks. Evidence: `~/.ash-dev/evidence/b6ff9bc787b39e5c6b8f721e/` (`report.json`, `checks.log`, `openai-inspection.png`); zero live calls. All assertions passed, but the workflow runner needed manual cleanup of one lingering Electron test process before exiting. A separate review checked live-only key loading, environment isolation, session counters and reset/disposal behavior; the screenshot confirms provider metadata remains visible.
 
 Live model quality, account access and paid usage have not been tested. See the [test plan](../plans/persisted-chat-tests.md#openai-adapter).
