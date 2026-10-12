@@ -40,3 +40,5 @@ Sequencing is proposed. Source names refer to overview headings.
 ## First journey
 
 Current delivery: [persisted text chat and Artifact inspection](features/conversations.md#scope). Topic management and instruction editing follow separately. [Implementation](../docs/features/conversations.md) · [Test plan](../docs/plans/persisted-chat-tests.md).
+
+Next direction, accepted 2026-10-12: usable self-modification through images, tools and Topics/context. The [delivery plan](../docs/plans/self-modification.md) proposes the sequence and acceptance targets, superseding the broad placement above for that path.

@@ -74,7 +74,9 @@ The prohibition on sending/publishing as the user has unspecified exceptions. Ap
 
 Isolated per-app stores/runtimes must coexist with one core backend/database. Sandbox privileges, rollout, rollback and modified-instance upgrades remain undefined.
 
-**Recommend:** keep the core simple; define isolation with the first app. Progress from reviewable instruction edits to isolated apps, then tested code changes with rollback. Defer concept-tree sharing/upgrades until a concrete compatibility need exists.
+**Direction accepted, 2026-10-12:** the next path targets usable self-modification, supported by images, tools and Topics/context. The [delivery plan](../docs/plans/self-modification.md) proposes a first code-change demonstration through the detached Codex harness; custom apps are not a prerequisite.
+
+**Remaining:** finalize harness integration/authentication, workspace containment, Decision scope and apply/revert behavior before enabling code changes. Defer concept-tree sharing/upgrades until a concrete compatibility need exists.
 
 ## Feature-level details
 
