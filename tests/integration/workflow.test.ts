@@ -40,7 +40,6 @@ async function desktop(instance: Instance) {
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     try { await page.getByTestId('connection').filter({ hasText: 'Connected' }).waitFor({timeout:15000}); }
     catch (e) { throw new Error(`${(e as Error).message}\nRenderer errors: ${errors.join('\n')}\n${(await page.locator('body').innerText()).slice(0,2000)}`); }
-    await page.getByRole('button', {name:'Storage test screen',exact:true}).click();
     return { app, page };
   } catch (e) { await app.close(); throw e; }
 }
@@ -91,36 +90,49 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       const before = await runtime(a); const repeated = await startInstance(wa, a.id, { headless: true });
       assert.equal(repeated.supervisor.pid, before!.supervisor.pid);
       await stopInstance(wa, a.id); await startInstance(wa, a.id, { headless: true });
+      assert.equal((await runtime(a))!.webUrl,before!.webUrl);
       assert.equal((await state(a)).note, 'Feature A');
+    });
+    await t.test('a saved frontend port conflict fails without moving browser storage', async () => {
+      const url=(await runtime(a))!.webUrl!;
+      await stopInstance(wa,a.id);
+      const blocker=createServer((_req,res)=>res.end('unrelated listener'));
+      await new Promise<void>((resolve,reject)=>{blocker.once('error',reject);blocker.listen(Number(new URL(url).port),'127.0.0.1',resolve);});
+      try {
+        await assert.rejects(startInstance(wa,a.id,{headless:true}),/Preview port .* is in use/);
+        assert.equal(await (await fetch(url)).text(),'unrelated listener');
+      } finally { await new Promise<void>((resolve,reject)=>blocker.close(error=>error?reject(error):resolve())); }
+      await startInstance(wa,a.id,{headless:true});
+      assert.equal((await runtime(a))!.webUrl,url);
     });
     await t.test('desktop UI edits and client state remain isolated', async () => {
       const da = await desktop(a); apps.push(da.app);
       const db = await desktop(b); apps.push(db.app);
-      await da.page.getByLabel('A note for this preview').fill('Saved from the desktop');
-      await da.page.getByRole('button', { name: 'Save note', exact: true }).click();
-      await da.page.getByText('Saved in this preview', {exact:true}).waitFor();
-      assert.equal((await state(a)).note, 'Saved from the desktop');
-      assert.equal(await db.page.getByLabel('A note for this preview').inputValue(), 'Feature B');
-      await da.page.getByText('File and client storage checks').click();
-      await da.page.getByLabel('Compact scratchpad', {exact:false}).check();
-      assert.equal(await db.page.evaluate(() => window.ashPreferences.getCompact()), false);
-      const renderer = join(a.checkout, 'packages/client/src/renderer/features/development/Scratchpad.svelte');
+      await da.page.getByLabel('Message',{exact:true}).fill('Saved from the desktop');
+      await da.page.getByRole('button',{name:'Send message',exact:true}).click();
+      await da.page.getByTestId('run-status').filter({hasText:'completed'}).waitFor();
+      assert.equal(await db.page.getByTestId('message').count(),0);
+      await da.page.getByLabel('Message',{exact:true}).fill('An unsent draft');
+      await da.page.getByRole('button',{name:'Hide sidebar',exact:true}).click();
+      assert.equal(await db.page.getByRole('button',{name:'Hide sidebar',exact:true}).count(),1);
+      const renderer = join(a.checkout, 'packages/client/src/renderer/features/conversations/Chat.svelte');
       const original = await readFile(renderer, 'utf8');
-      const originalTitle = await da.page.getByRole('heading', {level:1}).innerText();
-      const changedTitle = 'Workflow hot reload check';
+      const changedPlaceholder = 'Workflow hot reload check';
       try {
-        await writeFile(renderer, original.replace(/<h1>[\s\S]*?<\/h1>/, `<h1>${changedTitle}</h1>`));
-        await da.page.getByRole('heading', {name:changedTitle,exact:true}).waitFor();
-        assert.equal(await da.page.getByLabel('A note for this preview').inputValue(), 'Saved from the desktop');
-        assert.equal(await db.page.getByRole('heading', {name:originalTitle,exact:true}).count(), 1);
+        await writeFile(renderer, original.replace('placeholder="Message Ash…"', `placeholder="${changedPlaceholder}"`));
+        await da.page.getByPlaceholder(changedPlaceholder,{exact:true}).waitFor();
+        assert.equal(await da.page.getByLabel('Message',{exact:true}).inputValue(),'An unsent draft');
+        assert.equal(await db.page.getByPlaceholder('Message Ash…',{exact:true}).count(),1);
       } finally { await writeFile(renderer, original); }
-      await da.page.getByRole('heading', {name:originalTitle,exact:true}).waitFor();
+      await da.page.getByPlaceholder('Message Ash…',{exact:true}).waitFor();
       await da.page.screenshot({ path: join(evidence, 'feature-a.png') });
       await db.page.screenshot({ path: join(evidence, 'feature-b.png') });
       await da.app.close(); apps.splice(apps.indexOf(da.app), 1);
       await stopInstance(wa, a.id); await startInstance(wa, a.id, {headless:true});
       const reopened = await desktop(a); apps.push(reopened.app);
-      assert.equal(await reopened.page.evaluate(() => window.ashPreferences.getCompact()), true);
+      await reopened.page.getByRole('button',{name:'Show sidebar',exact:true}).waitFor();
+      assert.equal(await reopened.page.getByLabel('Message',{exact:true}).inputValue(),'An unsent draft');
+      assert.equal(await reopened.page.getByTestId('message').count(),2);
       await reopened.app.close(); apps.splice(apps.indexOf(reopened.app), 1);
     });
     await t.test('DEV-07 reset replaces database, files and client state and rotates authentication', async () => {
@@ -130,7 +142,9 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       assert.equal((await request(a, '/api/state', undefined, old.token)).status, 401);
       assert.equal((await state(b)).note, 'Feature B'); assert.equal((await state(verify)).note, 'Verification');
       const fresh = await desktop(a); apps.push(fresh.app);
-      assert.equal(await fresh.page.evaluate(() => window.ashPreferences.getCompact()), false);
+      await fresh.page.getByRole('button',{name:'Hide sidebar',exact:true}).waitFor();
+      assert.equal(await fresh.page.getByLabel('Message',{exact:true}).inputValue(),'');
+      assert.equal(await fresh.page.getByTestId('message').count(),0);
       await fresh.page.screenshot({path: join(evidence, 'reset-empty.png')});
       await fresh.app.close(); apps.splice(apps.indexOf(fresh.app), 1);
       const original = await json(join(a.root, 'instance.json'));

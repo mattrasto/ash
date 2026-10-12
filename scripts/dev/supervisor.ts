@@ -18,6 +18,20 @@ const headless = process.argv.includes('--headless');
 const windowed = process.argv.includes('--windowed') || instance.profile !== 'preview';
 const background = process.argv.includes('--background');
 const modelSessionId = process.argv.includes('--model-session') ? process.argv[process.argv.indexOf('--model-session')+1] : undefined;
+const frontendPath = join(instance.root, 'frontend.json');
+let frontendPort: number | undefined;
+try { frontendPort = (await json<{port:number}>(frontendPath)).port; }
+catch (error) {
+  if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  // Upgrade an existing desktop without moving its browser-storage origin.
+  try {
+    const {url} = await json<{url:string}>(join(instance.root, 'client.json'));
+    const previous = new URL(url);
+    if (previous.protocol !== 'http:' || previous.hostname !== '127.0.0.1') throw new Error('Invalid saved preview address');
+    frontendPort = Number(previous.port);
+  } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+}
+if (frontendPort !== undefined && (!Number.isInteger(frontendPort) || frontendPort < 1024 || frontendPort > 65535)) throw new Error('Invalid saved preview port');
 let state: Runtime = { phase: 'starting', instanceId: instance.id, generation: instance.generation, supervisor: await processRef(process.pid), children: [], modelSessionId };
 let vite: ViteDevServer | undefined;
 let stopping = false;
@@ -71,19 +85,25 @@ async function startServices() {
   const response = await fetch(`${state.serverUrl}/health`, { headers: { authorization: `Bearer ${config.token}` }, signal: AbortSignal.timeout(5000) });
   const health = await response.json() as { instanceId: string; generation: string; schemaVersion: number };
   if (!response.ok || health.instanceId !== instance.id || health.generation !== instance.generation || health.schemaVersion !== instance.schemaVersion) throw new Error('Backend readiness identity mismatch');
-  // Vite interprets zero as its default port, so retry actual binds instead.
+  // Keep the browser-storage origin stable. Only a new instance may choose another port.
   for (let attempt = 0; attempt < 12; attempt++) {
     vite = await createViteServer({ ...rendererConfig(instance.checkout, join(instance.root, 'build')), server: {
-      host: '127.0.0.1', port: randomInt(20000, 60000), strictPort: true, cors: false,
+      host: '127.0.0.1', port: frontendPort ?? randomInt(20000, 60000), strictPort: true, cors: false,
       fs: { strict: true, allow: [join(instance.checkout, 'packages'), join(instance.checkout, 'node_modules'), join(instance.root, 'build/vite-cache')] },
       proxy: { '/api': { target: state.serverUrl, headers: { authorization: `Bearer ${config.token}` } } },
     } });
     try { await vite.listen(); break; }
-    catch (e) { await vite.close(); if (!/in use|EADDRINUSE/.test((e as Error).message) || attempt === 11) throw e; }
+    catch (e) {
+      await vite.close();
+      if (!/in use|EADDRINUSE/.test((e as Error).message) || attempt === 11) throw e;
+      if (frontendPort !== undefined) throw new Error(`Preview port ${frontendPort} is in use. Stop its listener and start the preview again; the port is retained to preserve drafts and client preferences.`);
+    }
   }
   const address = vite!.httpServer!.address();
   if (!address || typeof address === 'string') throw new Error('Missing frontend address');
   state.webUrl = `http://127.0.0.1:${address.port}`;
+  frontendPort = address.port;
+  await atomic(frontendPath, {port:frontendPort});
   state.source = await fingerprint(instance.checkout);
   if (!headless) await launchClient();
   state.phase = 'ready'; await save();

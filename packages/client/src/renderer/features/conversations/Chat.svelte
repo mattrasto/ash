@@ -240,7 +240,7 @@
 <svelte:window onkeydown={key}/>
 <svelte:head><title>Ash — {conversation?.thread.title ?? 'Chat'}</title></svelte:head>
 <div class="shell" style={`--accent:hsl(${hue} 29% 37%);--tint:hsl(${hue} 24% 92%)`}>
-  {#if sidebarOpen}<Sidebar {threads} {selected} {info} {connected} {creating} {readRuns} onSelect={selectThread} onCreate={createThread} onUpdate={updateThread} onClose={toggleSidebar}/>{/if}
+  {#if sidebarOpen}<Sidebar {threads} {selected} {connected} {creating} {readRuns} onSelect={selectThread} onCreate={createThread} onUpdate={updateThread} onClose={toggleSidebar}/>{/if}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="main-column" ondragenter={(e)=>drag(e,'enter')} ondragover={(e)=>drag(e,'over')} ondragleave={(e)=>drag(e,'leave')} ondrop={(e)=>drag(e,'drop')}>
     {#if isDragOver}<div class="drop-overlay"><strong>Drop images here</strong><span>PNG, JPEG or WebP</span></div>{/if}

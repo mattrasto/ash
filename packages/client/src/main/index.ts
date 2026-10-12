@@ -1,6 +1,6 @@
 import { app, BrowserWindow, session, ipcMain, clipboard, nativeImage, dialog, shell } from 'electron';
 import { readFileSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Uuid, type AttachmentView } from '@ash/shared';
 
@@ -19,7 +19,6 @@ const win = new BrowserWindow({
   fullscreen: !config.windowed, show: false,
   webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, preload: join(config.root, 'build/preload.cjs') },
 });
-const preferencePath = join(app.getPath('userData'), 'ash-preferences.json');
 function trusted(event:Electron.IpcMainInvokeEvent) {
   if(event.sender!==win.webContents || event.senderFrame!==win.webContents.mainFrame || new URL(event.senderFrame.url).origin!==new URL(config.url).origin)throw new Error('Invalid media request');
 }
@@ -52,14 +51,6 @@ ipcMain.handle('media:image-action',async(event,value:unknown,action:unknown)=>{
   const result=await dialog.showSaveDialog(win,{defaultPath:name,filters:[{name:'Image',extensions:[extension]}]});
   if(result.canceled||!result.filePath)return 'cancelled';
   await writeFile(result.filePath,bytes,{mode:0o600});return 'saved';
-});
-ipcMain.handle('preferences:get', async () => {
-  try { return JSON.parse(await readFile(preferencePath, 'utf8')).compact === true; }
-  catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return false; throw e; }
-});
-ipcMain.handle('preferences:set', async (event, compact: unknown) => {
-  if (event.sender !== win.webContents || typeof compact !== 'boolean') throw new Error('Invalid client preference');
-  await writeFile(preferencePath, JSON.stringify({compact}), {mode:0o600});
 });
 win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 win.webContents.on('will-navigate', (event, url) => {

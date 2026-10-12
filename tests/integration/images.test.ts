@@ -38,7 +38,8 @@ test('persisted images, description Runs and desktop workflow (no external calls
   async function upload(filename:string,data=bytes,uploadId=randomUUID()){
     const live=(await runtime(instance))!;return fetch(`${live.serverUrl}/api/attachments/${uploadId}`,{method:'PUT',headers:{authorization:`Bearer ${cfg.token}`,'content-type':'application/octet-stream','x-image-filename':encodeURIComponent(filename)},body:new Uint8Array(data)});
   }
-  const captionDone=(asset:string)=>until(()=>images.get(asset),a=>!!a.summaryRun&&!['queued','running'].includes(a.summaryRun.status));
+  // The attachment and its Run can be read on opposite sides of the completion commit.
+  const captionDone=(asset:string)=>until(()=>images.get(asset),a=>!!a.summaryRun&&!['queued','running'].includes(a.summaryRun.status)&&(a.summaryRun.status!=='completed'||a.summary!==null));
   let attachment:AttachmentView,thread:string,first:RunView;
   try{
     await startInstance(ws,instance.id,{headless:true});

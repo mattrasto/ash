@@ -21,8 +21,6 @@ export const ServerConfig = z.object({
 });
 export type ServerConfig = z.infer<typeof ServerConfig>;
 
-export const ScratchState = z.object({ note: z.string(), count: z.number().int(), fileNote: z.string() });
-export type ScratchState = z.infer<typeof ScratchState>;
 export const ScratchChange = z.object({
   note: z.string().max(2000).optional(), increment: z.boolean().optional(), fileNote: z.string().max(2000).optional(),
 }).strict();

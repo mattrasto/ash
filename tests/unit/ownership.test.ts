@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, symlink, rm, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, symlink, rm, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { guardedPath, withLock, childEnvironment, stopProcess, atomic } from '../../scripts/dev/io.ts';
+import { guardedPath, withLock, childEnvironment, stopProcess, atomic, fingerprint, exec } from '../../scripts/dev/io.ts';
 
 test('storage guards reject parent paths and symlink escapes', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'ash-guard-')));
@@ -39,4 +39,21 @@ test('child environment does not inherit keys, database URLs or Node injection',
 test('a reused or forged PID record is never enough to stop a process', async () => {
   await stopProcess({ pid: process.pid, identity: 'not this process' }, true);
   assert.doesNotThrow(() => process.kill(process.pid, 0));
+});
+test('source fingerprints reflect deleted files before and after staging', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ash-fingerprint-'));
+  const git = (...args:string[]) => exec('git',args,{cwd:root});
+  try {
+    await git('init'); await mkdir(join(root,'packages'));
+    await writeFile(join(root,'pnpm-lock.yaml'),'fixture lock');
+    await writeFile(join(root,'packages/removed.ts'),'export const fixture = true;');
+    await git('add','.');
+    await git('-c','user.name=Ash Test','-c','user.email=ash-test@example.invalid','-c','commit.gpgsign=false','commit','-m','Fixture');
+    const before = await fingerprint(root);
+    await rm(join(root,'packages/removed.ts'));
+    const deleted = await fingerprint(root);
+    assert.notEqual(deleted.hash,before.hash);
+    await git('add','-u');
+    assert.deepEqual(await fingerprint(root),deleted);
+  } finally { await rm(root,{recursive:true,force:true}); }
 });

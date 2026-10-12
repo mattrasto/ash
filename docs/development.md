@@ -4,7 +4,7 @@ Workflow accepted, 2026-10-09 · Persisted chat with opt-in OpenAI mode
 
 Give each feature a Git worktree, a persistent preview and disposable verification environments. Repository commands own the runtime; Codex supplies worktrees and launch actions. Ash can later invoke the same commands for [self-modification](../specs/HUMAN_SPEC.md#modifying-ashs-code).
 
-The Electron/Svelte shell opens [persisted deterministic chat](features/conversations.md). **Storage test screen** retains the database note/counter, file note and persisted client preference used by the workflow suite. It is a separate screen in the current app, not an older build; its `dev_meta` and `dev_scratch` tables remain development scaffolding. **Developer info** in the chat sidebar identifies the instance, persistence profile and model session. PITR operation, signed packaging, personal-data imports and production rollout remain deferred.
+The Electron/Svelte shell opens [persisted chat](features/conversations.md). Desktop verification uses conversations, drafts and sidebar preferences. The authenticated scratchpad API and `dev_scratch` fixture remain internal database/file isolation probes; there is no storage test screen or developer-info panel. Use `pnpm dev:status --json` for instance diagnostics. PITR operation, signed packaging, personal-data imports and production rollout remain deferred.
 
 ## Run the preview
 
@@ -92,8 +92,8 @@ A versioned manifest records workspace/instance IDs, checkout and source fingerp
 
 1. Lock the instance; prepare its directories, database and migrations. A second start attaches to or opens the existing healthy instance. An incompatible database stops startup with a migration/reset diagnostic; it never triggers an automatic reset.
 2. Start only the declared backend, frontend and desktop processes. Experimental packages have separate commands rather than joining a recursive `dev` invocation.
-3. Bind services on loopback using OS-assigned ports where supported, then publish their actual addresses. For services requiring a chosen port, use bounded retries on failed binds; do not rely on a probe-then-bind check. Node supports binding to port `0` and retrieving the assigned port after listening. [Node server listen](https://nodejs.org/api/net.html#serverlistenport-host-backlog-callback)
-4. Require an authenticated readiness response matching the expected instance and schema before launching the client. A listening socket alone is insufficient. UI verification also waits for a connected scratchpad.
+3. Bind the backend on loopback with an OS-assigned port. On first launch, Vite retries actual binds for a random frontend port, then stores it in the instance's `frontend.json`. Reuse that port across restarts so browser drafts and preferences keep their origin; an occupied saved port fails startup instead of moving storage. Existing desktops adopt the URL from `client.json`. Stop the conflicting listener before retrying. Disposal removes the port record; reset clears client state. Never probe availability before binding. [Node server listen](https://nodejs.org/api/net.html#serverlistenport-host-backlog-callback)
+4. Require an authenticated readiness response matching the expected instance and schema before launching the client. A listening socket alone is insufficient. UI verification also waits for a connected conversation.
 5. Record owned process groups and process start identity. Stop by ownership, never by port number or a bare remembered PID. On normal stop, startup failure or cancellation, close owned clients/workers and terminate their process groups with a bounded graceful period and forced fallback.
 
 Unexpected supervisor loss must leave recoverable ownership records; the next status/start reconciles surviving processes before replacing them. Hot reload preserves the instance's data. If a service restart changes its address, republish configuration and reconnect or relaunch the client. Foreign listeners are never killed.
@@ -131,19 +131,19 @@ The integration test releases its owned resources in final cleanup, retaining ev
 
 ### Manual checks
 
-Open **Storage test screen**, then run these in order using disposable sample edits; reset deliberately removes the selected preview's data.
+Use disposable sample conversations; reset deliberately removes the selected preview's data.
 
-1. **Persistence and reopening:** Run, save a scratchpad note and file note, add a marker, and enable **Compact scratchpad**. Close the app window and Run again, then Stop and Run. Both notes, the count and the preference should survive. Repeated Run should reuse the same preview.
-2. **Parallel features:** Open another Ash worktree based on the current `master` and Run it. Save different notes in A and B. Refresh or reopen each: labels distinguish the workspaces and each retains its own values. Stop A; B should still work.
-3. **Ephemeral preview:** With A open, choose **Run Ephemeral Preview**. The window should say verification and start with fresh sample data. Change its note, then Ctrl-C that terminal. The ephemeral preview closes and is discarded; A's saved values remain.
-4. **True reset:** Run `pnpm dev:reset --fixture empty` in A, then Run. Notes and file note should be blank, the counter zero and Compact off. B should retain its values. Reset leaves A stopped until Run.
-5. **Hot reload:** In A's `packages/client/src/renderer/features/development/Scratchpad.svelte`, temporarily change the main heading to “Hot reload works.” The open A window should update while B stays unchanged. Revert the text; saved data should survive both updates.
+1. **Persistence and reopening:** Send a message, leave an unsent draft and collapse the sidebar. Close/reopen the app, then Stop and Run. The exchange, draft and sidebar preference should survive. Repeated Run should reuse the same preview.
+2. **Parallel features:** Open another Ash worktree and Run it. Send different messages in A and B. Reopen each and confirm each retains only its own conversations and drafts. Use `pnpm dev:status --json` to identify the instances. Stop A; B should still work.
+3. **Ephemeral preview:** With A open, choose **Run Ephemeral Preview**. It starts with an empty conversation. Send a sample message, then Ctrl-C that terminal. The ephemeral preview closes and is discarded; A's saved data remains.
+4. **True reset:** Run `pnpm dev:reset --fixture empty` in A, then Run. A starts with an empty conversation, blank draft and visible sidebar. B retains its values. Reset leaves A stopped until Run.
+5. **Hot reload:** In A's `packages/client/src/renderer/features/conversations/Chat.svelte`, temporarily change the composer placeholder. A updates while B stays unchanged. Revert the text; the conversation and draft survive both updates.
 
 ### Automated checks
 
 `pnpm verify` runs typechecking, an isolated build, unit tests and the workflow integration suite. It writes `report.json`, `checks.log`, screenshots and cleanup results under the printed evidence directory. Tests exercise two simultaneous worktrees plus a verification instance, cross-database access denial, database/file/client persistence, renderer hot reload, reset/token rotation, native launch/stop, supervisor crash recovery, Docker configuration changes, database-container recreation and disposal. Protected server configuration is excluded from Vite's served paths. The test helper in `tests/integration/workflow.test.ts` drives real Electron windows with Playwright.
 
-Future product verification: keep deterministic regression checks and agent exploration distinct in reports. Extend the driver with conversation, recorded input/run/context/output inspection, attachment and voice controls as those features land. Observation endpoints must remain authenticated and development-only.
+Keep deterministic regression checks and agent exploration distinct in reports. Conversation and image suites cover recorded input/run/context/output inspection and attachments; extend the driver with voice controls when implemented. Observation endpoints must remain authenticated and development-only.
 
 The deterministic adapter supports streaming, controlled delay, failure and cancellation. [OpenAI mode](features/conversations.md#openai-mode) separates interactive chat from bounded live checks and isolates the credential from the client. Mocked Responses protocol tests run in ordinary verification; [live-test model selection and budget exhaustion](plans/persisted-chat-tests.md#openai-adapter) do not constrain offline coverage. Report calls and available usage.
 
