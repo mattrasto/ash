@@ -1,6 +1,6 @@
 # Conversations
 
-First-phase scope accepted · Chat and image extension verified
+First-phase scope accepted · Chat, images and conversation UX implemented and verified
 
 [Source](../HUMAN_SPEC.md) · [Product principles](../product.md) · [Architecture](../../docs/architecture.md)
 
@@ -16,11 +16,11 @@ The accepted [artifact rules](artifacts.md#rules) refine membership and chains, 
 
 ## Scope
 
-Current delivery: conversation with [image input and descriptions](images.md), a deterministic default and explicitly configured OpenAI adapter, thread creation/selection, persisted messages and Run outcomes, cancellation/retry, reconnect/restart handling, and context/lineage inspection. Base instructions are captured with each request.
+Current delivery: conversation with [image input and descriptions](images.md), a deterministic default and explicitly configured OpenAI adapter, one-click creation, first-message titles, manual rename/archive, persisted messages and Run outcomes, cancellation/retry, reconnect/restart handling, and context/lineage inspection. Base instructions are captured with each request.
 
-Deferred from the broader design below: topic management, the instructions editor, archive/pin controls and PITR operation/restore verification. Requirement and acceptance IDs remain stable for those later deliveries. [Implementation](../../docs/features/conversations.md) · [Test plan](../../docs/plans/persisted-chat-tests.md).
+Deferred from the broader design below: topic management, the instructions editor, pin controls and PITR operation/restore verification. Requirement and acceptance IDs remain stable for those later deliveries. [Implementation](../../docs/features/conversations.md) · [Test plan](../../docs/plans/persisted-chat-tests.md).
 
-Deferred: voice and Live Threads, automatic naming/organization/archiving, artifact moves and references, split/merge, context from other threads, semantic memory, other file attachments, external tools and inputs, task execution, mobile and self-modification. OpenAI is the first live provider; [live verification](../../docs/features/conversations.md#verification) records the tested model and allowance. [Image rules and acceptance](images.md) extend this scope.
+Deferred: voice and Live Threads, model-generated naming, automatic organization/archiving, artifact moves and references, split/merge, context from other threads, semantic memory, other file attachments, external tools and inputs, task execution, mobile and self-modification. OpenAI is the first live provider; [live verification](../../docs/features/conversations.md#verification) records the tested model and allowance. [Image rules and acceptance](images.md) extend this scope.
 
 ## User flow
 
@@ -50,6 +50,18 @@ Deferred: voice and Live Threads, automatic naming/organization/archiving, artif
 - **CONV-R15 — Retry context:** later follow-ups include only the latest completed response for each Input. Failed, cancelled, interrupted, partial and superseded attempts remain visible but are omitted from model context. A failed retry does not displace an earlier completed response. If no response completed, include the user message without an answer. Existing captured requests remain unchanged.
 
 - **CONV-R16 — Live provider:** OpenAI is opt-in for development with an explicit model. Interactive chat has no session call cap or expiry; disposable live tests use explicit call/time limits. Default verification makes no external calls. Record provider identifiers and reported usage when available; missing usage is unknown. Incomplete provider output is a failed Run, not a completed reply. OpenAI retries preserve the captured provider/model/options and do not execute automatically.
+
+## Conversation UX
+
+Accepted 2026-10-12 · Align interactions with Asha; retain Ash's appearance and Artifact model.
+
+- **UX01 — Start and name:** open an empty conversation immediately on first use. **New conversation** creates and focuses another composer without requiring a title. The first accepted message names an untitled conversation from its text; image-only input uses “Image conversation.” Manual rename persists. Model-based naming belongs with the future visibility layer.
+- **UX02 — Sidebar:** show recent activity, running responses and unseen settled responses. Archive access is a collapsible list; archiving the current conversation selects another active conversation or creates an empty one. Archived conversations remain readable and writable; writing does not unarchive them. Collapse, width, archive expansion and read markers are local desktop preferences. Archive persistence follows CONV-R14; pin controls remain deferred.
+- **UX03 — Compose and read:** Enter sends, Shift+Enter inserts a line, and IME composition never submits. Input grows up to a scrollable maximum and returns focus after sending. Preserve drafts and reading position across conversation switches. Sending anchors the latest user message with room for its response; new output must not pull a reader through the reply. **Latest messages** resumes following with breathing room below the last message. Concurrent input follows CONV-R07.
+- **UX04 — Stream and act:** progressively reveal new prose and code lines while preserving settled Markdown nodes. Returning to a running conversation shows its recorded content immediately. Completion does not replace the message or replay its reveal. Copy, Inspect and Retry are available on hover, keyboard focus and a context menu; stopped/failed outcomes stay visible. Compact response details expand to recorded timing, model and usage when available. Full inspection follows CONV-R12.
+- **UX05 — Accessibility:** icon actions have labels and tooltips; menus support arrows, Escape and focus restoration. Escape closes inspection and the image viewer. Sidebar resizing supports arrows and Home. Respect reduced-motion preferences for message, stream, sidebar and viewer animations. Desktop shortcuts: Cmd/Ctrl+N creates a conversation; Cmd/Ctrl+\ toggles the sidebar.
+
+[Reference review, implementation and verification plan](../../docs/features/conversation-ux.md).
 
 ## Acceptance examples
 

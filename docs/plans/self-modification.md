@@ -27,7 +27,7 @@ Do a small Codex integration feasibility check before expanding slice 2, so tool
 
 ## 1. Images and usable chat
 
-Accepted and implemented under the [image spec](../../specs/features/images.md). [Implementation and test plan](../features/images.md) covers the Asha adaptations, description model/cost, persistence, context limits, viewer and Markdown. Offline and bounded live verification passed.
+Accepted and implemented under the [image spec](../../specs/features/images.md). [Implementation and test plan](../features/images.md) covers the Asha adaptations, description model/cost, persistence, context limits, viewer and Markdown. Offline and bounded live verification passed. The subsequent [conversation UX alignment](../features/conversation-ux.md) extends this slice before tool execution.
 
 ## 2. Inspectable tool execution
 

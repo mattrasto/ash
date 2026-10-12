@@ -34,6 +34,14 @@ The desktop polls saved snapshots every 150 ms while a response is active and ev
 
 Context uses a 12,000-character budget and a 4,000-character input limit; this is an application bound for both adapters, not a token estimate. Selection follows CONV-R15. Older conversation groups are omitted together when they do not fit; the current message and base instructions must fit. The captured request records every selected source and excluded Surface.
 
+## Conversation controls
+
+The [UX review](conversation-ux.md) records the Asha comparison and test plan. `Sidebar.svelte`, `Message.svelte`, `Menu.svelte`, `scroll.ts` and `streaming.ts` own the interaction behavior; `Chat.svelte` owns API/draft state and inspection.
+
+`GET /api/threads` includes archived rows and each thread's latest Run identity/outcome. `POST /api/threads/:id` accepts only a nonempty title and/or archive flag. Metadata changes preserve activity order and do not alter Runs. The first-message title is committed in the same transaction as accepted input and only replaces an empty conversation's “New conversation” placeholder (80-character display bound). UI names never enter captured model requests.
+
+No product migration is needed: the existing `threads.is_archived` field is used. Restart an existing development instance once to apply its additive runtime column grant. Preserve the current live session ID when restarting.
+
 ## Schema operations
 
 Prisma CLI/client are pinned to 6.19.3 and DBML CLI to 10.3.1. `pnpm db:generate` generates the client and runs automatically after dependency installation. Startup of a stopped instance applies committed migrations before launching its backend; a running preview needs Stop/Run after migration changes.
@@ -44,7 +52,7 @@ The schema test compares DBML-exported tables with the migrated database and che
 
 ## Limits
 
-Topic management, instruction editing, archive/pin controls, Artifact moves, image generation and generalized background execution remain deferred. [Image input and descriptions](images.md) are implemented separately from chat response Runs. A persisted checkpoint does not imply automatic continuation. PITR operation and restore drills remain pending; restart tests establish persistence, not recovery from lost database storage.
+Topic management, instruction editing, pin controls, Artifact moves, image generation and generalized background execution remain deferred. [Image input and descriptions](images.md) are implemented separately from chat response Runs. A persisted checkpoint does not imply automatic continuation. PITR operation and restore drills remain pending; restart tests establish persistence, not recovery from lost database storage.
 
 ## OpenAI mode
 
@@ -76,6 +84,8 @@ Ash remains the authoritative conversation store. `store:false` disables retaine
 The Responses API supports image inputs and a built-in image-generation tool. Ash now supports image input; the built-in image-generation tool remains deferred. [OpenAI images and vision](https://developers.openai.com/api/docs/guides/images-vision).
 
 ## Verification
+
+Latest conversation UX verification and evidence: [UX review](conversation-ux.md#verification).
 
 The deterministic baseline passed `pnpm verify` on 2026-10-09; evidence: `~/.ash-dev/evidence/2ba6f2ea74eb63aa1c53b997/`.
 

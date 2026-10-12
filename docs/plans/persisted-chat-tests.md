@@ -2,7 +2,7 @@
 
 Scope: persisted text chat, deterministic and OpenAI adapters, Artifact/context inspection. [Verification results](../features/conversations.md#verification).
 
-Product rules: [Conversations](../../specs/features/conversations.md), [Artifacts](../../specs/features/artifacts.md), [data model](../data-model.md). Topic management, instruction editing, archive/pin UI, image support and PITR operation are outside this implementation slice. Existing accepted behavior for those features remains future work.
+Product rules: [Conversations](../../specs/features/conversations.md), [Artifacts](../../specs/features/artifacts.md), [data model](../data-model.md). Topic management, instruction editing, pin UI and PITR operation remain deferred. Image coverage is in the [image test plan](../features/images.md#test-plan); conversation controls and streaming are in the [UX test plan](../features/conversation-ux.md#test-plan). Existing accepted behavior for those features remains future work.
 
 ## Automated coverage
 

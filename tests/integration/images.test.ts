@@ -122,7 +122,9 @@ test('persisted images, description Runs and desktop workflow (no external calls
       const launch=()=>_electron.launch({executablePath:require('electron'),args:[entry],cwd:instance.checkout,env:{...childEnvironment(join(instance.root,'tmp')),ASH_CLIENT_CONFIG:path} as Record<string,string>,timeout:30000});
       app=await launch();let page=await app.firstWindow();const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
       await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
-      await page.getByLabel('New thread',{exact:true}).fill('Image workspace');await page.getByRole('button',{name:'+ Create thread',exact:true}).click();
+      await page.getByRole('button',{name:'New conversation',exact:true}).first().click();
+      await page.getByRole('button',{name:'Actions for New conversation',exact:true}).first().click();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
+      await page.getByLabel('Conversation title').fill('Image workspace');await page.getByRole('button',{name:'Save title',exact:true}).click();
       await page.getByRole('heading',{name:'Image workspace',exact:true}).waitFor();
       const uploads=[{name:'screenshot.png',mimeType:'image/png',buffer:bytes},{name:'portrait.jpg',mimeType:'image/jpeg',buffer:await orientedFixture()},{name:'second.png',mimeType:'image/png',buffer:await screenshotFixture('SECOND IMAGE')}];
       await page.getByLabel('Choose images',{exact:true}).setInputFiles(uploads);
@@ -146,6 +148,9 @@ test('persisted images, description Runs and desktop workflow (no external calls
       await page.getByRole('button',{name:'Copy text-only context',exact:true}).click();
       assert.match(await app.evaluate(()=>(globalThis as any).__textCopy),/attachmentId:/);
       await page.screenshot({path:join(evidence,'images-inspection.png')});await page.getByRole('button',{name:'Close inspector',exact:true}).click();
+      await page.getByRole('button',{name:'Open screenshot.png',exact:true}).click({button:'right'});
+      await page.getByRole('menuitem',{name:'Copy description',exact:true}).click();await page.getByText('Description copied',{exact:true}).waitFor();
+      assert.match(await app.evaluate(()=>(globalThis as any).__textCopy),/Deterministic test description/);
       await page.getByRole('button',{name:'Open screenshot.png',exact:true}).click();await page.getByRole('button',{name:'Use again',exact:true}).click();assert.equal(await page.getByTestId('draft-image').count(),1);
       assert.equal(await page.getByLabel('Message',{exact:true}).evaluate(el=>el===document.activeElement),true);
       await page.getByLabel('Message',{exact:true}).fill('Saved image draft');
@@ -199,7 +204,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
         await page.getByText('More text arrived while you were reading.',{exact:true}).waitFor({state:'attached'});
         assert.ok(await page.locator('.transcript').evaluate(el=>el.scrollTop<3));
         await page.getByRole('button',{name:'↓ Latest messages',exact:true}).click();
-        assert.ok(await page.locator('.transcript').evaluate(el=>el.scrollHeight-el.scrollTop-el.clientHeight<3));
+        assert.ok(await page.locator('.transcript').evaluate(el=>{const last=el.querySelector('.messages')!.lastElementChild!;const gap=el.getBoundingClientRect().bottom-last.getBoundingClientRect().bottom;return Math.abs(gap-el.clientHeight*.2)<3;}));
       }finally{continueStream();await streaming.stop();}
       await app.close();app=undefined;
       const before=await api<ConversationView>(`threads/${current.id}`);await stopInstance(ws,instance.id);await startInstance(ws,instance.id,{headless:true});assert.deepEqual(await api<ConversationView>(`threads/${current.id}`),before);

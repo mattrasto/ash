@@ -37,7 +37,15 @@ export class Conversations {
       throw error;
     }
   }
-  listThreads() { return this.db.thread.findMany({where:{isArchived:false}, orderBy:[{updatedAt:'desc'},{id:'asc'}]}); }
+  async listThreads() {
+    const rows=await this.db.thread.findMany({orderBy:[{updatedAt:'desc'},{id:'asc'}],include:{runs:{orderBy:[{createdAt:'desc'},{id:'desc'}],take:1,select:{id:true,status:true,endedAt:true}}}});
+    return rows.map(({runs,...thread})=>({...thread,latestRun:runs[0]??null}));
+  }
+  async updateThread(id:string,change:{title?:string;isArchived?:boolean}) {
+    // Metadata changes preserve the conversation's activity order and never stop a Run.
+    if (!(await this.db.thread.updateMany({where:{id},data:change})).count) throw new ConversationError(404,'Thread not found.');
+    return this.db.thread.findUniqueOrThrow({where:{id}});
+  }
   async readThread(threadId: string) {
     return this.db.$transaction(async tx => {
       const thread = await tx.thread.findUnique({where:{id:threadId}});
@@ -95,6 +103,10 @@ export class Conversations {
           let inputId: string;
           let request: RequestPayload;
           if (command.kind === 'send') {
+            if (thread.title==='New conversation' && !await tx.artifact.findFirst({where:{threadId,layer:'input'}})) {
+              const title=command.text.replace(/\s+/g,' ').trim() || 'Image conversation';
+              await tx.thread.update({where:{id:threadId},data:{title:Array.from(title).length>80?Array.from(title).slice(0,79).join('')+'…':title}});
+            }
             const attachmentIds=command.attachmentIds??[];
             await retainImages(tx,attachmentIds);
             inputId = randomUUID();
