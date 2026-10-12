@@ -31,7 +31,7 @@
     "@sveltejs/vite-plugin-svelte": "5.1.1",
     "@types/node": "22.19.17",
     "electron": "41.10.6",
-    "esbuild": "0.25.12",
+    "esbuild": "0.28.1",
     "playwright": "1.58.2",
     "postgres": "3.4.8",
     "svelte-check": "4.1.0",
