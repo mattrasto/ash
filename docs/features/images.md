@@ -57,7 +57,7 @@ Ordinary `pnpm verify` uses synthetic images and deterministic/mocked providers;
 | IM08 | Cleanup/submission race, accepted-image retention, private graph deletion, restart and existing text compatibility. |
 | Renderer boundary | Escaped raw HTML, disabled remote Markdown images and rejected unsafe links. |
 
-Relevant tests: server `modules/attachments/storage.test.ts`, `modules/context/select.test.ts`, `platform/models/openai.test.ts`, `tests/unit/markdown.test.ts` and `tests/integration/images.test.ts`. Desktop checks stub only the operating-system clipboard/save dialog, verifying the remaining IPC, decode and file-writing path without changing the user's clipboard.
+Relevant tests: server `modules/attachments/storage.test.ts`, `modules/context/select.test.ts`, `platform/models/openai.test.ts`, `tests/boundary/markdown.test.ts` and `tests/integration/images.test.ts`. Desktop checks stub only the operating-system clipboard/save dialog, verifying the remaining IPC, decode and file-writing path without changing the user's clipboard.
 
 For live verification, create a separate disposable instance with a five-call, ten-minute session on the configured chat model. Upload the synthetic screenshot fixture, verify its short description, ask about visible shapes/text, and follow up. Inspect captured image identity and provider usage, then restart and confirm persistence without another call. Retain the report/screenshots and dispose the instance. Limits exhausting or provider failure do not stop offline verification; record incomplete live cases.
 

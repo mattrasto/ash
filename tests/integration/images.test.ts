@@ -1,3 +1,4 @@
+import { scenarioStep } from '../support/node-scenarios.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -43,7 +44,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
   let attachment:AttachmentView,thread:string,first:RunView;
   try{
     await startInstance(ws,instance.id,{headless:true});
-    await t.test('upload identity is idempotent, captioning is independent, and request snapshots freeze late descriptions',async()=>{
+    await scenarioStep(t, 'images-snapshot',async()=>{
       const uploadId=randomUUID();const [a,b]=await Promise.all([images.upload(uploadId,'screenshot.png',bytes),images.upload(uploadId,'screenshot.png',bytes)]);
       attachment=a;assert.equal(a.id,b.id);assert.equal(a.summaryRun!.id,b.summaryRun!.id);assert.equal(a.summaryRun!.threadId,null);
       await assert.rejects(images.upload(uploadId,'different.png',bytes),/another image/);
@@ -63,7 +64,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       assert.deepEqual(inspection.artifacts.map(a=>a.payload.type),['image_upload','model_request','image_description']);
       assert.ok(!JSON.stringify(inspection).includes('base64,'));
     });
-    await t.test('server rejects invalid uploads, foreign IDs and corrupt bytes before model execution',async()=>{
+    await scenarioStep(t, 'images-boundaries',async()=>{
       const count=await db.attachment.count();
       assert.equal((await upload('fake.png',Buffer.from('<svg>not a PNG</svg>'))).status,400);
       assert.equal((await upload('too-large.png',Buffer.alloc(10*1024*1024+1))).status,413);
@@ -78,7 +79,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       const run=await conversations.submit(thread,randomUUID(),'Broken bytes','normal',[asset.id]);conversations.dispatch(run.id);
       const failed=await settle(thread,run.id);assert.equal(failed.runs.find(r=>r.id===run.id)!.status,'failed');
     });
-    await t.test('failed descriptions can be retried without a chat message; restart never redispatches',async()=>{
+    await scenarioStep(t, 'images-description-retry',async()=>{
       let fail=true,calls=0;
       const captioner=new Attachments(db,storage,{...deterministicModel,async *stream(request,signal){calls++;if(fail)throw new ModelFailure('fixture_failure','Synthetic description failure');yield* deterministicModel.stream(request,signal);}});
       try{
@@ -94,7 +95,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       const recovered=await images.get(queued.id);assert.equal(recovered.summaryRun!.status,'interrupted');assert.equal(recovered.summary,null);
       await sleep(150);assert.equal((await images.get(queued.id)).summaryRun!.status,'interrupted');
     });
-    await t.test('cleanup removes only unsubmitted uploads and serializes with message retention',async()=>{
+    await scenarioStep(t, 'images-cleanup',async()=>{
       const orphan=await images.upload(randomUUID(),'orphan.png',bytes);images.dispatch(orphan.summaryRun!.id);await captionDone(orphan.id);
       await db.attachment.update({where:{id:orphan.id},data:{expiresAt:new Date(Date.now()-1)}});await images.cleanup();
       assert.equal(await db.attachment.findUnique({where:{id:orphan.id}}),null);await assert.rejects(access(join(storage.root,orphan.id)));
@@ -116,7 +117,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       if(submission.status==='fulfilled'){assert.equal((await images.get(race.id)).expiresAt,null);assert.ok(await storage.read(race.id,race.metadata.original));conversations.dispatch(submission.value.id);await settle(thread,submission.value.id);}
       else assert.match(String(submission.reason),/expired or is unavailable/);
     });
-    await t.test('Electron pick/paste/drop, galleries, native actions, descriptions, draft recovery and Markdown',async()=>{
+    await scenarioStep(t, 'images-desktop',async()=>{
       const live=(await runtime(instance))!,entry=await buildMain(instance.checkout,join(instance.root,'build')),path=join(instance.root,'images-test-client.json');
       await atomic(path,{root:instance.root,label:instance.label,instanceId:instance.id,url:live.webUrl,windowed:true,background:true});
       const require=createRequire(join(instance.checkout,'package.json'));
