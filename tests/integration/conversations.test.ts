@@ -256,7 +256,9 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       await page.getByRole('heading',{name:'Automatically named conversation',exact:true}).waitFor();
       await page.getByRole('button',{name:'Desktop conversation',exact:true}).click();
       assert.equal(await page.getByLabel('Message',{exact:true}).inputValue(),'Line one\nL');
-      assert.ok(await page.locator('.transcript').evaluate(el=>el.scrollTop<5));
+      // Draft selection is synchronous; history and its saved scroll position load afterward.
+      await until(()=>page.getByTestId('message').count(),count=>count===9);
+      await until(()=>page.locator('.transcript').evaluate(el=>el.scrollTop),top=>top<5,1500);
       await page.locator('.row').filter({has:page.getByRole('button',{name:'Automatically named conversation',exact:true})}).getByLabel('Unread response',{exact:true}).waitFor();
       await page.getByRole('button',{name:'Automatically named conversation',exact:true}).click();
       await page.getByRole('button',{name:'Archive Automatically named conversation',exact:true}).click();
