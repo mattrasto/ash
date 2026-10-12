@@ -28,6 +28,8 @@ The launcher requires process inspection, loopback sockets and Docker access. A 
 5. The coding agent reviews the diff and evidence, then demonstrates the feature and presents any targeted manual checks. Follow the [delivery agreement](../specs/product.md#confirmed-engineering-agreement) for review and integration.
 6. Preserve source changes in a Git checkpoint or saved patch, including relevant untracked files. Dispose of development resources before archiving the checkout; retain verification evidence.
 
+Keep `master` linear. Squash-merge completed pull requests; for local work, rebase onto current `master` and fast-forward. Rebase active feature branches when they need trunk updates instead of merging `master` into them. Remove completed branches after integration; preserve preview data and local configuration before retiring worktrees. Published history rewrites require explicit user approval and a recovery backup.
+
 ## Workspace and instance identity
 
 A **workspace** is one registered checkout. An **instance** is one isolated set of application data and runtime resources within it.
