@@ -123,7 +123,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       app=await launch();let page=await app.firstWindow();const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
       await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
       await page.getByRole('button',{name:'New conversation',exact:true}).first().click();
-      await page.getByRole('button',{name:'Actions for New conversation',exact:true}).first().click();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
+      await page.getByRole('button',{name:'Actions for New conversation',exact:true}).first().click();assert.deepEqual(await page.getByRole('menuitem').allTextContents(),['Rename']);await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
       await page.getByLabel('Conversation title').fill('Image workspace');await page.getByRole('button',{name:'Save title',exact:true}).click();
       await page.getByRole('heading',{name:'Image workspace',exact:true}).waitFor();
       const uploads=[{name:'screenshot.png',mimeType:'image/png',buffer:bytes},{name:'portrait.jpg',mimeType:'image/jpeg',buffer:await orientedFixture()},{name:'second.png',mimeType:'image/png',buffer:await screenshotFixture('SECOND IMAGE')}];
@@ -133,7 +133,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       await page.getByLabel('Choose images',{exact:true}).setInputFiles({name:'invalid.svg',mimeType:'image/svg+xml',buffer:Buffer.from('<svg/>')});
       assert.equal(await page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),false);await page.getByRole('button',{name:'Remove invalid.svg',exact:true}).click();
       await page.getByRole('button',{name:'Preview portrait.jpg',exact:true}).click();
-      await page.getByRole('dialog').waitFor();await page.getByRole('dialog').press('ArrowRight');assert.match(await page.getByRole('dialog').innerText(),/second.png/);await page.getByRole('dialog').press('ArrowLeft');
+      await page.getByRole('dialog').waitFor();assert.equal(await page.getByRole('button',{name:'Use again',exact:true}).count(),0);assert.equal(await page.getByRole('button',{name:'Inspect image',exact:true}).count(),0);await page.getByRole('dialog').press('ArrowRight');assert.match(await page.getByRole('dialog').innerText(),/second.png/);await page.getByRole('dialog').press('ArrowLeft');
       const savePath=join(instance.root,'tmp','saved-image.jpg');
       // Exercise IPC, decode and filesystem behavior without changing the user's clipboard or opening a save prompt.
       await app.evaluate(({clipboard,dialog},savePath)=>{(globalThis as any).__imageCopy=null;clipboard.writeImage=(image)=>{(globalThis as any).__imageCopy=image.getSize();};clipboard.writeText=(text)=>{(globalThis as any).__textCopy=text;};dialog.showSaveDialog=(async()=>({canceled:false,filePath:savePath})) as typeof dialog.showSaveDialog;},savePath);
@@ -143,6 +143,20 @@ test('persisted images, description Runs and desktop workflow (no external calls
       await page.screenshot({path:join(evidence,'images-viewer.png')});await page.getByRole('dialog').press('Escape');
       await page.getByRole('button',{name:'Send message',exact:true}).click();await until(()=>page.getByTestId('run-status').filter({hasText:'completed'}).count(),n=>n===1);
       assert.equal(await page.getByTestId('draft-image').count(),0);assert.equal(await page.locator('.gallery.accordion').count(),1);
+      // Hover/focus descriptions must not contribute intrinsic width or shift the accordion.
+      const bubble=page.getByRole('article',{name:'User message',exact:true});
+      await page.getByLabel('Message',{exact:true}).hover();
+      const geometry=()=>bubble.evaluate(el=>[el,el.querySelector('.gallery')!].map(node=>{const r=node.getBoundingClientRect();return {left:r.left,width:r.width};}));
+      const beforeHover=await geometry();
+      await page.getByRole('button',{name:'Open screenshot.png',exact:true}).hover();
+      await until(()=>bubble.locator('.description').evaluate(el=>getComputedStyle(el).opacity),value=>value==='1');
+      assert.deepEqual(await geometry(),beforeHover);
+      await page.getByRole('button',{name:'Open portrait.jpg',exact:true}).focus();
+      assert.deepEqual(await geometry(),beforeHover);
+      const copyText=bubble.getByRole('button',{name:'Copy text',exact:true});await page.getByRole('button',{name:'Open second.png',exact:true}).press('Tab');
+      assert.equal(await copyText.evaluate(el=>el===document.activeElement),true);
+      assert.equal(await copyText.evaluate(el=>getComputedStyle(el,'::after').visibility),'visible');
+      assert.equal(await copyText.evaluate(el=>getComputedStyle(el,'::after').content),'"Copy text"');
       await page.getByRole('button',{name:'Inspect Ash response',exact:true}).click();await page.getByRole('heading',{name:'Captured model request',exact:true}).waitFor();
       assert.equal(await page.locator('.captured-image').count(),3);
       await page.getByRole('button',{name:'Copy text-only context',exact:true}).click();
@@ -151,7 +165,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       await page.getByRole('button',{name:'Open screenshot.png',exact:true}).click({button:'right'});
       await page.getByRole('menuitem',{name:'Copy description',exact:true}).click();await page.getByText('Description copied',{exact:true}).waitFor();
       assert.match(await app.evaluate(()=>(globalThis as any).__textCopy),/Deterministic test description/);
-      await page.getByRole('button',{name:'Open screenshot.png',exact:true}).click();await page.getByRole('button',{name:'Use again',exact:true}).click();assert.equal(await page.getByTestId('draft-image').count(),1);
+      await page.getByLabel('Choose images',{exact:true}).setInputFiles(uploads[0]);await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),v=>v);assert.equal(await page.getByTestId('draft-image').count(),1);
       assert.equal(await page.getByLabel('Message',{exact:true}).evaluate(el=>el===document.activeElement),true);
       await page.getByLabel('Message',{exact:true}).fill('Saved image draft');
       await app.close();app=await launch();page=await app.firstWindow();page.on('pageerror',error=>errors.push(error.message));await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
@@ -206,6 +220,24 @@ test('persisted images, description Runs and desktop workflow (no external calls
         await page.getByRole('button',{name:'↓ Latest messages',exact:true}).click();
         assert.ok(await page.locator('.transcript').evaluate(el=>{const last=el.querySelector('.messages')!.lastElementChild!;const gap=el.getBoundingClientRect().bottom-last.getBoundingClientRect().bottom;return Math.abs(gap-el.clientHeight*.2)<3;}));
       }finally{continueStream();await streaming.stop();}
+      // More than both former count caps survives composition, request capture and reload.
+      await page.getByRole('button',{name:'New conversation',exact:true}).click();
+      await page.getByRole('heading',{name:'New conversation',exact:true}).waitFor();
+      await page.getByLabel('Choose images',{exact:true}).setInputFiles(Array.from({length:9},(_,i)=>({name:`batch-${i+1}.png`,mimeType:'image/png',buffer:bytes})));
+      await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),v=>v);
+      assert.equal(await page.getByTestId('draft-image').count(),9);
+      await page.getByRole('button',{name:'Send message',exact:true}).click();
+      await until(()=>page.getByTestId('run-status').filter({hasText:'completed'}).count(),n=>n===1);
+      assert.equal(await page.locator('.gallery .tile').count(),9);
+      assert.ok(await page.locator('.gallery').evaluate(el=>el.scrollWidth>el.clientWidth));
+      await page.setViewportSize({width:740,height:650});
+      assert.ok(await page.locator('.messages').evaluate(el=>el.scrollWidth<=el.clientWidth));
+      await page.getByRole('button',{name:'Inspect Ash response',exact:true}).click();
+      await page.getByRole('heading',{name:'Captured model request',exact:true}).waitFor();assert.equal(await page.locator('.captured-image').count(),9);
+      await page.getByRole('button',{name:'Close inspector',exact:true}).click();
+      await page.reload();await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
+      await until(()=>page.locator('.gallery .tile').count(),n=>n===9);
+      await page.screenshot({path:join(evidence,'images-many.png')});
       await app.close();app=undefined;
       const before=await api<ConversationView>(`threads/${current.id}`);await stopInstance(ws,instance.id);await startInstance(ws,instance.id,{headless:true});assert.deepEqual(await api<ConversationView>(`threads/${current.id}`),before);
     });

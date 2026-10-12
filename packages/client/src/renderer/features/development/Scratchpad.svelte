@@ -39,9 +39,9 @@
     <div class="sidebar-bottom"><span class="eyebrow">CURRENT WORKSPACE</span><strong>{info?.label ?? 'Starting…'}</strong><span class="muted">{info?.profile === 'preview' ? 'Persistent preview' : 'Disposable verification'}</span></div>
   </aside>
   <div class="content">
-    <header><span>Development workspace</span><span class="connection" data-testid="connection">{error ? 'Disconnected' : info ? 'Connected' : 'Connecting…'}<i class:offline={!!error}></i></span></header>
+    <header><span>Development storage checks</span><span class="connection" data-testid="connection">{error ? 'Disconnected' : info ? 'Connected' : 'Connecting…'}<i class:offline={!!error}></i></span></header>
     <main>
-      <div class="intro"><span class="eyebrow">A PLACE TO START</span><h1>Room to build.</h1><p>A placeholder for Ash. Try a few changes here;<br>they stay in this workspace.</p></div>
+      <div class="intro"><span class="eyebrow">DEVELOPER TOOLS</span><h1>Storage test screen</h1><p>Test database, file and client persistence in this instance.<br>Use Back to chat to return to your conversations.</p></div>
       {#if error}<div class="error" role="alert">{error} <button onclick={refresh}>Refresh</button></div>{/if}
       <section class="scratchpad">
         <div class="section-heading"><h2>Scratchpad</h2><span class="pill">{info?.label ?? 'Loading'}</span></div>
@@ -54,7 +54,7 @@
       <details class="checks"><summary>File and client storage checks</summary><div class="check-body"><label for="file-note">Local file note</label><input id="file-note" bind:value={fileNote} maxlength="2000"><div class="actions"><span class="hint">Stored in this instance’s file directory</span><button disabled={saving || !info} onclick={() => change({ fileNote })}>Save file</button></div><label class="checkbox"><input type="checkbox" checked={compact} onchange={toggle}> Compact scratchpad <span class="hint">· saved on this client</span></label></div></details>
       <div class="save-status" aria-live="polite">{saved}</div>
     </main>
-    <footer><span>Isolated data · No model connected</span><span title={info?.instanceId}>Instance {info?.instanceId.slice(0, 8) ?? '…'}</span></footer>
+    <footer><span>Storage checks · No model calls</span><span title={info?.instanceId}>Instance {info?.instanceId.slice(0, 8) ?? '…'}</span></footer>
   </div>
 </div>
 

@@ -51,7 +51,7 @@ test('image history budgets degrade to labeled descriptions and text-only consum
   assert.ok(textOnly.messages.every(m=>typeof m.content==='string'||m.content.every(b=>b.type==='text')));
   const original=JSON.stringify(result);assets[0].summary='Late replacement';assert.equal(JSON.stringify(result),original);
 });
-test('newest images win a whole-request count budget; current message is never silently downgraded',()=>{
+test('newest images consume the history count budget first',()=>{
   const descriptor={hash:'b'.repeat(64),mimeType:'image/png' as const,sizeBytes:100000,width:100,height:100};
   const assets:AttachmentView[]=Array.from({length:12},()=>({id:randomUUID(),filename:'image.png',metadata:{original:descriptor,model:descriptor,thumbnail:descriptor,transform:'rotate-strip-webp-v1'},createdAt:time.toISOString(),expiresAt:null,inputArtifactId:randomUUID(),summary:null,summaryRun:null}));
   const artifacts=Array.from({length:3},(_,i)=>{
@@ -62,4 +62,15 @@ test('newest images win a whole-request count budget; current message is never s
   assert.ok(result.selection.images!.filter(i=>i.artifactId===artifacts[0].id).every(i=>i.reason==='image-budget'));
   assert.ok(result.selection.images!.filter(i=>i.artifactId===artifacts[2].id).every(i=>i.representation==='image'));
   assert.match(modelContentText(result.messages[1].content),/Description unavailable/);
+});
+test('current input has no image-count cap, while image bytes remain bounded',()=>{
+  const descriptor={hash:'c'.repeat(64),mimeType:'image/png' as const,sizeBytes:100000,width:100,height:100};
+  const assets:AttachmentView[]=Array.from({length:12},()=>({id:randomUUID(),filename:'image.png',metadata:{original:descriptor,model:descriptor,thumbnail:descriptor,transform:'rotate-strip-webp-v1'},createdAt:time.toISOString(),expiresAt:null,inputArtifactId:randomUUID(),summary:null,summaryRun:null}));
+  const row=surface('Look at all twelve','user',randomUUID());
+  (row.payload as unknown as MessagePayload).content.push(...assets.map(a=>({type:'image' as const,attachmentId:a.id})));
+  const result=selectContext([row],[],instruction,12000,assets);
+  assert.equal(result.selection.images!.length,12);
+  assert.ok(result.selection.images!.every(i=>i.representation==='image'));
+  const oversized=assets.map(a=>({...a,metadata:{...a.metadata,model:{...descriptor,sizeBytes:IMAGE_LIMITS.modelBytes}}}));
+  assert.throws(()=>selectContext([row],[],instruction,12000,oversized),/image context budget/);
 });

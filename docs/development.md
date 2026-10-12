@@ -4,7 +4,7 @@ Workflow accepted, 2026-10-09 · Persisted chat with opt-in OpenAI mode
 
 Give each feature a Git worktree, a persistent preview and disposable verification environments. Repository commands own the runtime; Codex supplies worktrees and launch actions. Ash can later invoke the same commands for [self-modification](../specs/HUMAN_SPEC.md#modifying-ashs-code).
 
-The Electron/Svelte shell opens [persisted deterministic chat](features/conversations.md). **Development checks** retains the database note/counter, file note and persisted client preference used by the workflow suite. Its `dev_meta` and `dev_scratch` tables remain development scaffolding. PITR operation, signed packaging, personal-data imports and production rollout remain deferred.
+The Electron/Svelte shell opens [persisted deterministic chat](features/conversations.md). **Storage test screen** retains the database note/counter, file note and persisted client preference used by the workflow suite. It is a separate screen in the current app, not an older build; its `dev_meta` and `dev_scratch` tables remain development scaffolding. **Developer info** in the chat sidebar identifies the instance, persistence profile and model session. PITR operation, signed packaging, personal-data imports and production rollout remain deferred.
 
 ## Run the preview
 
@@ -131,7 +131,7 @@ The integration test releases its owned resources in final cleanup, retaining ev
 
 ### Manual checks
 
-Open **Development checks**, then run these in order using disposable sample edits; reset deliberately removes the selected preview's data.
+Open **Storage test screen**, then run these in order using disposable sample edits; reset deliberately removes the selected preview's data.
 
 1. **Persistence and reopening:** Run, save a scratchpad note and file note, add a marker, and enable **Compact scratchpad**. Close the app window and Run again, then Stop and Run. Both notes, the count and the preference should survive. Repeated Run should reuse the same preview.
 2. **Parallel features:** Open another Ash worktree based on the current `master` and Run it. Save different notes in A and B. Refresh or reopen each: labels distinguish the workspaces and each retains its own values. Stop A; B should still work.

@@ -44,7 +44,8 @@ export function selectContext(artifacts: Artifact[], runs: Run[], instruction: I
         const asset=assets.get(block.attachmentId);
         if(!asset)throw new Error('A saved image reference is unavailable.');
         const recent=turns.length-1-index<IMAGE_LIMITS.historyTurns;
-        const fits=nextCount<IMAGE_LIMITS.contextCount && nextBytes+asset.metadata.model.sizeBytes<=IMAGE_LIMITS.contextBytes;
+        // The count budget only bounds history; every image in the current input gets pixels.
+        const fits=(index===turns.length-1 || nextCount<IMAGE_LIMITS.contextCount) && nextBytes+asset.metadata.model.sizeBytes<=IMAGE_LIMITS.contextBytes;
         const inline=supportsImages && recent && fits;
         const description=imageDescription(asset);
         if(inline){content.push({...block,image:asset.metadata.model,detail:'high',description});nextCount++;nextBytes+=asset.metadata.model.sizeBytes;}

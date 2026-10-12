@@ -10,7 +10,7 @@ Run `pnpm dev:setup`, then `pnpm dev`. Create a named thread, send a message and
 
 The **Test response settings** selector controls the deterministic adapter: normal, slow streaming, failure before output, failure after partial output, or an empty response. It is development behavior, saved in each model request. Explicit deterministic retries reuse the frozen message/context selection and use the current test setting. The default launch makes no external calls. [OpenAI mode](#openai-mode) requires explicit configuration.
 
-**Development checks** retains the original scratchpad for database/file/client isolation checks. Chat drafts and pending delivery keys live in the isolated desktop's browser storage. Accepted messages and execution state live in PostgreSQL.
+**Storage test screen** retains the original scratchpad for database/file/client isolation checks. Chat drafts and pending delivery keys live in the isolated desktop's browser storage. Accepted messages and execution state live in PostgreSQL.
 
 ## Implementation map
 

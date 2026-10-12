@@ -6,7 +6,7 @@ Behavior and limits: [image spec](../../specs/features/images.md). This is slice
 
 ## Try it
 
-In a thread, paste, drop or choose images. Remove or retry failed uploads before sending; descriptions run independently and do not block Send. Images can be sent without text. Click a thumbnail for the full-size viewer, arrow navigation, copy/save, description details and **Use again**. Reuse adds the existing image to the current draft without another upload or description call.
+In a thread, paste, drop or choose images. Remove or retry failed uploads before sending; descriptions run independently and do not block Send. Images can be sent without text. Click a thumbnail for the full-size viewer, arrow navigation, copy/save icons and description details. Inspect image records through the message inspector.
 
 **Inspect** shows the captured image bytes' dimensions/hash and whether each historical image contributed pixels or a description. **Inspect description** opens the upload → description request → description result chain. **Copy text-only context** exports the frozen text and image descriptions from that request.
 
@@ -19,8 +19,8 @@ The reference implementation is the adjacent Asha checkout, particularly `docs/p
 | Asha pattern | Ash implementation |
 | --- | --- |
 | Describe once on upload; reuse text for non-vision consumers | Independent description Run, persisted result and labeled text fallback/export. |
-| Recent image window and stable attachment markers | Context selection records pixels/description, reason and the description Run used. **Use again** supplies explicit recall until tools exist. |
-| Immediate previews, upload recovery and restrained transcript UI | Local previews/progress, per-thread drafts, fixed-width accordion for three or more images and descriptions on demand. |
+| Recent image window and stable attachment markers | Context selection records pixels/description, reason and the description Run used. |
+| Immediate previews, upload recovery and restrained transcript UI | Local previews/progress, per-thread drafts, stable-width accordion for three to five images, horizontal scrolling for larger sets and descriptions on demand. |
 | Viewer, filmstrip and native actions | Keyboard navigation, feedback, original-byte saving and orientation-correct PNG clipboard copy. |
 
 Ash additionally freezes cached model derivatives and description text in requests, so retries do not resize current files or pick up later captions. It implements unsubmitted-upload cleanup immediately rather than leaving orphan collection deferred.
@@ -51,9 +51,9 @@ Ordinary `pnpm verify` uses synthetic images and deterministic/mocked providers;
 | --- | --- |
 | IM01, IM02 | Pick/paste/drop, image-only and text-plus-image messages, upload failure/retry, remove during upload, switch threads during upload, saved drafts, follow-up and reopen. |
 | IM03, IM05 | Independent description provenance, explicit/deduplicated retry, restart interruption, late description and byte-identical frozen conversation retry. |
-| IM04 | Six-turn window, newest-first count limits, text-only fallback, frozen summary markers, explicit reuse, captured image order/detail and provider wire bytes. |
+| IM04 | Six-turn window, history count budget, twelve-image current input, text-only fallback, frozen summary markers, captured image order/detail and provider wire bytes. |
 | IM06 | Decode/size/pixel/animation limits, spoofed formats, foreign instance IDs, traversal, symlinks, missing/corrupt bytes and no paid-call reservation on a storage error. |
-| IM07 | Viewer arrows/Escape, filmstrip, clipboard orientation, saved original bytes, composer focus after reuse, code copying, streaming scroll preservation and return to latest. |
+| IM07 | Viewer arrows/Escape, filmstrip, clipboard orientation, saved original bytes, composer focus after upload, gallery geometry across hover/focus, nine-image send/inspect/reload, code copying, streaming scroll preservation and return to latest. |
 | IM08 | Cleanup/submission race, accepted-image retention, private graph deletion, restart and existing text compatibility. |
 | Renderer boundary | Escaped raw HTML, disabled remote Markdown images and rejected unsafe links. |
 

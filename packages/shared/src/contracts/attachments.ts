@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { RunView } from './conversations.ts';
 
-export const IMAGE_LIMITS = { perFile:10*1024*1024, perMessage:20*1024*1024, pixels:20_000_000, count:4,
+export const IMAGE_LIMITS = { perFile:10*1024*1024, perMessage:20*1024*1024, pixels:20_000_000,
   modelBytes:2*1024*1024, contextBytes:16*1024*1024, contextCount:8, historyTurns:6, draftLifetimeMs:24*60*60*1000 } as const;
 export const ImageFile = z.object({hash:z.string().regex(/^[a-f0-9]{64}$/), mimeType:z.enum(['image/png','image/jpeg','image/webp']),
   sizeBytes:z.number().int().positive().max(IMAGE_LIMITS.perFile), width:z.number().int().positive(), height:z.number().int().positive()}).strict();

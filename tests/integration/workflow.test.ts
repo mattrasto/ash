@@ -40,7 +40,7 @@ async function desktop(instance: Instance) {
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     try { await page.getByTestId('connection').filter({ hasText: 'Connected' }).waitFor({timeout:15000}); }
     catch (e) { throw new Error(`${(e as Error).message}\nRenderer errors: ${errors.join('\n')}\n${(await page.locator('body').innerText()).slice(0,2000)}`); }
-    await page.getByRole('button', {name:'Development checks',exact:true}).click();
+    await page.getByRole('button', {name:'Storage test screen',exact:true}).click();
     return { app, page };
   } catch (e) { await app.close(); throw e; }
 }

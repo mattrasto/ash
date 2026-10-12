@@ -87,7 +87,6 @@
   function addFiles(files:FileList|File[]) {
     const thread=selected;if(!thread||pending[thread])return;
     const list=Array.from(files),existing=draftImages[thread]??[];
-    if(existing.length+list.length>IMAGE_LIMITS.count){error='Attach up to four images per message.';return;}
     if([...list,...existing].reduce((n,file)=>n+file.size,0)>IMAGE_LIMITS.perMessage){error='Images in one message must total at most 20 MiB.';return;}
     error='';
     for(const file of list){
@@ -99,12 +98,6 @@
       if(!problem)queueUpload(thread,id);
     }
     saveLocal();textarea?.focus();
-  }
-  function reuseImage(image:AttachmentView){
-    if(!selected||pending[selected])return;
-    if(images.some(item=>item.id===image.id)){textarea?.focus();return;}
-    if(images.length>=IMAGE_LIMITS.count||images.reduce((n,item)=>n+item.size,image.metadata.original.sizeBytes)>IMAGE_LIMITS.perMessage){error='This draft has reached its image limit.';return;}
-    draftImages[selected]=[...images,{id:image.id,filename:image.filename,size:image.metadata.original.sizeBytes,status:'ready',progress:1,attachment:image}];saveLocal();void tick().then(()=>textarea?.focus());
   }
   async function retryDescription(image:AttachmentView){
     if(!image.summaryRun)return;
@@ -250,7 +243,7 @@
   {#if sidebarOpen}<Sidebar {threads} {selected} {info} {connected} {creating} {readRuns} onSelect={selectThread} onCreate={createThread} onUpdate={updateThread} onClose={toggleSidebar}/>{/if}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="main-column" ondragenter={(e)=>drag(e,'enter')} ondragover={(e)=>drag(e,'over')} ondragleave={(e)=>drag(e,'leave')} ondrop={(e)=>drag(e,'drop')}>
-    {#if isDragOver}<div class="drop-overlay"><strong>Drop images here</strong><span>PNG, JPEG or WebP · up to four images</span></div>{/if}
+    {#if isDragOver}<div class="drop-overlay"><strong>Drop images here</strong><span>PNG, JPEG or WebP</span></div>{/if}
     <header>{#if !sidebarOpen}<button class="icon-button" aria-label="Show sidebar" title="Show sidebar" onclick={toggleSidebar}><Icon name="sidebar"/></button>{/if}<div class="heading"><span class="eyebrow">CONVERSATION</span><h1>{conversation?.thread.title ?? 'New conversation'}</h1>{#if conversation?.thread.isArchived}<span class="archived-label">Archived</span>{/if}</div><span class="connection" data-testid="connection"><i class:offline={!connected}></i>{connected ? 'Connected' : 'Reconnecting…'}</span></header>
     <div class="model-banner"><span class="model-dot"></span>{#if info?.model?.provider === 'openai'}OpenAI · {info.model.model}{#if info.model.session}<span>· {info.model.session.callsUsed}{#if info.model.session.maxCalls !== null} / {info.model.session.maxCalls}{/if} calls{#if info.model.session.expiresAt !== null} · expires {new Date(info.model.session.expiresAt).toLocaleTimeString()}{/if}</span>{/if}{:else}Deterministic test model <span>· No external calls</span>{/if}</div>
     {#if error}<div class="error" role="alert">{error}</div>{/if}
@@ -271,7 +264,7 @@
           {#if images.length}<div class="draft-images">{#each images as image (image.id)}<div class="draft-image" class:upload-error={image.status==='error'} data-testid="draft-image"><button type="button" class="draft-thumb" disabled={!image.attachment} aria-label={`Preview ${image.filename}`} onclick={()=>openImages(images.flatMap(item=>item.attachment?[item.attachment]:[]),images.filter(item=>item.attachment).findIndex(item=>item.id===image.id))}>{#if image.preview||image.attachment}<img src={image.preview??`/api/attachments/${image.id}/thumbnail`} alt={image.attachment?.summary??image.filename}/>{:else}<span>▧</span>{/if}</button><div class="draft-meta"><strong>{image.filename}</strong><span>{image.status==='uploading'?(image.progress<1?`Uploading ${Math.round(image.progress*100)}%`:'Processing image…'):image.status==='error'?image.error:`${Math.round(image.size/1024)} KB`}</span>{#if image.status==='error'&&localFiles.has(image.id)}<button type="button" onclick={()=>queueUpload(selected,image.id)}>Retry upload</button>{/if}</div><button class="remove-image" type="button" disabled={!!pending[selected]} aria-label={`Remove ${image.filename}`} onclick={()=>removeImage(selected,image.id)}>×</button></div>{/each}</div>{/if}
           <input class="sr-only" type="file" accept="image/png,image/jpeg,image/webp" multiple bind:this={fileInput} aria-label="Choose images" onchange={(event)=>{if(event.currentTarget.files)addFiles(event.currentTarget.files);event.currentTarget.value='';}}/>
           <label class="sr-only" for="message">Message</label><textarea bind:this={textarea} id="message" placeholder="Message Ash…" rows="1" maxlength="4000" disabled={!!pending[selected]} value={drafts[selected] ?? ''} onpaste={paste} oninput={(event) => {drafts[selected] = event.currentTarget.value; saveLocal();autosize();}} onkeydown={(event) => {if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {event.preventDefault(); void send();}}}></textarea>
-          <div class="composer-actions"><button class="attach" type="button" aria-label="Attach images" title="Attach images" disabled={!!pending[selected]||images.length>=4} onclick={()=>fileInput?.click()}><Icon name="attach"/></button><span>{imagesPending?(images.some(image=>image.status==='error')?'Retry or remove failed uploads':'Uploading images…'):active ? 'Response in progress · your draft is saved' : 'Enter to send · Shift + Enter for a new line'}</span>{#if active}<button type="button" class="stop" aria-label="Stop response" title="Stop response" disabled={actionBusy[active.id]} onclick={() => runAction(active!,'cancel')}><Icon name="stop"/></button>{:else}<button class="primary" aria-label={pending[selected]?'Retry sending':'Send message'} title={pending[selected]?'Retry sending':'Send message'} disabled={submitting || !connected || imagesPending || (!pending[selected] && !(drafts[selected] ?? '').trim()&&!images.length)}><Icon name={pending[selected]?'retry':'send'}/></button>{/if}</div>
+          <div class="composer-actions"><button class="attach" type="button" aria-label="Attach images" title="Attach images" disabled={!!pending[selected]} onclick={()=>fileInput?.click()}><Icon name="attach"/></button><span>{imagesPending?(images.some(image=>image.status==='error')?'Retry or remove failed uploads':'Uploading images…'):active ? 'Response in progress · your draft is saved' : 'Enter to send · Shift + Enter for a new line'}</span>{#if active}<button type="button" class="stop" aria-label="Stop response" title="Stop response" disabled={actionBusy[active.id]} onclick={() => runAction(active!,'cancel')}><Icon name="stop"/></button>{:else}<button class="primary" aria-label={pending[selected]?'Retry sending':'Send message'} title={pending[selected]?'Retry sending':'Send message'} disabled={submitting || !connected || imagesPending || (!pending[selected] && !(drafts[selected] ?? '').trim()&&!images.length)}><Icon name={pending[selected]?'retry':'send'}/></button>{/if}</div>
         </form>
         {#if info?.model?.provider !== 'openai'}<details class="test-controls"><summary>Test response settings</summary><label for="mode">Response behavior</label><select id="mode" bind:value={mode}><option value="normal">Normal</option><option value="slow">Slow streaming</option><option value="fail">Fail after partial output</option><option value="fail-before">Fail before output</option><option value="empty">Empty response</option></select></details>{/if}
       {/if}
@@ -292,7 +285,7 @@
     </aside>
   {/if}
 </div>
-{#if viewer}<Viewer images={viewer.images.map(currentImage)} startIndex={viewer.index} onClose={()=>viewer=null} onReuse={selected&&!pending[selected]?reuseImage:undefined} onInspect={inspect} onRetry={retryDescription}/>{/if}
+{#if viewer}<Viewer images={viewer.images.map(currentImage)} startIndex={viewer.index} onClose={()=>viewer=null} onRetry={retryDescription}/>{/if}
 <style>
   :global(*){box-sizing:border-box}:global(body){margin:0;background:#f7f7f2;color:#2d342e;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px}:global(button),:global(input),:global(textarea),:global(select){font:inherit}:global(button){cursor:pointer}:global(button:disabled){cursor:default;opacity:.45}:global(button:focus-visible),:global(input:focus-visible),:global(textarea:focus-visible),:global(select:focus-visible),:global(summary:focus-visible){outline:2px solid var(--accent);outline-offset:3px}
   .archived-label{display:inline-block;font-size:10px;color:#8b947f;margin-top:5px}

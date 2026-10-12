@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ImageBlock, TextBlock, ModelContent, IMAGE_LIMITS, type AttachmentView } from './attachments.ts';
+import { ImageBlock, TextBlock, ModelContent, type AttachmentView } from './attachments.ts';
 
 export const Uuid = z.string().uuid();
 export const ModelMode = z.enum(['normal', 'slow', 'fail', 'fail-before', 'empty']);
@@ -7,7 +7,7 @@ export type ModelMode = z.infer<typeof ModelMode>;
 export const CreateThread = z.object({ id: Uuid, title: z.string().trim().min(1).max(160) }).strict();
 export const UpdateThread = z.object({title:z.string().trim().min(1).max(160).optional(),isArchived:z.boolean().optional()}).strict()
   .refine(value=>Object.keys(value).length>0,'Choose a conversation change.');
-export const SendMessage = z.object({ requestKey: Uuid, text: z.string().trim().max(4000), mode: ModelMode.default('normal'), attachmentIds:z.array(Uuid).max(IMAGE_LIMITS.count).default([]) }).strict()
+export const SendMessage = z.object({ requestKey: Uuid, text: z.string().trim().max(4000), mode: ModelMode.default('normal'), attachmentIds:z.array(Uuid).default([]) }).strict()
   .refine(value=>value.text.length>0 || value.attachmentIds.length>0,'A message needs text or an image.')
   .refine(value=>new Set(value.attachmentIds).size===value.attachmentIds.length,'Duplicate image references.');
 export const RetryRun = z.object({ requestKey: Uuid, mode: ModelMode.default('normal') }).strict();

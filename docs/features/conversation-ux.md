@@ -32,16 +32,18 @@ Run `pnpm verify`; all automated checks use deterministic or mocked responses.
 | Input | Enter sends once, Shift+Enter inserts a line, composition input does not send. Input grows and resets after acceptance. Stop preserves typed follow-up text. |
 | Streaming | Deliver Markdown one character at a time. Preserve an existing paragraph node; final text/code/link values match static rendering, raw HTML stays inert and remote images remain unfetched. No queued hidden content remains after the bounded reveal window. Restored content and reduced-motion content appear immediately. |
 | Reading | Stream a long response while reading earlier messages. Position stays fixed. Latest messages exposes the end with a gap below it. Switch/reload preserves a reading position; resize keeps the chosen follow mode. |
-| Actions/inspection | Use hover, keyboard focus and context menus. Copy text/code through native IPC. Expand metadata; open the recorded context/Artifact chain and close with Escape. Menu Escape/outside click restore focus. |
-| Images | Pick/paste/drop, upload error/retry/removal, draft recovery, gallery hover/focus description, right-click copy/save/description, viewer arrows/filmstrip/Escape and reuse. Existing image retention and snapshot tests remain required. |
-| Sidebar | Keyboard resize and reset; collapse/reopen; reload preserves width and visibility. Archive expansion persists. Reordering/stream/viewer animations respect reduced motion. |
+| Actions/inspection | Use hover, keyboard focus and context menus. Message icons show tooltips on hover and keyboard focus. Copy text/code through native IPC under UX04. Expand metadata; open the recorded context/Artifact chain and close with Escape. Menu Escape/outside click restore focus. |
+| Images | Pick/paste/drop, upload error/retry/removal, draft recovery, gallery hover/focus description, right-click copy/save/description, viewer arrows/filmstrip/Escape and icon actions. Description reveal preserves message/gallery width; larger galleries scroll. Send nine images and inspect/reload all nine. Existing image retention and snapshot tests remain required. |
+| Sidebar | Keyboard resize and reset; collapse/reopen; reload preserves width and visibility. Archive expansion persists; archive/unarchive lives in the row icon, while the menu contains Rename. Reordering/stream/viewer animations respect reduced motion. |
 
 Manual comparison uses a disposable deterministic Ash instance. Check the conversation at desktop and narrow widths, scroll during a long reply, open contextual actions, rename/archive/unarchive and inspect saved context. Existing native Electron tests verify clipboard/save integration without replacing the user's clipboard contents.
 
 ## Verification
 
-`pnpm verify` passed: typechecking with zero warnings, isolated build, 28 unit tests and 39 integration/desktop checks, with zero live provider calls. Evidence: `~/.ash-dev/evidence/0170acb787fa0ad52ea6ac0c/` (`report.json`, `checks.log`, `chat-reconnected.png`, `images-chat.png`, `images-viewer.png`).
+`pnpm verify` passed: typechecking with zero warnings, isolated build, 29 unit tests and 39 integration/desktop checks, with zero live provider calls. Evidence: `~/.ash-dev/evidence/e17b7d8c67a345893e39e1a8/` (`report.json`, `checks.log`, conversation and image screenshots).
 
-Manual comparison covered Asha's new-chat/streaming/metadata/archive behavior and Ash's multiline composer, first-message naming, rename/archive/reopen, long reply and Artifact inspection. A separate code review checked metadata validation/grants, atomic naming, stale polling responses, safe DOM reconciliation, timer disposal and archive-animation accessibility. No blocking findings remain.
+Regression checks cover stable gallery/message geometry on hover and focus, keyboard tooltips, a Rename-only thread menu, viewer icon actions, and nine-image composition, captured pixels and reload at a narrow width. Context tests include twelve current images and rejection above the byte budget.
 
-Temporary Asha and Ash comparison databases/workspaces were disposed; the Asha source checkout is unchanged. The persistent Ash preview was restarted with its existing OpenAI session, three conversations retained, and its archive grant verified. Broader live-model quality, Topics, tool timelines and the future visibility layer remain outside this UX pass.
+Manual inspection in a disposable deterministic preview covered the gallery, keyboard tooltip, spotlight, thread menu and developer controls. A separate diff review checked count validation through request selection, caption sizing, tooltip placement and removal of unused viewer actions. The disposable preview was removed; the persistent preview retained its OpenAI session.
+
+The earlier Asha comparison covered new-chat/streaming/metadata/archive behavior. Broader live-model quality, Topics, tool timelines and the future visibility layer remain outside this UX pass.
