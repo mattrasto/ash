@@ -1,16 +1,16 @@
 # Data model
 
-Six-table design accepted, 2026-10-09 · Schema and deterministic chat implemented; see [coverage](features/conversations.md) · PITR operation pending
+Initial six-table design accepted, 2026-10-09 · Image extension accepted, 2026-10-12 · PITR operation pending
 
 [DBML](../specs/data/model.dbml) · [Artifact rules](../specs/features/artifacts.md) · [Instruction rules](../specs/features/instructions.md) · [Open decisions](../specs/open-questions.md)
 
 ## Storage
 
-One private Ash instance uses one database and initially one backend. Current rows are authoritative; recovery follows [ART-R08](../specs/features/artifacts.md#rules). The backend assigns record IDs and timestamps. `updated_at` starts at `created_at` and changes with the row's editable fields. Naming follows the [engineering agreement](../specs/product.md#confirmed-engineering-agreement).
+One private Ash instance uses one database and initially one backend. Current rows are authoritative; recovery follows [ART-R08](../specs/features/artifacts.md#rules). The backend assigns timestamps and record IDs; uploads accept a client-generated UUID as their idempotent identity. `updated_at` starts at `created_at` and changes with the row's editable fields. Naming follows the [engineering agreement](../specs/product.md#confirmed-engineering-agreement).
 
 ### First-phase coverage
 
-Scope: the [text-conversation journey](../specs/features/conversations.md). No additional product tables or columns are needed for these requirements.
+The initial [conversation journey](../specs/features/conversations.md) uses six tables; [image input](../specs/features/images.md) adds two attachment tables and permits threadless description Runs. The schema also anticipates organization/instruction editors that are not yet implemented.
 
 | Capability | Stored data |
 | --- | --- |
@@ -21,7 +21,8 @@ Scope: the [text-conversation journey](../specs/features/conversations.md). No a
 | Submit without duplicates | `runs.input_artifact_id`, `request_key`, `request_hash`; unique constraints. |
 | Stream, reconnect, cancel and retry | Saved Surface content; Run `state`, `status`, `error`, timestamps and `retry_of_id`. |
 | Inspect context and select retry results | Request payloads retain messages, instruction identities, limits, omissions, provider/model/options; Run input links and status select the answer under CONV-R15. |
-| Restore after data loss | All six tables, physical backups and archived WAL. |
+| Persist images and descriptions | `attachments`, `artifact_attachments`, immutable instance files and description Runs. |
+| Restore after data loss | All product tables, physical backups/archived WAL and matching attachment files. |
 
 Typed drafts and selection state belong to the desktop client. Provider credentials and model configuration belong to the backend configuration.
 
@@ -31,7 +32,7 @@ A Run tracks an Act workflow and its outputs, including Surface Artifacts. Routi
 
 A workflow may contain several model calls using different providers or models. Each call has its own Artifact payload. Find produced Artifacts through `artifacts.run_id`; the checkpoint references those currently needed by the workflow.
 
-The first journey implements one response per Run. User Input and its directly mirrored Surface precede that Run and have no producing `run_id`. Multiple-call execution, independently finalized outputs, durable waits/resumption and threadless Act workflows still need execution contracts before implementation; the initial Run requires one Input and a target thread.
+Conversation Runs produce one response. User Input and its directly mirrored Surface precede that Run and have no producing `run_id`. Image-description Runs consume an upload Input, have null `thread_id`, and produce an internal result Act without a Surface. Multiple-call execution, durable waits/resumption and other threadless workflows still need execution contracts.
 
 ## Artifacts and placement
 
@@ -64,11 +65,14 @@ Every payload has a required string `type` validated against its layer. The appl
 
 | Layer / type | Payload content |
 | --- | --- |
-| Input / `text_input` | Original input text and any source metadata. |
+| Input / `text_input` | Original text-only input and any source metadata. |
+| Input / `message_input` | Original text (possibly empty) and ordered `attachmentIds`. |
+| Input / `image_upload` | Uploaded `attachmentId` and filename. |
+| Act / `image_description` | `attachmentId` and the completed generated description text. |
 | Act / `model_request` | Exact model-visible messages, instruction/context selection, and this call's `provider`, `model` and `options`. See [captured requests](#instructions-and-captured-requests). |
 | Surface / `message` | `initial_thread_id`, `speaker`, ordered `content` blocks and any presentation metadata. |
 
-`payload.speaker` is required for Surface messages: `user` for the mirrored user message, `ash` for the reply. Omit it from other payloads; internal model roles belong in `messages`. Surface messages use blocks so the payload can later include images, references and other structured content. The first text journey supports text blocks:
+`payload.speaker` is required for Surface messages: `user` for the mirrored user message, `ash` for the reply. Omit it from other payloads; internal model roles belong in `messages`. Surface messages support text blocks and `{type: "image", attachmentId}` blocks. For example:
 
 ```json
 {
@@ -94,9 +98,19 @@ An empty response starts with an empty `content` array. Streaming may append blo
 
 Its `created_at` would be 09:10. The two times answer when the source event happened and when Ash saved it.
 
+## Image storage and description Runs
+
+`attachments` owns one upload Input, immutable filename/metadata, the latest description Run/result text, creation time and optional expiry. Metadata contains original/model/thumbnail descriptors (SHA-256, MIME type, bytes and displayed dimensions), plus the transform version. Storage paths derive from the instance root, attachment UUID and descriptor hash; payloads never accept arbitrary filesystem paths.
+
+`artifact_attachments` gives every Input, Surface, description record and captured request a restrictive FK reference to its image. Requests retain references even when they use only a description. Submission locks attachments, verifies availability/budgets, clears expiry and inserts references in the same transaction as acceptance. Original bytes and descriptors never change. [IMG-R09](../specs/features/images.md#rules) owns lifetime; [implementation](features/images.md#storage-and-execution) owns publication and cleanup.
+
+Upload acceptance creates `image_upload` → `model_request` in a transaction, with a queued threadless Run and complete checkpoint. The request's `purpose: image_summary` distinguishes its adapter configuration. Completion atomically creates `image_description`, updates the Run checkpoint/status and caches text on the attachment. Error/interruption leaves the image usable. Retry creates another Run/request with frozen content and updates the attachment's current Run pointer. Null thread IDs do not occupy the per-thread active-Run slot.
+
+Structured request messages embed immutable image descriptors, detail settings and then-current description text. `selection.images` records the representation, reason, source Artifact and description Run identity. See [IMG-R03–06](../specs/features/images.md#rules) for retry/context rules; existing string-content text requests remain valid.
+
 ## Instructions and captured requests
 
-`instructions` stores current name/text for a common editor. `topics.instruction_id` and `threads.instruction_id` are nullable, unique FKs implementing [INST-R02](../specs/features/instructions.md#rules). Null means no custom document. Global documents instead have a unique stable `key`, initially `response`; Topic/Thread documents have a null key.
+`instructions` stores current name/text for a common editor. `topics.instruction_id` and `threads.instruction_id` are nullable, unique FKs implementing [INST-R02](../specs/features/instructions.md#rules). Null means no custom document. Global documents instead have a unique stable `key`, currently `response` and `image-description`; Topic/Thread documents have a null key.
 
 The unique constraints prevent sharing within each owner type, but not across Topics and Threads. For ownership changes, use a `READ COMMITTED` transaction: lock the Instruction row, then check both owner tables in a separate query so the check sees changes committed while waiting for the lock. Reject a different owner or a global key. All attachment/key changes must follow this lock protocol; an owned document cannot become a global prompt. Create/copy and attach a document atomically. Soft-deleting a Topic retains its document; erasure remains G06. See [PostgreSQL snapshot behavior](https://www.postgresql.org/docs/current/transaction-iso.html#XACT-READ-COMMITTED).
 
@@ -121,7 +135,7 @@ The first response workflow uses this minimal shape at acceptance:
 }
 ```
 
-`request_artifact_id` is required and immutable for this workflow; it references this Run's frozen `model_request` Act. `response_artifact_id` stays null until a response is saved, then references this Run's Surface. Create the Surface and set the reference atomically. A completed empty reply still has a Surface; failure/cancellation before output may have none. In that case, display the Run's outcome beside its originating user message.
+`request_artifact_id` is required and immutable for this workflow; it references this Run's frozen `model_request` Act. `response_artifact_id` stays null until a response is saved, then references this Run's Surface (or its result Act for a description). Create the result and set the reference atomically. A completed empty reply still has a Surface; failure/cancellation before output may have none. In that case, display the Run's outcome beside its originating user message.
 
 Validate each reference's existence, layer, type and producing Run on write; JSON references have no SQL FKs. Commit checkpoint changes with their related Artifacts/outcome. Terminal Runs freeze the checkpoint; status and error remain separate columns.
 
@@ -191,7 +205,7 @@ Use PostgreSQL point-in-time recovery (PITR): a physical base backup plus a cont
 
 Restore into an isolated PostgreSQL instance with Ash workers and external dispatch disabled. Verify the database at the selected time before applying startup interruption handling or promoting it. PITR restores the whole cluster, including its then-current schema; use compatible PostgreSQL and application versions. It does not selectively undo one thread, migrate history into a new model, or reverse external actions. Selected-row recovery requires restoring a separate copy and deliberately reconciling the data.
 
-Recovery is limited by retained base backups, uninterrupted archived WAL and archive lag. G03 must set backup storage, retention, acceptable data loss and recovery time, archive monitoring and restore-drill ownership. Back up configuration and any future external attachment/object storage separately. External actions may already have happened after the recovery point while their request keys are absent from the restored data; reconcile that work before resubmitting client queues.
+Recovery is limited by retained base backups, uninterrupted archived WAL and archive lag. G03 must set backup storage, retention, acceptable data loss and recovery time, archive monitoring and restore-drill ownership. Back up configuration and immutable attachment files alongside the database. A restore must include every referenced image hash before enabling dispatch; the database cannot reconstruct missing pixels. External actions may already have happened after the recovery point while their request keys are absent from the restored data; reconcile that work before resubmitting client queues.
 
 PITR is a chosen design, not configured or verified by this DBML change. Permanent erasure remains G06 and must cover live rows, captured requests and backup retention. Restrictive foreign keys prevent accidental cascades; they are not an erasure policy.
 

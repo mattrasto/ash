@@ -3,7 +3,7 @@
 // Transactions, JSON contracts and SQL-only constraints: ../../docs/data-model.md
 Project ash {
   database_type: 'PostgreSQL'
-  Note: 'Six product tables. Recovery uses physical backups and archived WAL; application audit history is deferred.'
+  Note: 'Core state plus image attachments. Recovery uses physical backups and archived WAL; application audit history is deferred.'
 }
 
 Table topics {
@@ -26,7 +26,7 @@ Table threads {
   is_archived boolean [not null, default: false, note: 'Hidden from the ordinary thread list; accessible in the archive.']
   is_pinned boolean [not null, default: false, note: 'Pinned in the thread list. Does not override is_archived.']
 
-  Note: 'Normal text conversations; Topic membership is optional.'
+  Note: 'Normal conversations; Topic membership is optional.'
 }
 
 Table thread_topics {
@@ -79,7 +79,7 @@ Table instructions {
 Table runs {
   id uuid [pk, not null, note: 'New for each execution, including explicit retries.']
   input_artifact_id uuid [not null, note: 'Input that triggered the Run; reused by retries.']
-  thread_id uuid [not null, note: 'Execution target; unchanged by Surface moves.']
+  thread_id uuid [note: 'Conversation target; null for standalone image description Runs. Unchanged by Surface moves.']
   retry_of_id uuid [note: 'Previous settled Run for an explicit retry; null for the initial execution.']
   status text [not null, check: `status IN ('queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted')`, note: 'Current execution state; starts queued.']
   state jsonb [not null, note: 'Latest workflow checkpoint, including request/output references. Contract: docs/data-model.md#run-state-and-errors.']
@@ -115,3 +115,30 @@ Ref: artifacts.run_id > runs.id [delete: restrict]
 Ref: runs.input_artifact_id > artifacts.id [delete: restrict]
 Ref: runs.thread_id > threads.id [delete: restrict]
 Ref: runs.retry_of_id > runs.id [delete: restrict]
+
+Table attachments {
+  id uuid [pk, not null]
+  filename text [not null]
+  input_artifact_id uuid [unique, not null, note: 'Upload Input root.']
+  summary_run_id uuid [unique, note: 'Latest image description attempt.']
+  summary text [note: 'Latest completed description; request snapshots preserve their own text.']
+  metadata jsonb [not null, note: 'Immutable original/model/thumbnail hashes, media types, byte sizes, dimensions and transform version.']
+  created_at timestamptz [not null]
+  expires_at timestamptz [note: 'Unsubmitted upload expiry; null after a message retains this image.']
+  indexes { expires_at }
+}
+
+Table artifact_attachments {
+  artifact_id uuid [not null]
+  attachment_id uuid [not null]
+  indexes {
+    (artifact_id, attachment_id) [pk]
+    attachment_id
+  }
+  Note: 'Enforced lifecycle references from upload, message, description and captured-request Artifacts.'
+}
+
+Ref: attachments.input_artifact_id > artifacts.id [delete: restrict]
+Ref: attachments.summary_run_id > runs.id [delete: restrict]
+Ref: artifact_attachments.artifact_id > artifacts.id [delete: restrict]
+Ref: artifact_attachments.attachment_id > attachments.id [delete: restrict]

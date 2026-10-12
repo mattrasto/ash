@@ -17,7 +17,7 @@
     "dev:verify": "node --import tsx scripts/dev/cli.ts explore",
     "typecheck": "tsc --noEmit && svelte-check --workspace packages/client --tsconfig ../../tsconfig.json",
     "build": "node --import tsx scripts/dev/build.ts",
-    "test": "node --import tsx --test tests/unit/*.test.ts packages/server/src/modules/context/*.test.ts packages/server/src/platform/models/*.test.ts",
+    "test": "node --import tsx --test tests/unit/*.test.ts packages/server/src/modules/context/*.test.ts packages/server/src/modules/attachments/*.test.ts packages/server/src/platform/models/*.test.ts",
     "test:workflow": "node --import tsx --test --test-concurrency=1 tests/integration/*.test.ts",
     "verify": "node --import tsx scripts/dev/verify.ts",
     "db:generate": "pnpm --filter @ash/server exec prisma generate --schema prisma/schema.prisma",

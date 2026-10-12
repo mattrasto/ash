@@ -6,6 +6,9 @@ import { deterministicModel } from './platform/models/deterministic.ts';
 import { openAIModel } from './platform/models/openai.ts';
 import { openSession } from './platform/models/session.ts';
 import { readOpenAIKey } from './platform/models/credentials.ts';
+import { Attachments } from './modules/attachments/service.ts';
+import { ImageStorage, AttachmentError } from './modules/attachments/storage.ts';
+import { attachmentRoutes } from './modules/attachments/routes.ts';
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -29,13 +32,19 @@ ownsDatabase = true;
 const product = connectProduct(config.databaseUrl);
 const modelSessionId = process.argv[3];
 const model = modelSessionId ? openAIModel({...await openSession(instance,modelSessionId),apiKey:await readOpenAIKey(instance.checkout)}) : deterministicModel;
-const conversations = new Conversations(product,model);
+const imageStorage=new ImageStorage(instance.root);
+await imageStorage.prepare();
+const attachments=new Attachments(product,imageStorage,model);
+const conversations = new Conversations(product,model,true,imageStorage);
 await conversations.recover();
+await attachments.recover();await attachments.cleanup();
+const cleanupTimer=setInterval(()=>{void attachments.cleanup().catch(()=>console.error('Image cleanup failed'));},60*60*1000);cleanupTimer.unref();
 const app = Fastify({ logger: false });
 app.addHook('onRequest', async (request, reply) => {
   if (request.headers.authorization !== `Bearer ${token}`) return reply.code(401).send({ error: 'Unauthorized' });
 });
 conversationRoutes(app, conversations);
+attachmentRoutes(app,attachments);
 app.get('/health', async () => {
   const [meta] = await db`SELECT instance_id, generation, schema_version FROM dev_meta`;
   if (meta.instance_id !== instance.id || meta.generation !== instance.generation || meta.schema_version !== instance.schemaVersion) {
@@ -65,6 +74,8 @@ app.patch('/api/state', async (request, reply) => {
 app.setErrorHandler((error, _request, reply) => {
   if (error instanceof ZodError) return reply.code(400).send({error:'Invalid conversation request.'});
   if (error instanceof ConversationError) return reply.code(error.status).send({error:error.message});
+  if (error instanceof AttachmentError) return reply.code(error.status).send({error:error.message});
+  if ((error as {statusCode?:number}).statusCode===413)return reply.code(413).send({error:'Each image must be at most 10 MiB.'});
   console.error(JSON.stringify({ event: 'request-error', message: (error instanceof Error ? error.message : 'Unknown error').replaceAll(token, '[redacted]') }));
   reply.code(500).send({ error: 'The preview could not complete this operation.' });
 });
@@ -75,7 +86,7 @@ process.send?.({ type: 'listening', url: `http://127.0.0.1:${address.port}` });
 async function stop() {
   if (stopping) return;
   stopping = true;
-  await app.close(); await conversations.stop(); await product.$disconnect(); ownership.release(); await ownerDb.end(); await db.end(); process.exit(0);
+  clearInterval(cleanupTimer);await app.close(); await conversations.stop();await attachments.stop(); await product.$disconnect(); ownership.release(); await ownerDb.end(); await db.end(); process.exit(0);
 }
 process.on('SIGINT', stop); process.on('SIGTERM', stop);
 process.on('disconnect', stop);

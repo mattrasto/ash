@@ -1,6 +1,6 @@
 # Conversations
 
-First-phase scope accepted · Deterministic chat and bounded live OpenAI text verified
+First-phase scope accepted · Chat and image extension verified
 
 [Source](../HUMAN_SPEC.md) · [Product principles](../product.md) · [Architecture](../../docs/architecture.md)
 
@@ -16,11 +16,11 @@ The accepted [artifact rules](artifacts.md#rules) refine membership and chains, 
 
 ## Scope
 
-Current delivery: text conversation with a deterministic default and explicitly configured OpenAI adapter, thread creation/selection, persisted messages and Run outcomes, cancellation/retry, reconnect/restart handling, and context/lineage inspection. Base instructions are captured with each request.
+Current delivery: conversation with [image input and descriptions](images.md), a deterministic default and explicitly configured OpenAI adapter, thread creation/selection, persisted messages and Run outcomes, cancellation/retry, reconnect/restart handling, and context/lineage inspection. Base instructions are captured with each request.
 
 Deferred from the broader design below: topic management, the instructions editor, archive/pin controls and PITR operation/restore verification. Requirement and acceptance IDs remain stable for those later deliveries. [Implementation](../../docs/features/conversations.md) · [Test plan](../../docs/plans/persisted-chat-tests.md).
 
-Deferred: voice and Live Threads, automatic naming/organization/archiving, artifact moves and references, split/merge, context from other threads, semantic memory, attachments, external tools and inputs, task execution, mobile and self-modification. OpenAI is the first live provider; [live verification](../../docs/features/conversations.md#verification) records the tested model and allowance. Image support follows separately.
+Deferred: voice and Live Threads, automatic naming/organization/archiving, artifact moves and references, split/merge, context from other threads, semantic memory, other file attachments, external tools and inputs, task execution, mobile and self-modification. OpenAI is the first live provider; [live verification](../../docs/features/conversations.md#verification) records the tested model and allowance. [Image rules and acceptance](images.md) extend this scope.
 
 ## User flow
 
@@ -33,7 +33,7 @@ Deferred: voice and Live Threads, automatic naming/organization/archiving, artif
 
 ## Requirements
 
-- **CONV-R01 — Interface:** text-only normal threads in the existing desktop client. Hosting and further native requirements remain G02.
+- **CONV-R01 — Interface:** normal threads in the existing desktop client, with text and image input under [IMG-R01–09](images.md#rules). Hosting and further native requirements remain G02.
 - **CONV-R02 — Manual organization:** the user can create/rename topics and threads and explicitly link/unlink topics; starting a thread without a topic is allowed.
 - **CONV-R03 — Topic context boundary:** a topic link organizes the first-delivery UI. Context from other threads in that topic is deferred and documented as a temporary limitation (G05).
 - **CONV-R04 — Instruction edits:** the user can view/edit current base instructions under [INST-R03–04](instructions.md#rules). Ash does not edit instructions in this milestone.

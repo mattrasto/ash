@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import type { Instance } from '../../packages/shared/src/index.ts';
-import { BASE_INSTRUCTION_ID, BASE_INSTRUCTIONS } from '../../packages/server/src/modules/instructions/defaults.ts';
+import { BASE_INSTRUCTION_ID, BASE_INSTRUCTIONS, IMAGE_INSTRUCTION_ID, IMAGE_INSTRUCTIONS } from '../../packages/server/src/modules/instructions/defaults.ts';
 import { connect, databaseUrl, type Cluster } from './database.ts';
 import { exec, childEnvironment } from './io.ts';
 
@@ -34,8 +34,12 @@ export async function migrateProduct(instance: Instance, cluster: Cluster) {
     await db.begin(async tx => {
       await tx.unsafe(`SET LOCAL ROLE "${instance.ownerRole}"`);
       await tx.unsafe("INSERT INTO instructions (id,key,name,text,created_at,updated_at) VALUES ($1,'response','Base response instructions',$2,now(),now()) ON CONFLICT (key) DO NOTHING", [BASE_INSTRUCTION_ID,BASE_INSTRUCTIONS]);
-      await tx.unsafe(`GRANT SELECT ON topics, threads, thread_topics, artifacts, instructions, runs TO "${instance.runtimeRole}"`);
+      await tx.unsafe("INSERT INTO instructions (id,key,name,text,created_at,updated_at) VALUES ($1,'image-description','Image description instructions',$2,now(),now()) ON CONFLICT (key) DO NOTHING", [IMAGE_INSTRUCTION_ID,IMAGE_INSTRUCTIONS]);
+      await tx.unsafe(`GRANT SELECT ON topics, threads, thread_topics, artifacts, instructions, runs, attachments, artifact_attachments TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT INSERT ON threads, artifacts, runs TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT INSERT, DELETE ON attachments, artifact_attachments TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT DELETE ON artifacts, runs TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT UPDATE (summary_run_id, summary, expires_at) ON attachments TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT UPDATE (title, updated_at) ON threads TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT UPDATE (payload, updated_at) ON artifacts TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT UPDATE (status, state, error, started_at, ended_at) ON runs TO "${instance.runtimeRole}"`);

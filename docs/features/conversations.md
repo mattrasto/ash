@@ -1,6 +1,6 @@
 # Persisted chat implementation
 
-Deterministic, mocked OpenAI and bounded live text paths verified
+Deterministic, mocked OpenAI and bounded live text paths verified · [Image extension](images.md) verified
 
 Scope and behavior: [conversation spec](../../specs/features/conversations.md). Verification scenarios: [test plan](../plans/persisted-chat-tests.md).
 
@@ -16,7 +16,7 @@ The **Test response settings** selector controls the deterministic adapter: norm
 
 | Location | Responsibility |
 | --- | --- |
-| `packages/server/prisma/` | Six product tables, development baseline and committed SQL migrations. |
+| `packages/server/prisma/` | Product tables, development baseline and committed SQL migrations. |
 | `scripts/dev/product-database.ts` | Guarded baseline/deploy, seeded base instructions and restricted runtime grants. |
 | `packages/server/src/modules/conversations/` | HTTP routes, submission transactions, streaming persistence, cancellation, retries and inspection. |
 | `packages/server/src/modules/context/select.ts` | Current-thread Surface selection and omission metadata. |
@@ -38,13 +38,13 @@ Context uses a 12,000-character budget and a 4,000-character input limit; this i
 
 Prisma CLI/client are pinned to 6.19.3 and DBML CLI to 10.3.1. `pnpm db:generate` generates the client and runs automatically after dependency installation. Startup of a stopped instance applies committed migrations before launching its backend; a running preview needs Stop/Run after migration changes.
 
-Existing `dev_meta`/`dev_scratch` tables are baselined only in an identity-checked development database. Product migrations then run using its owner role. Runtime credentials have no schema privileges and cannot change immutable identity/provenance columns. The shared bootstrap schema version remains 1; product structure is tracked in Prisma's migration table. Fixture version 2 adds seeded base instructions, including in an otherwise empty instance.
+Existing `dev_meta`/`dev_scratch` tables are baselined only in an identity-checked development database. Product migrations then run using its owner role. Runtime credentials have no schema privileges and cannot change immutable identity/provenance columns. The shared bootstrap schema version remains 1; product structure is tracked in Prisma's migration table. Fixture version 3 seeds response and image-description instructions, including in an otherwise empty instance. Existing instruction text is preserved.
 
 The schema test compares DBML-exported tables with the migrated database and checks Prisma drift. DBML's exporter emits deferrable foreign keys; deployed keys are immediate and non-deferrable. The comparison checks their targets/actions while allowing that exporter difference. SQL-only checks and partial indexes are tested separately.
 
 ## Limits
 
-Topic management, instruction editing, archive/pin controls, Artifact moves, image input/generation and generalized background execution remain deferred. A persisted checkpoint does not imply automatic continuation. PITR operation and restore drills remain pending; restart tests establish persistence, not recovery from lost database storage.
+Topic management, instruction editing, archive/pin controls, Artifact moves, image generation and generalized background execution remain deferred. [Image input and descriptions](images.md) are implemented separately from chat response Runs. A persisted checkpoint does not imply automatic continuation. PITR operation and restore drills remain pending; restart tests establish persistence, not recovery from lost database storage.
 
 ## OpenAI mode
 
@@ -73,7 +73,7 @@ Streaming deltas and refusal text use the existing Surface persistence path. A c
 
 Ash remains the authoritative conversation store. `store:false` disables retained Responses application state; it does not promise zero provider retention. OpenAI documents separate abuse-monitoring and prompt-cache retention. Use synthetic content until the personal-data policy in [G06/G09](../../specs/open-questions.md) is settled. [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data).
 
-The Responses API supports image inputs and a built-in image-generation tool. Ash still needs attachment storage, image payloads and rendering before enabling them. [OpenAI images and vision](https://developers.openai.com/api/docs/guides/images-vision).
+The Responses API supports image inputs and a built-in image-generation tool. Ash now supports image input; the built-in image-generation tool remains deferred. [OpenAI images and vision](https://developers.openai.com/api/docs/guides/images-vision).
 
 ## Verification
 
@@ -87,4 +87,4 @@ Passed 2026-10-12 on `8ef4380` using `gpt-6.1-sol`, low reasoning, with the appr
 
 Three completed calls reported 391 input and 370 output tokens (761 total). The cancelled call reported no usage; these totals exclude its unknown billable work. Provider dashboard/billing reconciliation was not performed. The disposable instance was removed and the persistent preview remained in deterministic mode.
 
-Evidence: `~/.ash-dev/evidence/live-f484cd4b6d74c96c340f9c56/` contains the source fingerprint, session ID/counter, individual Run outcomes, captured conversation/inspection, smoke driver and desktop screenshots. This establishes live text connectivity and the tested flows; image support and broader quality evaluation remain deferred. [Repeat procedure](../plans/persisted-chat-tests.md#live-smoke-test).
+Evidence: `~/.ash-dev/evidence/live-f484cd4b6d74c96c340f9c56/` contains the source fingerprint, session ID/counter, individual Run outcomes, captured conversation/inspection, smoke driver and desktop screenshots. This establishes live text connectivity and the tested flows; image verification is recorded in the [image implementation](images.md); broader quality evaluation remains deferred. [Repeat procedure](../plans/persisted-chat-tests.md#live-smoke-test).

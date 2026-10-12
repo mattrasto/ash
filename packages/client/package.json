@@ -1,4 +1,11 @@
 {
-  "name": "@ash/client", "private": true, "version": "0.0.0", "type": "module",
-  "dependencies": { "@ash/shared": "workspace:*", "svelte": "5.55.7" }
+  "name": "@ash/client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "@ash/shared": "workspace:*",
+    "marked": "18.0.2",
+    "svelte": "5.55.7"
+  }
 }

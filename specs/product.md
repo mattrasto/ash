@@ -50,7 +50,7 @@ Deliver through acceptance criteria → small complete journey → automated che
 
 Keep one initial backend and one core database, organized by feature. Share contracts only where actually shared. The bootstrap uses TypeScript, Svelte, Electron, Node/Fastify and PostgreSQL; Prisma owns the product schema and migrations.
 
-Use DBML in Git and dbdiagram for table boxes showing all columns and foreign-key connections with minimal notation. Begin with ownership, relationships and deletion semantics. Follow the [Prisma/diagram synchronization workflow](../docs/architecture.md#schema-workflow). The accepted [six-table model](../docs/data-model.md) defines the initial scope.
+Use DBML in Git and dbdiagram for table boxes showing all columns and foreign-key connections with minimal notation. Begin with ownership, relationships and deletion semantics. Follow the [Prisma/diagram synchronization workflow](../docs/architecture.md#schema-workflow). The accepted [data model](../docs/data-model.md) records initial scope and subsequent feature extensions.
 
 Use plural snake_case table names and snake_case columns in SQL; camelCase properties and UpperCamelCase types in TypeScript.
 

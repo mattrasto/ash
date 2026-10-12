@@ -1,9 +1,13 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { Prisma, type Artifact, type PrismaClient, type Run } from '@prisma/client';
-import { InputPayload, MessagePayload, RequestPayload, RunState, RunError, RunStatus, ModelExecution, isActive, type ArtifactView, type RunView, type ModelMode } from '@ash/shared';
+import { InputPayload, MessagePayload, RequestPayload, RunState, ModelExecution, isActive, type ModelMode } from '@ash/shared';
 import { selectContext } from '../context/select.ts';
 import { deterministicModel } from '../../platform/models/deterministic.ts';
 import { ModelFailure, type ModelAdapter } from '../../platform/models/adapter.ts';
+import { artifactView, runView } from './views.ts';
+import { attachmentViews, retainImages, referenceImages } from '../attachments/service.ts';
+import { AttachmentError, type ImageStorage } from '../attachments/storage.ts';
+export { artifactView, runView } from './views.ts';
 
 type Tx = Prisma.TransactionClient;
 export class ConversationError extends Error {
@@ -11,22 +15,13 @@ export class ConversationError extends Error {
 }
 const order = [{createdAt:'asc' as const}, {id:'asc' as const}];
 const asJson = (value: unknown) => value as Prisma.InputJsonValue;
-export function artifactView(row: Artifact): ArtifactView {
-  const payload = row.layer === 'input' ? InputPayload.parse(row.payload) : row.layer === 'surface' ? MessagePayload.parse(row.payload) : RequestPayload.parse(row.payload);
-  return {...row, payload, createdAt:row.createdAt.toISOString(), updatedAt:row.updatedAt.toISOString()};
-}
-export function runView(row: Run): RunView {
-  return {id:row.id, requestKey:row.requestKey, inputArtifactId:row.inputArtifactId, threadId:row.threadId, retryOfId:row.retryOfId,
-    status:RunStatus.parse(row.status), state:RunState.parse(row.state), error:row.error === null ? null : RunError.parse(row.error),
-    createdAt:row.createdAt.toISOString(), startedAt:row.startedAt?.toISOString() ?? null, endedAt:row.endedAt?.toISOString() ?? null};
-}
 export class Conversations {
   private jobs = new Map<string, {controller: AbortController; promise: Promise<void>}>();
   private stopping = false;
-  constructor(readonly db: PrismaClient, private model: ModelAdapter = deterministicModel, private autoDispatch = true) {}
+  constructor(readonly db: PrismaClient, private model: ModelAdapter = deterministicModel, private autoDispatch = true, private images?:ImageStorage) {}
 
   async recover() {
-    await this.db.run.updateMany({where:{status:{in:['queued','running']}}, data:{status:'interrupted', endedAt:new Date(), error:{code:'server_interrupted', message:'The backend stopped before this response finished. Retry explicitly to continue.'}}});
+    await this.db.run.updateMany({where:{threadId:{not:null},status:{in:['queued','running']}}, data:{status:'interrupted', endedAt:new Date(), error:{code:'server_interrupted', message:'The backend stopped before this response finished. Retry explicitly to continue.'}}});
   }
   async createThread(id: string, title: string) {
     const existing = await this.db.thread.findUnique({where:{id}});
@@ -49,7 +44,7 @@ export class Conversations {
       if (!thread) throw new ConversationError(404, 'Thread not found.');
       const artifacts = await tx.artifact.findMany({where:{threadId,layer:'surface'},orderBy:order});
       const runs = await tx.run.findMany({where:{threadId},orderBy:order});
-      return {thread, artifacts:artifacts.map(artifactView), runs:runs.map(runView)};
+      return {thread, artifacts:artifacts.map(artifactView), runs:runs.map(runView),attachments:await attachmentViews(tx,artifacts.map(a=>a.id))};
     }, {isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead});
   }
   async inspect(id: string) {
@@ -66,22 +61,22 @@ export class Conversations {
       const chain: Artifact[] = [];
       const append = (parent: Artifact) => { chain.push(parent); for (const child of artifacts.filter(item=>item.sourceId===parent.id)) append(child); };
       append(input);
-      return {selectedId:id, input:artifactView(input), artifacts:chain.map(artifactView), runs:runs.map(runView)};
+      return {selectedId:id, input:artifactView(input), artifacts:chain.map(artifactView), runs:runs.map(runView),attachments:await attachmentViews(tx,chain.map(a=>a.id))};
     }, {isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead});
   }
   private existing(row: Run, hash: string) {
     if (row.requestHash !== hash) throw new ConversationError(409, 'This submission key was already used for different content.');
     return row;
   }
-  async submit(threadId: string, requestKey: string, text: string, mode: ModelMode) {
-    return this.accept(threadId, requestKey, {kind:'send',text,mode});
+  async submit(threadId: string, requestKey: string, text: string, mode: ModelMode, attachmentIds:string[]=[]) {
+    return this.accept(threadId, requestKey, {kind:'send',text,mode,...(attachmentIds.length?{attachmentIds}:{})});
   }
   async retry(id: string, requestKey: string, mode: ModelMode) {
     const previous = await this.db.run.findUnique({where:{id}});
-    if (!previous) throw new ConversationError(404, 'Run not found.');
+    if (!previous?.threadId) throw new ConversationError(404, 'Conversation Run not found.');
     return this.accept(previous.threadId, requestKey, {kind:'retry',previousId:id,mode});
   }
-  private async accept(threadId: string, requestKey: string, command: {kind:'send';text:string;mode:ModelMode} | {kind:'retry';previousId:string;mode:ModelMode}) {
+  private async accept(threadId: string, requestKey: string, command: {kind:'send';text:string;mode:ModelMode;attachmentIds?:string[]} | {kind:'retry';previousId:string;mode:ModelMode}) {
     if (this.stopping) throw new ConversationError(503, 'The backend is stopping.');
     const hash = createHash('sha256').update(JSON.stringify({threadId,...command})).digest('hex');
     const existing = await this.db.run.findUnique({where:{requestKey}});
@@ -100,13 +95,17 @@ export class Conversations {
           let inputId: string;
           let request: RequestPayload;
           if (command.kind === 'send') {
+            const attachmentIds=command.attachmentIds??[];
+            await retainImages(tx,attachmentIds);
             inputId = randomUUID();
-            await tx.artifact.create({data:{id:inputId,layer:'input',sourceId:null,threadId,runId:null,actor:'user',payload:InputPayload.parse({type:'text_input',text:command.text}),createdAt:now,updatedAt:now}});
-            await tx.artifact.create({data:{id:randomUUID(),layer:'surface',sourceId:inputId,threadId,runId:null,actor:'user',payload:MessagePayload.parse({type:'message',initial_thread_id:threadId,speaker:'user',content:[{type:'text',text:command.text}]}),createdAt:now,updatedAt:now}});
+            await tx.artifact.create({data:{id:inputId,layer:'input',sourceId:null,threadId,runId:null,actor:'user',payload:InputPayload.parse({type:attachmentIds.length?'message_input':'text_input',text:command.text,...(attachmentIds.length?{attachmentIds}:{})}),createdAt:now,updatedAt:now}});
+            const surfaceId=randomUUID();
+            await tx.artifact.create({data:{id:surfaceId,layer:'surface',sourceId:inputId,threadId,runId:null,actor:'user',payload:MessagePayload.parse({type:'message',initial_thread_id:threadId,speaker:'user',content:[...(command.text?[{type:'text',text:command.text}]:[]),...attachmentIds.map(attachmentId=>({type:'image',attachmentId}))]}),createdAt:now,updatedAt:now}});
+            await referenceImages(tx,inputId,attachmentIds);await referenceImages(tx,surfaceId,attachmentIds);
             const instruction = await tx.instruction.findUniqueOrThrow({where:{key:'response'}});
             const artifacts = await tx.artifact.findMany({where:{threadId,layer:'surface'},orderBy:order});
             const runs = await tx.run.findMany({where:{threadId}});
-            request = RequestPayload.parse({type:'model_request',...this.model.configuration(command.mode),...selectContext(artifacts,runs,instruction)});
+            request = RequestPayload.parse({type:'model_request',...this.model.configuration(command.mode),...selectContext(artifacts,runs,instruction,undefined,await attachmentViews(tx,artifacts.map(a=>a.id)))});
           } else {
             const previous = await tx.run.findUniqueOrThrow({where:{id:command.previousId}});
             if (isActive(previous.status)) throw new ConversationError(409, 'Wait for the previous Run to stop before retrying.');
@@ -119,6 +118,7 @@ export class Conversations {
           const state = RunState.parse({request_artifact_id:requestId,response_artifact_id:null});
           const run = await tx.run.create({data:{id:runId,inputArtifactId:inputId,threadId,retryOfId:command.kind === 'retry' ? command.previousId : null,status:'queued',state,requestKey,requestHash:hash,createdAt:now}});
           await tx.artifact.create({data:{id:requestId,layer:'act',sourceId:inputId,threadId,runId,actor:'ash',payload:asJson(request),createdAt:now,updatedAt:now}});
+          await referenceImages(tx,requestId,request.selection.images?.map(image=>image.id)??[]);
           await tx.thread.update({where:{id:threadId},data:{updatedAt:now}});
           return run;
         }, {isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
@@ -150,13 +150,19 @@ export class Conversations {
     try {
       const run = await this.db.run.findUniqueOrThrow({where:{id}});
       const request = await this.db.artifact.findUniqueOrThrow({where:{id:RunState.parse(run.state).request_artifact_id}});
-      for await (const event of this.model.stream(RequestPayload.parse(request.payload),signal)) {
+      const parsed=RequestPayload.parse(request.payload);
+      // Deterministic runs also validate media, so offline checks exercise the real storage path.
+      for(const message of parsed.messages)if(Array.isArray(message.content))for(const block of message.content)if(block.type==='image') {
+        if(!this.images)throw new ModelFailure('image_unavailable','Saved image storage is unavailable.');
+        await this.images.read(block.attachmentId,block.image);
+      }
+      for await (const event of this.model.stream(parsed,signal,this.images?image=>this.images!.dataUrl(image):undefined)) {
         if (typeof event === 'string') { if (!await this.writeResponse(id,event,false)) return; }
         else if (!await this.writeMetadata(id,event)) return;
       }
       await this.writeResponse(id,'',true);
     } catch (error) {
-      await this.db.run.updateMany({where:{id,status:'running'},data:{status:'failed',endedAt:new Date(),error:{code:error instanceof ModelFailure ? error.code : 'response_failed',message:error instanceof ModelFailure ? error.message : 'The response could not be completed.'}}});
+      await this.db.run.updateMany({where:{id,status:'running'},data:{status:'failed',endedAt:new Date(),error:{code:error instanceof ModelFailure ? error.code : error instanceof AttachmentError?'image_unavailable':'response_failed',message:error instanceof ModelFailure||error instanceof AttachmentError ? error.message : 'The response could not be completed.'}}});
     }
   }
   private async writeMetadata(id: string, metadata: ModelExecution) {
@@ -180,7 +186,8 @@ export class Conversations {
         const artifact = await tx.artifact.findUniqueOrThrow({where:{id:state.response_artifact_id}});
         const payload = MessagePayload.parse(artifact.payload);
         if (chunk) {
-          if (!payload.content.length) payload.content.push({type:'text',text:chunk}); else payload.content[0].text += chunk;
+          const text=payload.content.find(block=>block.type==='text');
+          if(text?.type==='text')text.text+=chunk;else payload.content.push({type:'text',text:chunk});
           await tx.artifact.update({where:{id:artifact.id},data:{payload,updatedAt:now}});
         }
       } else {
@@ -196,7 +203,7 @@ export class Conversations {
     const saved = await this.db.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM runs WHERE id = ${id}::uuid FOR UPDATE`;
       const run = await tx.run.findUnique({where:{id}});
-      if (!run) throw new ConversationError(404,'Run not found.');
+      if (!run?.threadId) throw new ConversationError(404,'Conversation Run not found.');
       if (!isActive(run.status)) return run;
       return tx.run.update({where:{id},data:{status:'cancelled',endedAt:new Date()}});
     });

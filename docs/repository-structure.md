@@ -1,6 +1,6 @@
 # Repository structure
 
-Product layout. Desktop bootstrap, Prisma persistence and deterministic conversation modules exist; unused feature folders remain proposed.
+Product layout. Desktop, Prisma persistence, conversations and image modules exist; unused feature folders remain proposed.
 
 ```text
 ash/
@@ -48,6 +48,7 @@ ash/
 │   │   │   ├── app.ts                # App assembly
 │   │   │   ├── modules/
 │   │   │   │   ├── conversations/    # Threads and conversation operations
+│   │   │   │   ├── attachments/      # Image storage, descriptions and cleanup
 │   │   │   │   ├── organization/     # Topics and membership
 │   │   │   │   ├── artifacts/        # Engine records, lineage and Surface content
 │   │   │   │   ├── runs/             # Execution and linked retries
@@ -57,7 +58,7 @@ ash/
 │   │   │       ├── config.ts
 │   │   │       ├── db/               # Connection, transactions, schema aggregation
 │   │   │       └── models/           # Provider adapters and test model
-│   │   └── test/integration/
+│   │   └── test/fixtures/           # Synthetic media
 │   └── shared/
 │       ├── package.json
 │       └── src/contracts/            # Cross-process requests, responses, events
@@ -65,8 +66,9 @@ ash/
 │   ├── dev/                          # Workspace launcher, provisioning, reset and verification
 │   └── ...                           # DBML export and other repository tooling
 ├── tests/
-│   ├── e2e/
-│   └── fixtures/                     # Synthetic data
+│   ├── integration/                # Real database/worktree/Electron journeys
+│   ├── unit/
+│   └── helpers/
 └── .github/workflows/                # CI, if hosted on GitHub
 ```
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { openAIModel, type OpenAIRequest, type OpenAIModelSettings } from './openai.ts';
 import { sse, successEvents, providerResponse } from '../../../../../tests/helpers/openai.ts';
 import { type ModelExecution } from '@ash/shared';
+import { randomUUID } from 'node:crypto';
 
 const request:OpenAIRequest = {type:'model_request',provider:'openai',model:'test-openai-model',
   options:{api:'responses',store:false,maxOutputTokens:1024,timeoutMs:1000,reasoningEffort:'low'},
@@ -77,4 +78,27 @@ test('retries keep frozen options and reject a different provider or over-budget
   assert.throws(()=>model.configuration('normal',{...request,model:'other-model'}),/original/);
   assert.throws(()=>model.configuration('normal',{...request,options:{...request.options,maxOutputTokens:2048}}),/output limit/);
   assert.throws(()=>model.configuration('fail'),/deterministic/);
+});
+test('image wire requests include frozen descriptions and bytes; unreadable images consume no calls',async()=>{
+  let reserved=0,calls=0;
+  const image={type:'image' as const,attachmentId:randomUUID(),image:{hash:'a'.repeat(64),mimeType:'image/png' as const,sizeBytes:8,width:2,height:2},detail:'high' as const,description:'[Image] Generated description: a square.'};
+  const imageRequest:OpenAIRequest={...request,messages:[{role:'user',content:[image]}]};
+  const model=openAIModel({...settings,reserve:async()=>{reserved++;return 60000;}},async(_url,init)=>{
+    calls++;const body=JSON.parse(init!.body as string);
+    assert.deepEqual(body.input,[{role:'user',content:[{type:'input_text',text:image.description},{type:'input_image',image_url:'data:image/png;base64,cGl4ZWxz',detail:'high'}]}]);
+    return sse(successEvents());
+  });
+  for await(const _ of model.stream(imageRequest,new AbortController().signal,async()=> 'data:image/png;base64,cGl4ZWxz')){}
+  assert.equal(calls,1);assert.equal(reserved,1);
+  await assert.rejects(async()=>{for await(const _ of model.stream(imageRequest,new AbortController().signal,async()=>{throw new Error('Missing image');})){};},/Missing image/);
+  assert.equal(calls,1);assert.equal(reserved,1);
+});
+test('description uses the dedicated short model call while sharing the reservation path',async()=>{
+  let reserved=0;
+  const model=openAIModel({...settings,reserve:async()=>{reserved++;return 60000;}},async(_url,init)=>{
+    const body=JSON.parse(init!.body as string);assert.equal(body.model,'gpt-6-luna');assert.equal(body.max_output_tokens,256);assert.equal(body.store,false);assert.equal(body.reasoning.effort,'none');return sse(successEvents('A blue circle.'));
+  });
+  const caption={...request,...model.summaryConfiguration(),purpose:'image_summary' as const};
+  for await(const _ of model.stream(caption,new AbortController().signal)){}
+  assert.equal(reserved,1);assert.equal(model.configuration('normal').model,'test-openai-model');
 });

@@ -4,7 +4,7 @@ export const Identity = z.string().regex(/^[a-f0-9]{24}$/);
 export const Profile = z.enum(['preview', 'verify', 'test']);
 export const Fixture = z.enum(['scratchpad', 'empty']);
 export const SCHEMA_VERSION = 1;
-export const FIXTURE_VERSION = 2;
+export const FIXTURE_VERSION = 3;
 
 export const Instance = z.object({
   version: z.literal(1), id: Identity, workspaceId: Identity,
@@ -34,5 +34,6 @@ export interface PreviewInfo {
 }
 
 export * from './contracts/conversations.ts';
+export * from './contracts/attachments.ts';
 
 export { ZodError } from 'zod';

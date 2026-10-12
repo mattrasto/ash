@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import type { Response as OpenAIResponse } from 'openai/resources/responses/responses';
+import type { Response as OpenAIResponse, ResponseInput, ResponseInputContent } from 'openai/resources/responses/responses';
 import { ModelExecution, RequestPayload, type ModelInfo } from '@ash/shared';
 import { ModelFailure, type ModelAdapter } from './adapter.ts';
 
@@ -46,10 +46,30 @@ export function openAIModel(settings: OpenAIModelSettings, testFetch?: typeof fe
       }
       return {provider:'openai',model:settings.model,options:settings.options};
     },
+    summaryConfiguration(previous) {
+      const configuration={provider:'openai' as const,model:'gpt-6-luna',options:{api:'responses' as const,store:false as const,maxOutputTokens:256,timeoutMs:20000,reasoningEffort:'none' as const}};
+      if(previous && (previous.provider!=='openai' || previous.model!==configuration.model || previous.purpose!=='image_summary'))
+        throw new ModelFailure('provider_unavailable','Description retry requires its original provider and model.');
+      return previous ? {provider:previous.provider as 'openai',model:previous.model,options:(previous as OpenAIRequest).options} : configuration;
+    },
     info:settings.info,
-    async *stream(request, signal) {
+    async *stream(request, signal, imageUrl) {
       if (request.provider !== 'openai') throw new ModelFailure('provider_unavailable', 'This request requires the deterministic model.');
-      this.configuration('normal',request);
+      if(request.purpose==='image_summary')this.summaryConfiguration(request);else this.configuration('normal',request);
+      signal.throwIfAborted();
+      // Resolve/verify every frozen image before consuming a paid-call slot.
+      const input:ResponseInput=await Promise.all(request.messages.map(async message=>{
+        if(typeof message.content==='string')return {role:message.role,content:message.content};
+        const content:ResponseInputContent[]=[];
+        for(const block of message.content) {
+          if(block.type==='text')content.push({type:'input_text',text:block.text});
+          else {
+            if(!imageUrl)throw new ModelFailure('image_unavailable','Saved image storage is unavailable.');
+            content.push({type:'input_text',text:block.description},{type:'input_image',image_url:await imageUrl(block),detail:block.detail});
+          }
+        }
+        return {role:message.role,content};
+      }));
       signal.throwIfAborted();
       const remainingMs = await settings.reserve();
       signal.throwIfAborted();
@@ -58,7 +78,7 @@ export function openAIModel(settings: OpenAIModelSettings, testFetch?: typeof fe
       let stream: Awaited<ReturnType<typeof client.responses.create>> | undefined;
       try {
         const result = await client.responses.create({
-          model:request.model,input:request.messages,stream:true,store:request.options.store,
+          model:request.model,input,stream:true,store:request.options.store,
           max_output_tokens:request.options.maxOutputTokens,
           ...(request.options.reasoningEffort ? {reasoning:{effort:request.options.reasoningEffort}} : {}),
         },{signal:abort,maxRetries:0}).withResponse();

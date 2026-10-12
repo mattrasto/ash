@@ -1,6 +1,6 @@
 # Path to the first self-modification
 
-Direction accepted, 2026-10-12 · Sequence and designs proposed · Implementation not started
+Direction accepted, 2026-10-12 · Slice 1 implemented and verified · Later designs proposed
 
 Build toward a small code change completed through Ash: screenshot → discussion → isolated Codex workspace → tests and preview → reviewed application → revert. Start with image understanding and usable chat; add tools and explicit context before delegating code changes.
 
@@ -25,41 +25,9 @@ Each slice follows the [delivery agreement](../../specs/product.md#confirmed-eng
 
 Do a small Codex integration feasibility check before expanding slice 2, so tool/Run contracts can represent its events and permission requests. This check does not enable self-modification or change the user's running instance.
 
-## 1. Images and usable chat — implement next
+## 1. Images and usable chat
 
-### Product scope
-
-- Paste, drop or choose PNG/JPEG/WebP images; text may accompany them. Preview/remove attachments before sending. Show upload failure without losing the draft; do not submit a message referencing an incomplete upload.
-- Preserve image order, display sent images and provide a full-size viewer. Follow-up questions can reuse selected historical images. Explain when older images leave context.
-- Render Markdown and code blocks with copy controls. Disable raw HTML and automatic remote image loading; message content must not execute code or gain desktop privileges.
-- Keep streaming, Stop, retry and Artifact inspection usable with long replies and attachments. Preserve scroll position when reading earlier content. Broader visual redesign remains separate.
-
-### Implementation
-
-1. Extend the conversation spec with stable image acceptance IDs. Define message/image/request contracts in `packages/shared/src/contracts/conversations.ts`; preserve readers for saved text-only Artifacts and checkpoints.
-2. Add an attachment module and durable asset metadata: ID, instance ownership, media type, byte/pixel dimensions, content hash, storage key and lifecycle state. Store immutable bytes under the owning instance's file storage. Link every retained Input, Surface and request reference to the asset lifecycle; a JSON reference alone is insufficient for safe cleanup.
-3. Upload to staging, validate/decode with bounded resources, then atomically publish bytes before accepting references. Handle crashes between filesystem and database steps with reconciliation. Resolve storage keys only on the backend; reject cross-instance references, traversal and symlink escapes.
-4. Freeze the exact provider image bytes, order and detail setting with each model request. If resizing or metadata removal is used, retain that immutable derivative and its transformation metadata. Retrying must not reprocess the current original or reread an arbitrary local path. Missing bytes produce an explicit error before dispatch.
-5. Expand context selection and the OpenAI adapter to structured content. Keep the current text budget and add explicit image-count, byte and pixel bounds; image input has its own token cost. Send backend-owned bytes as data URLs with `store:false`, avoiding remote URL fetching and a separate provider file lifecycle. [OpenAI image inputs](https://developers.openai.com/api/docs/guides/images-vision).
-6. Show images and attachment metadata in the inspector without dumping base64 into UI or logs. Extend the deterministic adapter and mocked transport to cover image requests without paid calls.
-
-Proposed initial limits: four images per message, 10 MiB per file, 20 MiB per message and 20 megapixels per image; reject unsupported/animated formats and preserve the draft. Validate these against realistic screenshots and the configured model before finalizing the spec. Bound decoded memory and whole-request history separately from upload size.
-
-Retention proposal for this slice: unsubmitted uploads expire after 24 hours; accepted assets remain while any retained Artifact/request references them. A draft whose upload expired must show that state before sending. Instance disposal removes its assets. User erasure and backup expiration remain [G06](../../specs/open-questions.md#g06--deletion-and-retention); use synthetic images until that policy is settled. Recovery must restore referenced files alongside the database.
-
-### Verification
-
-| Case | Required evidence |
-| --- | --- |
-| Main flow | Real Electron paste/drop/select, image-only and text-plus-image submission, follow-up, full-size view, restart and inspection. |
-| Frozen input | Captured provider body uses the expected hashes/order/detail; retry remains identical after local source changes. |
-| Context bounds | Old images are omitted visibly; the current submission never silently loses an image; text-only selection still works. |
-| Delivery and interruption | Duplicate submit creates one Input/Run; upload failure preserves the draft; cancellation/restart preserves accepted assets and partial output. |
-| Storage boundaries | Invalid media, oversized decoded images, traversal, symlinks, foreign-instance IDs and missing/corrupt bytes fail safely. Staged/orphan cleanup cannot delete referenced assets. |
-| Renderer | HTML/script and remote-image fixtures cannot execute or fetch implicitly; code copying and scroll behavior work during streaming. |
-| Upgrade | Existing text conversations, frozen retries and inspection survive the contract/schema migration. |
-
-Finish with one targeted live image/follow-up check on the configured interactive model. Use the existing [offline/live test split](persisted-chat-tests.md#openai-adapter); record live cases left incomplete without stopping independent verification.
+Accepted and implemented under the [image spec](../../specs/features/images.md). [Implementation and test plan](../features/images.md) covers the Asha adaptations, description model/cost, persistence, context limits, viewer and Markdown. Offline and bounded live verification passed.
 
 ## 2. Inspectable tool execution
 

@@ -66,6 +66,8 @@ model Artifact {
   thread Thread? @relation(fields: [threadId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   run Run? @relation("produced", fields: [runId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   inputs Run[] @relation("input")
+  attachmentInput Attachment?
+  attachmentReferences ArtifactAttachment[]
   @@index([sourceId])
   @@index([runId])
   @@index([threadId, createdAt, id])
@@ -74,7 +76,7 @@ model Artifact {
 model Run {
   id String @id @db.Uuid
   inputArtifactId String @map("input_artifact_id") @db.Uuid
-  threadId String @map("thread_id") @db.Uuid
+  threadId String? @map("thread_id") @db.Uuid
   retryOfId String? @map("retry_of_id") @db.Uuid
   status String
   state Json @db.JsonB
@@ -85,14 +87,41 @@ model Run {
   startedAt DateTime? @map("started_at") @db.Timestamptz(6)
   endedAt DateTime? @map("ended_at") @db.Timestamptz(6)
   input Artifact @relation("input", fields: [inputArtifactId], references: [id], onDelete: Restrict, onUpdate: NoAction)
-  thread Thread @relation(fields: [threadId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  thread Thread? @relation(fields: [threadId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   retryOf Run? @relation("retry", fields: [retryOfId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   retries Run[] @relation("retry")
   artifacts Artifact[] @relation("produced")
+  attachmentSummary Attachment?
   @@index([inputArtifactId])
   @@index([threadId])
   @@index([retryOfId])
   @@map("runs")
+}
+
+model Attachment {
+  id String @id @db.Uuid
+  filename String
+  inputArtifactId String @unique @map("input_artifact_id") @db.Uuid
+  summaryRunId String? @unique @map("summary_run_id") @db.Uuid
+  summary String?
+  metadata Json @db.JsonB
+  createdAt DateTime @map("created_at") @db.Timestamptz(6)
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz(6)
+  input Artifact @relation(fields: [inputArtifactId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  summaryRun Run? @relation(fields: [summaryRunId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  references ArtifactAttachment[]
+  @@index([expiresAt])
+  @@map("attachments")
+}
+
+model ArtifactAttachment {
+  artifactId String @map("artifact_id") @db.Uuid
+  attachmentId String @map("attachment_id") @db.Uuid
+  artifact Artifact @relation(fields: [artifactId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  attachment Attachment @relation(fields: [attachmentId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  @@id([artifactId, attachmentId])
+  @@index([attachmentId])
+  @@map("artifact_attachments")
 }
 
 // Development-only tables are provisioned before product migrations and baselined.

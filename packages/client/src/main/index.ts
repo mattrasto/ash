@@ -1,7 +1,8 @@
-import { app, BrowserWindow, session, ipcMain } from 'electron';
+import { app, BrowserWindow, session, ipcMain, clipboard, nativeImage, dialog, shell } from 'electron';
 import { readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { Uuid, type AttachmentView } from '@ash/shared';
 
 async function main() {
 const config = JSON.parse(readFileSync(process.env.ASH_CLIENT_CONFIG!, 'utf8')) as {
@@ -19,6 +20,39 @@ const win = new BrowserWindow({
   webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, preload: join(config.root, 'build/preload.cjs') },
 });
 const preferencePath = join(app.getPath('userData'), 'ash-preferences.json');
+function trusted(event:Electron.IpcMainInvokeEvent) {
+  if(event.sender!==win.webContents || event.senderFrame!==win.webContents.mainFrame || new URL(event.senderFrame.url).origin!==new URL(config.url).origin)throw new Error('Invalid media request');
+}
+ipcMain.handle('media:copy-text',async(event,text:unknown)=>{
+  trusted(event);if(typeof text!=='string'||text.length>100000)throw new Error('Invalid clipboard text');clipboard.writeText(text);
+});
+ipcMain.handle('media:open-link',async(event,value:unknown)=>{
+  trusted(event);if(typeof value!=='string'||value.length>8000)throw new Error('Invalid link');
+  const url=new URL(value);if(!['https:','http:'].includes(url.protocol)||url.username||url.password)throw new Error('Invalid link');
+  await shell.openExternal(url.href);
+});
+ipcMain.handle('media:image-action',async(event,value:unknown,action:unknown)=>{
+  trusted(event);const id=Uuid.parse(value);
+  if(action!=='copy'&&action!=='save')throw new Error('Invalid image action');
+  // Accept only an attachment ID. The renderer cannot choose a URL or filesystem path.
+  const endpoint=new URL(`/api/attachments/${id}`,config.url).href;
+  const metadata=await fetch(endpoint,{redirect:'error',signal:AbortSignal.timeout(10000)});
+  if(!metadata.ok)throw new Error('Image unavailable');
+  const attachment=await metadata.json() as AttachmentView;
+  const response=await fetch(`${endpoint}/${action==='copy'?'clipboard':'original'}`,{redirect:'error',signal:AbortSignal.timeout(15000)});
+  if(!response.ok)throw new Error('Image unavailable');
+  const bytes=Buffer.from(await response.arrayBuffer());
+  if(bytes.length>100*1024*1024)throw new Error('Image too large');
+  if(action==='copy') {
+    const image=nativeImage.createFromBuffer(bytes);if(image.isEmpty())throw new Error('Image decode failed');
+    clipboard.writeImage(image);return 'copied';
+  }
+  const extension={'image/png':'png','image/jpeg':'jpg','image/webp':'webp'}[attachment.metadata.original.mimeType];
+  const name=attachment.filename.replace(/\.[^.]*$/,'')+`.${extension}`;
+  const result=await dialog.showSaveDialog(win,{defaultPath:name,filters:[{name:'Image',extensions:[extension]}]});
+  if(result.canceled||!result.filePath)return 'cancelled';
+  await writeFile(result.filePath,bytes,{mode:0o600});return 'saved';
+});
 ipcMain.handle('preferences:get', async () => {
   try { return JSON.parse(await readFile(preferencePath, 'utf8')).compact === true; }
   catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return false; throw e; }

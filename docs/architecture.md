@@ -24,7 +24,7 @@ Asha's conversations/interactions/log-events model does not establish Ash's topi
 
 ## First model
 
-The [six-table data model](data-model.md) defines ownership, causal links, context capture, Run checkpoints and recovery for the conversation core. The [DBML](../specs/data/model.dbml) contains tables, columns and foreign keys. Physical details and remaining product decisions are marked in the model.
+The [data model](data-model.md) defines ownership, causal links, context capture, Run checkpoints and recovery for the conversation core. The [DBML](../specs/data/model.dbml) contains tables, columns and foreign keys. Physical details and remaining product decisions are marked in the model.
 
 ## Schema workflow
 

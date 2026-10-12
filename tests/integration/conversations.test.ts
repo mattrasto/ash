@@ -6,7 +6,7 @@ import { mkdir, readFile, copyFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { _electron, type ElectronApplication } from 'playwright';
-import { ServerConfig, type Instance, type ConversationView, type RunView, type InspectionView, type RequestPayload } from '../../packages/shared/src/index.ts';
+import { ServerConfig, modelContentText, type Instance, type ConversationView, type RunView, type InspectionView, type RequestPayload } from '../../packages/shared/src/index.ts';
 import { devRoot, json, id, atomic, childEnvironment, sleep, exec } from '../../scripts/dev/io.ts';
 import { workspace, createInstance } from '../../scripts/dev/workspace.ts';
 import { startInstance, stopInstance, disposeInstance, runtime } from '../../scripts/dev/lifecycle.ts';
@@ -61,7 +61,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
         await checkDiagram(admin,evidence);
       } finally {await admin.end();}
       await assert.rejects(db.$executeRawUnsafe('CREATE TABLE forbidden (id integer)'),/permission denied/);
-      assert.equal(await db.instruction.count(),1);
+      assert.equal(await db.instruction.count(),2);
       const serverRequire=createRequire(join(instance.checkout,'packages/server/package.json'));
       const difference=await exec(process.execPath,[serverRequire.resolve('prisma/build/index.js'),'migrate','diff','--from-url',cfg.databaseUrl,'--to-schema-datamodel','prisma/schema.prisma','--exit-code'],{cwd:join(instance.checkout,'packages/server')});
       assert.match(difference.stdout,/No difference detected/);
@@ -146,7 +146,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       const captured=(await db.artifact.findUniqueOrThrow({where:{id:current.state.request_artifact_id}})).payload as RequestPayload;
       assert.ok(captured.selection.omitted.some(item=>item.reason==='context-limit'));
       assert.ok(captured.messages.reduce((sum,message)=>sum+message.content.length,0)<=captured.selection.maxCharacters);
-      assert.ok(captured.messages.at(-1)!.content.startsWith('Latest'));
+      assert.ok(modelContentText(captured.messages.at(-1)!.content).startsWith('Latest'));
       assert.equal((await requestOversized()).status,400);
       async function requestOversized() {return request(`threads/${target}/messages`,{requestKey:randomUUID(),text:'z'.repeat(4001),mode:'empty'});}
     });
