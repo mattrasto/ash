@@ -58,7 +58,7 @@ Desktop scenarios exercise keyboard message submission, persisted conversations,
 
 Playwright Test compares screenshots with `updateSnapshots: 'none'`; a missing baseline fails. Baselines are partitioned by OS and architecture, with Electron/Playwright pinned in the lockfile. Match OS version, display scale and fonts when comparing; a new environment needs its own reviewed expectations. Initial baselines cover macOS arm64 only.
 
-The randomly derived accent is normalized and variable response timing/thread age are hidden by `tests/support/visual.css`. The remaining conversation layout and content are real. These screenshots do not cover the hidden metadata or random accent selection; interaction tests cover their behavior. Reviewed images record the current implementation, not human approval of its design.
+Static layout scenarios use reduced-motion mode to avoid entry/stream animation timing; integration scenarios cover motion and scrolling. The randomly derived accent is normalized and variable response timing/thread age are hidden by `tests/support/visual.css`. The remaining conversation layout and content are real. These screenshots do not cover the hidden metadata or random accent selection; interaction tests cover their behavior. Reviewed images record the current implementation, not human approval of its design.
 
 For an intentional visual change:
 
