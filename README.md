@@ -11,4 +11,5 @@ With Node 22, pnpm 9 and Docker running: `pnpm dev:setup`, then `pnpm dev`. Run 
 - [Development workflow](docs/development.md)
 - [Chat implementation](docs/features/conversations.md) · [Test plan](docs/plans/persisted-chat-tests.md)
 - [Images: implementation and test plan](docs/features/images.md)
+- [Testing](docs/testing.md)
 - [Project instructions](AGENTS.md)

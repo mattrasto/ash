@@ -1,0 +1,4 @@
+/* Normalize the random workspace accent; preserve application layout and content. */
+.shell { --accent: #467451 !important; --tint: #eaf0e9 !important; }
+/* Elapsed response time and relative thread age vary across deterministic runs. */
+.metadata, .sidebar time { visibility: hidden !important; }

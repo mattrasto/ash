@@ -25,6 +25,11 @@ icon = "tool"
 command = "pnpm --silent dev:reset"
 
 [[actions]]
+name = "Quick Checks"
+icon = "test"
+command = "pnpm --silent verify --profile quick"
+
+[[actions]]
 name = "Run Tests"
 icon = "test"
 command = "pnpm --silent verify"

@@ -8,7 +8,7 @@ The Electron/Svelte shell opens [persisted chat](features/conversations.md). Des
 
 ## Run the preview
 
-Prerequisites: macOS desktop session, Node 22.1 or later, pnpm 9 and running Docker Desktop. Versions are pinned in the lockfile and PostgreSQL image digest. `pnpm verify` opens temporary, windowed Electron apps; a graphical session is required. Linux/Windows and native macOS Spaces/focus behavior have not been verified.
+Prerequisites: macOS desktop session, Node 22.1 or later, pnpm 9 and running Docker Desktop. Versions are pinned in the lockfile and PostgreSQL image digest. `pnpm verify` opens temporary, windowed Electron apps; a graphical session is required. The [verified baseline](testing.md#verified-baseline) covers macOS automated and manual checks. Linux/Windows remain unverified.
 
 ```sh
 pnpm dev:setup
@@ -24,8 +24,8 @@ The launcher requires process inspection, loopback sockets and Docker access. A 
 1. Start a Codex chat in a new worktree for a feature. Automatic setup installs pinned dependencies, registers the workspace and prepares its preview data.
 2. Choose **Run Preview**. Open that feature's chat preview with hot reload. Other feature previews keep running.
 3. Iterate in the same preview; restarts preserve its database, file and client preference. Reset explicitly when a clean fixture is useful. Product fixtures will replace the scratchpad as features land.
-4. Run automated checks and let the coding agent exercise a separate verification instance. Testing does not interrupt or rewrite the preview being inspected.
-5. Review the diff and verification evidence, then demonstrate the feature in its preview. Follow the [delivery agreement](../specs/product.md#confirmed-engineering-agreement) for review and integration.
+4. Follow the [testing workflow](testing.md): run automated checks and let the coding agent exercise a separate verification instance. Testing does not interrupt or rewrite the preview being inspected.
+5. The coding agent reviews the diff and evidence, then demonstrates the feature and presents any targeted manual checks. Follow the [delivery agreement](../specs/product.md#confirmed-engineering-agreement) for review and integration.
 6. Preserve source changes in a Git checkpoint or saved patch, including relevant untracked files. Dispose of development resources before archiving the checkout; retain verification evidence.
 
 ## Workspace and instance identity
@@ -98,7 +98,7 @@ A versioned manifest records workspace/instance IDs, checkout and source fingerp
 
 Unexpected supervisor loss must leave recoverable ownership records; the next status/start reconciles surviving processes before replacing them. Hot reload preserves the instance's data. If a service restart changes its address, republish configuration and reconnect or relaunch the client. Foreign listeners are never killed.
 
-The shell has a workspace label, stable accent color and Dock badge. Human previews default to fullscreen; `--windowed` keeps a normal window. Verification windows are labeled distinctly and stay windowed; `--background` requests inactive display. Native Spaces/focus behavior needs manual verification. DevTools are available through Electron's menu. Closing the client leaves the backend available for reconnect testing; **Stop Preview** ends the entire instance.
+The shell has a workspace label, stable accent color and Dock badge. Human previews default to fullscreen; `--windowed` keeps a normal window. Verification windows are labeled distinctly and stay windowed; `--background` requests inactive display. Native Spaces/focus changes follow the [manual verification policy](testing.md#evidence-and-handoff). DevTools are available through Electron's menu. Closing the client leaves the backend available for reconnect testing; **Stop Preview** ends the entire instance.
 
 ## Commands
 
@@ -111,9 +111,9 @@ Run from the target checkout; cleanup commands accept registered instance identi
 | Status | `pnpm dev:status` | Report identity, source, profile, readiness, safe endpoints and owned-resource state; include actionable startup errors. |
 | Stop Preview | `pnpm dev:stop` | Stop the preview and its children; retain application data. Never stop the shared database container. |
 | Reset Preview | `pnpm dev:reset` | Stop the preview, replace all mutable application state with `scratchpad`, and leave it stopped. Add `--fixture empty` for blank state. |
-| — | `pnpm test` | Run fast ownership, lock and environment unit tests. |
+| Quick Checks | `pnpm verify --profile quick` | Types and fast boundary checks; partial verification. |
 | — | `pnpm test:workflow` | Run isolated PostgreSQL, real-worktree and Electron integration checks. |
-| Run Tests | `pnpm verify` | Run typechecking, build validation and relevant automated acceptance checks in fresh instances; write a report. A narrower selection must be explicit in the report. |
+| Run Tests | `pnpm verify` | Full automated verification. Selection, suite commands and evidence: [testing](testing.md#commands). |
 | Run Ephemeral Preview | `pnpm dev:verify --fixture scratchpad` | Start a fresh windowed instance for exploration; return its ID and endpoints. Ctrl-C stops and disposes it. A detached session requires explicit disposal. |
 | — | `pnpm dev:dispose` | Stop and delete this workspace's preview, verification/test resources and generated runtime credentials; retain source, developer configuration and exported evidence. |
 
@@ -129,27 +129,7 @@ The integration test releases its owned resources in final cleanup, retaining ev
 
 ## Verification and evidence
 
-### Manual checks
-
-Use disposable sample conversations; reset deliberately removes the selected preview's data.
-
-1. **Persistence and reopening:** Send a message, leave an unsent draft and collapse the sidebar. Close/reopen the app, then Stop and Run. The exchange, draft and sidebar preference should survive. Repeated Run should reuse the same preview.
-2. **Parallel features:** Open another Ash worktree and Run it. Send different messages in A and B. Reopen each and confirm each retains only its own conversations and drafts. Use `pnpm dev:status --json` to identify the instances. Stop A; B should still work.
-3. **Ephemeral preview:** With A open, choose **Run Ephemeral Preview**. It starts with an empty conversation. Send a sample message, then Ctrl-C that terminal. The ephemeral preview closes and is discarded; A's saved data remains.
-4. **True reset:** Run `pnpm dev:reset --fixture empty` in A, then Run. A starts with an empty conversation, blank draft and visible sidebar. B retains its values. Reset leaves A stopped until Run.
-5. **Hot reload:** In A's `packages/client/src/renderer/features/conversations/Chat.svelte`, temporarily change the composer placeholder. A updates while B stays unchanged. Revert the text; the conversation and draft survive both updates.
-
-### Automated checks
-
-`pnpm verify` runs typechecking, an isolated build, unit tests and the workflow integration suite. It writes `report.json`, `checks.log`, screenshots and cleanup results under the printed evidence directory. Tests exercise two simultaneous worktrees plus a verification instance, cross-database access denial, database/file/client persistence, renderer hot reload, reset/token rotation, native launch/stop, supervisor crash recovery, Docker configuration changes, database-container recreation and disposal. Protected server configuration is excluded from Vite's served paths. The test helper in `tests/integration/workflow.test.ts` drives real Electron windows with Playwright.
-
-Keep deterministic regression checks and agent exploration distinct in reports. Conversation and image suites cover recorded input/run/context/output inspection and attachments; extend the driver with voice controls when implemented. Observation endpoints must remain authenticated and development-only.
-
-The deterministic adapter supports streaming, controlled delay, failure and cancellation. [OpenAI mode](features/conversations.md#openai-mode) separates interactive chat from bounded live checks and isolates the credential from the client. Mocked Responses protocol tests run in ordinary verification; [live-test model selection and budget exhaustion](plans/persisted-chat-tests.md#openai-adapter) do not constrain offline coverage. Report calls and available usage.
-
-Use the [chat test plan](plans/persisted-chat-tests.md) for this slice and the remaining [C01–C14](../specs/features/conversations.md#acceptance-examples) as their features land. The restore test follows the [backup and recovery design](data-model.md#backup-and-recovery): use synthetic data and restore a physical backup plus archived WAL into an isolated PostgreSQL instance, not the shared development cluster. Verify C10 with external dispatch disabled, then separately verify startup interruption handling. Add accepted artifact-move examples when that feature enters scope.
-
-Each report records source commit plus dirty-content fingerprint, lockfile, fixture and schema versions, commands/scenarios, outcomes, model mode, screenshots and relevant traces. Source changes during verification invalidate the result. Include failed/skipped checks and subjective judgments; a screenshot alone is not a pass. Store evidence outside disposable state and never include credentials. Recheck the integrated revision after merge, especially migrations and shared contracts; code integration never merges preview databases.
+The [testing approach](testing.md), [chat test plan](plans/persisted-chat-tests.md) and [image test plan](features/images.md) own coverage policy, scenario selection, evidence, visual expectations and manual procedures. `pnpm verify` runs the full automated gate; quick and selected runs are explicitly partial. Use `pnpm dev:verify` for agent exploration or targeted human checks without changing the persistent preview.
 
 ## Codex now and Ash later
 

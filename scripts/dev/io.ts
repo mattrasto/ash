@@ -111,7 +111,7 @@ export function childEnvironment(tmp: string): NodeJS.ProcessEnv {
 }
 export async function fingerprint(checkout: string) {
   const { stdout } = await exec('git', ['ls-files', '-co', '--exclude-standard', '-z'], { cwd: checkout });
-  const files = [...new Set(stdout.split('\0').filter(p => /^(packages\/|scripts\/|tests\/|package.json$|pnpm-lock.yaml$|pnpm-workspace.yaml$|tsconfig.json$|compose.yaml$)/.test(p)))].sort();
+  const files = [...new Set(stdout.split('\0').filter(p => /^(packages\/|scripts\/|tests\/|specs\/|docs\/|\.codex\/|AGENTS.md$|package.json$|pnpm-lock.yaml$|pnpm-workspace.yaml$|tsconfig.json$|compose.yaml$|\.npmrc$)/.test(p)))].sort();
   const hash = createHash('sha256');
   for (const file of files) {
     let bytes: Buffer;
@@ -121,7 +121,7 @@ export async function fingerprint(checkout: string) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
       throw error;
     }
-    hash.update(file); hash.update(bytes);
+    hash.update(`${file}\0`); hash.update(bytes); hash.update('\0');
   }
   const { stdout: head } = await exec('git', ['rev-parse', 'HEAD'], { cwd: checkout });
   return { commit: head.trim(), hash: hash.digest('hex'), lockfileHash: createHash('sha256').update(await readFile(join(checkout, 'pnpm-lock.yaml'))).digest('hex') };

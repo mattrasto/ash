@@ -4,46 +4,19 @@ import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
-import { createRequire } from 'node:module';
 import postgres from 'postgres';
-import { _electron, type ElectronApplication } from 'playwright';
-import { devRoot, exec, atomic, json, exists, childEnvironment, id, alive, sleep } from '../../scripts/dev/io.ts';
+import type { ElectronApplication } from 'playwright';
+import { devRoot, exec, atomic, json, exists, id, alive, sleep } from '../../scripts/dev/io.ts';
 import { workspace, createInstance, instancePath, type Workspace } from '../../scripts/dev/workspace.ts';
 import { startInstance, stopInstance, resetInstance, disposeInstance, runtime } from '../../scripts/dev/lifecycle.ts';
-import { buildMain } from '../../scripts/dev/build.ts';
+import { desktop, request } from '../support/desktop.ts';
+import { scenarioStep } from '../support/node-scenarios.ts';
 import { ServerConfig, type Instance } from '../../packages/shared/src/index.ts';
 import { connect, ensureCluster, type Cluster } from '../../scripts/dev/database.ts';
 import { makeWorktree } from '../helpers/worktree.ts';
 
 const source = process.cwd();
-const require = createRequire(join(source, 'package.json'));
-async function request(instance: Instance, path: string, body?: object, tokenOverride?: string) {
-  const current = await runtime(instance);
-  const cfg = ServerConfig.parse(await json(join(instance.root, 'server.json')));
-  return fetch(`${current!.serverUrl}${path}`, {
-    method: body ? 'PATCH' : 'GET', headers: { authorization: `Bearer ${tokenOverride ?? cfg.token}`, 'content-type': 'application/json' },
-    ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(5000),
-  });
-}
 async function state(instance: Instance) { const response = await request(instance, '/api/state'); assert.equal(response.status, 200); return response.json() as Promise<{note: string; count: number; fileNote: string}>; }
-async function desktop(instance: Instance) {
-  const running = await runtime(instance);
-  const entry = await buildMain(instance.checkout, join(instance.root, 'build'));
-  const configPath = join(instance.root, 'test-client.json');
-  await atomic(configPath, { root: instance.root, label: instance.label, instanceId: instance.id, url: running!.webUrl, windowed: true, background: true });
-  const app = await _electron.launch({ executablePath: require('electron'), args: [entry], cwd: instance.checkout,
-    env: { ...childEnvironment(join(instance.root, 'tmp')), ASH_CLIENT_CONFIG: configPath } as Record<string, string>, timeout: 30_000 });
-  try {
-    const page = await app.firstWindow();
-    const errors: string[] = [];
-    page.on('pageerror', error => errors.push(error.stack ?? error.message));
-    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-    try { await page.getByTestId('connection').filter({ hasText: 'Connected' }).waitFor({timeout:15000}); }
-    catch (e) { throw new Error(`${(e as Error).message}\nRenderer errors: ${errors.join('\n')}\n${(await page.locator('body').innerText()).slice(0,2000)}`); }
-    return { app, page };
-  } catch (e) { await app.close(); throw e; }
-}
-
 test('parallel worktrees, desktop state, reset, credentials and lifecycle', { timeout: 240_000 }, async t => {
   const base = await mkdtemp(join(tmpdir(), 'ash-workflow-'));
   const root = await devRoot(join(base, 'state'));
@@ -58,7 +31,7 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
   let a!: Instance, b!: Instance, verify!: Instance, wa!: Workspace, wb!: Workspace;
   try {
     let setupComplete = false;
-    await t.test('DEV-01 concurrent setup in real detached Git worktrees', async () => {
+    await scenarioStep(t, 'workflow-setup', async () => {
       await makeWorktree(source,aPath); await makeWorktree(source,bPath);
       [wa, wb] = await Promise.all([workspace(aPath, root), workspace(bPath, root)]);
       // Record intended ownership before provisioning so cleanup still runs on partial failure.
@@ -73,7 +46,7 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       setupComplete = true;
     });
     assert.ok(setupComplete, 'Setup must succeed before testing dependent behavior');
-    await t.test('DEV-02 and DEV-05 database and file writes do not cross instances', async () => {
+    await scenarioStep(t, 'workflow-isolation', async () => {
       await Promise.all([request(a, '/api/state', { note: 'Feature A', fileNote: 'File A', increment: true }), request(b, '/api/state', { note: 'Feature B', fileNote: 'File B', increment: true }), request(verify, '/api/state', { note: 'Verification', increment: true })]);
       assert.deepEqual(await state(a), { note: 'Feature A', count: 1, fileNote: 'File A' });
       assert.equal((await state(b)).note, 'Feature B'); assert.equal((await state(verify)).note, 'Verification');
@@ -86,14 +59,14 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       assert.equal((await fetch(`${running.serverUrl}/api/state`)).status, 401);
       assert.equal((await fetch(`${running.webUrl}/@fs${join(a.root, 'server.json')}`)).status, 403);
     });
-    await t.test('DEV-04 duplicate launch reuses the supervisor and restart keeps data', async () => {
+    await scenarioStep(t, 'workflow-restart', async () => {
       const before = await runtime(a); const repeated = await startInstance(wa, a.id, { headless: true });
       assert.equal(repeated.supervisor.pid, before!.supervisor.pid);
       await stopInstance(wa, a.id); await startInstance(wa, a.id, { headless: true });
       assert.equal((await runtime(a))!.webUrl,before!.webUrl);
       assert.equal((await state(a)).note, 'Feature A');
     });
-    await t.test('a saved frontend port conflict fails without moving browser storage', async () => {
+    await scenarioStep(t, 'workflow-port', async () => {
       const url=(await runtime(a))!.webUrl!;
       await stopInstance(wa,a.id);
       const blocker=createServer((_req,res)=>res.end('unrelated listener'));
@@ -105,7 +78,7 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       await startInstance(wa,a.id,{headless:true});
       assert.equal((await runtime(a))!.webUrl,url);
     });
-    await t.test('desktop UI edits and client state remain isolated', async () => {
+    await scenarioStep(t, 'workflow-desktop', async () => {
       const da = await desktop(a); apps.push(da.app);
       const db = await desktop(b); apps.push(db.app);
       await da.page.getByLabel('Message',{exact:true}).fill('Saved from the desktop');
@@ -135,7 +108,7 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       assert.equal(await reopened.page.getByTestId('message').count(),2);
       await reopened.app.close(); apps.splice(apps.indexOf(reopened.app), 1);
     });
-    await t.test('DEV-07 reset replaces database, files and client state and rotates authentication', async () => {
+    await scenarioStep(t, 'workflow-reset', async () => {
       const old = ServerConfig.parse(await json(join(a.root, 'server.json')));
       a = await resetInstance(wa, a.id, 'empty'); await startInstance(wa, a.id, { headless: true });
       assert.deepEqual(await state(a), { note: '', count: 0, fileNote: '' });
@@ -152,7 +125,7 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       await assert.rejects(resetInstance(wa, a.id), /ownership mismatch/);
       await atomic(join(a.root, 'instance.json'), original);
     });
-    await t.test('DEV-03 and DEV-06 crash recovery leaves unrelated listeners and sibling previews alive', async () => {
+    await scenarioStep(t, 'workflow-crash', async () => {
       const before = (await runtime(a))!;
       process.kill(before.supervisor.pid, 'SIGKILL');
       for (let i=0; i<30 && await alive(before.supervisor); i++) await sleep(100);
@@ -160,11 +133,11 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       assert.equal((await state(a)).count, 0); assert.equal((await state(b)).note, 'Feature B');
       assert.equal(await (await fetch(`http://127.0.0.1:${foreignPort}`)).text(), 'foreign');
     });
-    await t.test('DEV-09 copied identity is rejected', async () => {
+    await scenarioStep(t, 'workflow-identity', async () => {
       const path = join(bPath, '.ash-dev/workspace.json'); const original = await json(path);
       await atomic(path, wa); await assert.rejects(workspace(bPath, root), /Copied/); await atomic(path, original);
     });
-    await t.test('native launcher waits for the desktop and Stop closes its owned processes', async () => {
+    await scenarioStep(t, 'workflow-native', async () => {
       await stopInstance(wa, a.id);
       const started = await startInstance(wa, a.id, {windowed:true, background:true});
       assert.equal(started.children.length, 2);
@@ -174,7 +147,7 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       await startInstance(wa, a.id, {headless:true});
       assert.equal((await state(b)).note, 'Feature B');
     });
-    await t.test('disposal retries clean up owned roles after an interrupted database drop', async () => {
+    await scenarioStep(t, 'workflow-disposal', async () => {
       const disposable = await createInstance(wa, 'verify'); instances.push({ws:wa,id:disposable.id});
       const cluster = await json<Cluster>(join(root, 'cluster.json'));
       const db = connect(cluster);
@@ -184,7 +157,7 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       try { assert.equal((await check`SELECT 1 FROM pg_roles WHERE rolname IN (${disposable.ownerRole}, ${disposable.runtimeRole})`).length, 0); }
       finally { await check.end(); }
     });
-    await t.test('changed Docker configuration invalidates the startup cache', async () => {
+    await scenarioStep(t, 'workflow-config', async () => {
       await Promise.all([stopInstance(wa, a.id), stopInstance(wb, b.id), stopInstance(wa, verify.id)]);
       const path = join(aPath, 'compose.yaml');
       const original = await readFile(path, 'utf8');
@@ -203,7 +176,7 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
         await ensureCluster(root, aPath);
       }
     });
-    await t.test('recreating development infrastructure reconnects existing previews without reseeding', async () => {
+    await scenarioStep(t, 'workflow-recreate', async () => {
       const cluster = await json<Cluster>(join(root, 'cluster.json'));
       const name = `ash-dev-${cluster.id}`;
       assert.equal((await exec('docker', ['container', 'inspect', '--format', '{{index .Config.Labels "dev.ash.cluster"}}', name])).stdout.trim(), cluster.id);
@@ -214,7 +187,7 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       assert.equal((await state(b)).note, 'Feature B');
       assert.equal((await state(verify)).note, 'Verification');
     });
-    await t.test('verification disposal leaves the human preview data intact', async () => {
+    await scenarioStep(t, 'workflow-cleanup', async () => {
       await disposeInstance(wa, verify.id); instances.splice(instances.findIndex(i => i.id === verify.id), 1);
       assert.equal(await exists(verify.root), false); assert.equal((await state(b)).note, 'Feature B');
     });

@@ -1,3 +1,4 @@
+import { scenarioStep } from '../support/node-scenarios.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -70,7 +71,7 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
     assert.equal(response.status,200,await response.clone().text());return response.json();
   }
   try {
-    await t.test('deterministic mode ignores the local key and the frontend cannot serve it',async()=>{
+    await scenarioStep(t, 'openai-credentials',async()=>{
       await startInstance(ws,instance.id,{headless:true});
       const info=await api<{model:{provider:string}}>('info');
       assert.equal(info.model.provider,'deterministic');
@@ -83,7 +84,7 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
     });
     await startInstance(ws,instance.id,{headless:true,modelSessionId:session.id});
     assert.deepEqual(await readdir(sessionDirectory(instance,session.id)),['session.json']);
-    await t.test('captured requests, provider identifiers, usage and duplicate delivery persist',async()=>{
+    await scenarioStep(t, 'openai-capture',async()=>{
       target=randomUUID();await service.createThread(target,'OpenAI protocol inspection');
       const key=randomUUID();
       const run=await service.submit(target,key,'A synthetic apartment checklist','normal');await settle(target,run.id);
@@ -97,7 +98,7 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
       assert.deepEqual((bodies.at(-1) as {input:unknown}).input,request.messages);
       assert.ok(!JSON.stringify(inspection).includes('synthetic-private-key'));
     });
-    await t.test('incomplete output fails, retry retains frozen input, and cancellation freezes the Surface',async()=>{
+    await scenarioStep(t, 'openai-outcomes',async()=>{
       behavior='fail';const failed=await service.submit(target,randomUUID(),'Stop at the output limit','normal');
       const first=await settle(target,failed.id);assert.equal(first.runs.find(r=>r.id===failed.id)!.status,'failed');
       assert.equal(first.runs.find(r=>r.id===failed.id)!.error!.code,'provider_incomplete');
@@ -112,7 +113,7 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
       behavior='success';lastRun=await service.submit(target,randomUUID(),'Continue after cancellation','normal');await settle(target,lastRun.id);
       assert.ok(!(bodies.at(-1) as {input:Array<{content:string}>}).input.some(m=>m.content==='Before stop'));
     });
-    await t.test('desktop renders provider usage and live-mode failures without leaking credentials',async()=>{
+    await scenarioStep(t, 'openai-desktop',async()=>{
       const require=createRequire(join(instance.checkout,'package.json'));
       const running=(await runtime(instance))!;
       const entry=await buildMain(instance.checkout,join(instance.root,'build'));
@@ -136,7 +137,7 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
       assert.deepEqual(errors,[]);assert.ok(!(await page.locator('body').innerText()).includes('synthetic-private-key'));
       await app.close();app=undefined;
     });
-    await t.test('reopen preserves saved results; reset preserves a session’s spent allowance',async()=>{
+    await scenarioStep(t, 'openai-budget',async()=>{
       const before=await api<ConversationView>(`threads/${target}`);
       await stopInstance(ws,instance.id);await startInstance(ws,instance.id,{headless:true,modelSessionId:session.id});
       assert.deepEqual(await api<ConversationView>(`threads/${target}`),before);
@@ -152,7 +153,7 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
         assert.equal(await readFile(envPath,'utf8'),envContent);
       } finally {await rm(sessionDirectory(instance,spent.id),{recursive:true,force:true});}
     });
-    await t.test('interactive preview has no session cap or expiry and renders without a countdown',async()=>{
+    await scenarioStep(t, 'openai-interactive',async()=>{
       const preview=await createInstance(ws,'preview','empty');
       let interactive:string|undefined;
       try {

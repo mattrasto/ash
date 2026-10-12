@@ -1,3 +1,4 @@
+import { scenarioStep } from '../support/node-scenarios.ts';
 import test from 'node:test';
 import { checkStreaming } from '../helpers/streaming.ts';
 import { checkDiagram } from '../helpers/schema.ts';
@@ -44,7 +45,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
   let threadId='';
   try {
     await startInstance(ws,instance.id,{headless:true});
-    await t.test('migration is additive and repeatable, and the runtime has no schema privileges',async()=>{
+    await scenarioStep(t, 'chat-schema',async()=>{
       const cluster=await ensureCluster(ws.devRoot,ws.checkout);
       const existingThread=await newThread('Migration survivor');
       await migrateProduct(instance,cluster);
@@ -67,7 +68,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       const difference=await exec(process.execPath,[serverRequire.resolve('prisma/build/index.js'),'migrate','diff','--from-url',cfg.databaseUrl,'--to-schema-datamodel','prisma/schema.prisma','--exit-code'],{cwd:join(instance.checkout,'packages/server')});
       assert.match(difference.stdout,/No difference detected/);
     });
-    await t.test('UX01/UX02 titles, archive and activity metadata preserve running conversations',async()=>{
+    await scenarioStep(t, 'chat-organization',async()=>{
       const target=await newThread('New conversation');
       const run=await send(target,'A first message\nwith a useful title','slow');
       assert.equal((await view(target)).thread.title,'A first message with a useful title');
@@ -85,7 +86,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       for(const body of [{title:' '},{isArchived:'yes'},{isPinned:true},{}])assert.equal((await request(`threads/${target}`,body)).status,400);
       await assert.rejects(db.thread.update({where:{id:target},data:{isPinned:true}}),/permission denied/);
     });
-    await t.test('C01/C05 acceptance and concurrent duplicate delivery preserve one input and one execution',async()=>{
+    await scenarioStep(t, 'chat-delivery',async()=>{
       threadId=await newThread('Persisted repair checklist');
       const key=randomUUID();
       const [a,b]=await Promise.all([send(threadId,'Make a repair checklist','slow',key),send(threadId,'Make a repair checklist','slow',key)]);
@@ -101,7 +102,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       assert.equal(inspection.artifacts.find(a=>a.layer==='act')!.sourceId,inspection.input.id);
       assert.equal(state.artifacts[1].sourceId,state.runs[0].state.request_artifact_id);
     });
-    await t.test('C03/C04 follow-up context and inspection use the captured request',async()=>{
+    await scenarioStep(t, 'chat-context',async()=>{
       const other=await newThread('Unrelated'); const unrelated=await send(other,'Never include this');await settled(other,unrelated.id);
       const followup=await send(threadId,'Put kitchen items first');const state=await settled(threadId,followup.id);
       const inspection=await api<InspectionView>(`artifacts/${state.runs.find(r=>r.id===followup.id)!.state.response_artifact_id}`);
@@ -112,7 +113,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       assert.equal(request.provider,'deterministic');assert.equal(request.selection.instructions.length,1);
       assert.equal(request.selection.artifacts.length,3);
     });
-    await t.test('C07 cancellation freezes partial output and queued cancellation has no start time',async()=>{
+    await scenarioStep(t, 'chat-cancellation',async()=>{
       const slow=await send(threadId,'Slow response please','slow');
       const partial=await until(()=>view(threadId),v=>v.artifacts.some(a=>a.runId===slow.id));
       assert.equal(partial.runs.find(r=>r.id===slow.id)!.status,'running');
@@ -123,7 +124,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       const queued=await direct.submit(threadId,randomUUID(),'Queued cancellation','normal');
       const cancelled=await direct.cancel(queued.id);assert.equal(cancelled.status,'cancelled');assert.equal(cancelled.startedAt,null);assert.equal(cancelled.state.response_artifact_id,null);
     });
-    await t.test('C07/C14 retries retain prior outcomes, own their requests, and select only completed answers',async()=>{
+    await scenarioStep(t, 'chat-retries',async()=>{
       const failed=await send(threadId,'Retry this request','fail'); const first=await settled(threadId,failed.id); assert.equal(first.runs.find(r=>r.id===failed.id)!.status,'failed');
       const retry=await api<RunView>(`runs/${failed.id}/retry`,{requestKey:randomUUID(),mode:'normal'});await settled(threadId,retry.id);
       const failedAgain=await api<RunView>(`runs/${retry.id}/retry`,{requestKey:randomUUID(),mode:'fail-before'});await settled(threadId,failedAgain.id);
@@ -140,14 +141,14 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       const empty=await send(threadId,'Empty output','empty');const emptyState=await settled(threadId,empty.id);
       assert.deepEqual((emptyState.artifacts.find(a=>a.runId===empty.id)!.payload as {content:unknown[]}).content,[]);
     });
-    await t.test('C08 independent threads can run concurrently',async()=>{
+    await scenarioStep(t, 'chat-concurrency',async()=>{
       const a=await newThread('Parallel A'), b=await newThread('Parallel B');
       const [ra,rb]=await Promise.all([send(a,'One','slow'),send(b,'Two','slow')]);
       await until(()=>view(a),v=>v.runs.some(r=>r.status==='running'));
       assert.equal((await view(b)).runs[0].status,'running');
       await Promise.all([api(`runs/${ra.id}/cancel`,{}),api(`runs/${rb.id}/cancel`,{})]);
     });
-    await t.test('C11 restart preserves completed data and interrupts undispatched work',async()=>{
+    await scenarioStep(t, 'chat-restart',async()=>{
       const before=await view(threadId);
       await stopInstance(ws,instance.id);
       const queued=await direct.submit(threadId,randomUUID(),'Persisted before crash','normal');
@@ -158,7 +159,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       assert.equal(interrupted.status,'interrupted');assert.equal(interrupted.startedAt,null);assert.equal(interrupted.state.response_artifact_id,null);
       await sleep(150);assert.equal((await view(threadId)).runs.length,after.runs.length);
     });
-    await t.test('C12 the API captures context limits and rejects oversized input',async()=>{
+    await scenarioStep(t, 'chat-limits',async()=>{
       const target=await newThread('Bounded context');
       for (let index=0;index<3;index++) {const accepted=await send(target,`${index}:`+'x'.repeat(2998),'empty');await settled(target,accepted.id);}
       const current=await send(target,'Latest '+ 'y'.repeat(3990),'empty');await settled(target,current.id);
@@ -169,7 +170,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       assert.equal((await requestOversized()).status,400);
       async function requestOversized() {return request(`threads/${target}/messages`,{requestKey:randomUUID(),text:'z'.repeat(4001),mode:'empty'});}
     });
-    await t.test('backend ownership and crash recovery cannot silently repeat work',async()=>{
+    await scenarioStep(t, 'chat-ownership',async()=>{
       const running=(await runtime(instance))!;
       const serverRequire=createRequire(join(instance.checkout,'package.json'));
       await assert.rejects(exec(process.execPath,['--import',serverRequire.resolve('tsx'),'packages/server/src/main.ts',join(instance.root,'server.json')],{cwd:instance.checkout,timeout:5000,env:childEnvironment(join(instance.root,'tmp'))}),/Another backend already owns/);
@@ -184,7 +185,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       const content=restored.artifacts.find(artifact=>artifact.runId===slow.id)!;
       await sleep(400);assert.deepEqual((await view(threadId)).artifacts.find(artifact=>artifact.id===content.id),content);
     });
-    await t.test('queued and retried requests retain the original instruction snapshot',async()=>{
+    await scenarioStep(t, 'chat-instructions',async()=>{
       const target=await newThread('Snapshot isolation');
       const queued=await direct.submit(target,randomUUID(),'Capture original instructions','normal');
       const request=(await db.artifact.findUniqueOrThrow({where:{id:queued.state.request_artifact_id}})).payload as RequestPayload;
@@ -199,7 +200,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
         assert.equal(captured.messages[0].content,original.text);
       } finally {await admin`UPDATE instructions SET text=${original.text},updated_at=now() WHERE key='response'`;await admin.end();}
     });
-    await t.test('desktop sends, inspects, preserves drafts and reconnects during generation',async()=>{
+    await scenarioStep(t, 'chat-desktop',async()=>{
       const running=(await runtime(instance))!;
       const entry=await buildMain(instance.checkout,join(instance.root,'build'));
       const path=join(instance.root,'chat-test-client.json');

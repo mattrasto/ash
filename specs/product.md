@@ -55,3 +55,5 @@ Use DBML in Git and dbdiagram for table boxes showing all columns and foreign-ke
 Use plural snake_case table names and snake_case columns in SQL; camelCase properties and UpperCamelCase types in TypeScript.
 
 Establish reproducible startup, synthetic but realistic sample data, a reset command restricted to isolated development data, automated checks and recoverable Git checkpoints early.
+
+Testing centers on boundary integration, real-app functionality/UX/visual checks and targeted human acceptance. No routine unit-test requirement; retain focused invariants where useful. The accepted [testing approach](../docs/testing.md) defines execution, evidence and future self-modification verification. Reports are for agents; human handoff stays concise.

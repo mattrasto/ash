@@ -1,11 +1,11 @@
-import test from 'node:test';
+import { scenarioTest } from '../support/node-scenarios.ts';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, symlink, rm, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { guardedPath, withLock, childEnvironment, stopProcess, atomic, fingerprint, exec } from '../../scripts/dev/io.ts';
 
-test('storage guards reject parent paths and symlink escapes', async () => {
+scenarioTest('boundary-paths', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'ash-guard-')));
   try {
     await mkdir(join(root, 'owned'));
@@ -16,7 +16,7 @@ test('storage guards reject parent paths and symlink escapes', async () => {
     await assert.rejects(guardedPath(root, join(root, 'escape/file')), /symlink/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
-test('concurrent lifecycle operations serialize', async () => {
+scenarioTest('boundary-locks', async () => {
   const root = await mkdtemp(join(tmpdir(), 'ash-lock-'));
   const sequence: number[] = [];
   try {
@@ -27,7 +27,7 @@ test('concurrent lifecycle operations serialize', async () => {
     for (let i = 0; i < sequence.length; i += 2) assert.equal(sequence[i], sequence[i + 1]);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
-test('child environment does not inherit keys, database URLs or Node injection', () => {
+scenarioTest('boundary-environment', () => {
   const before = { ...process.env };
   try {
     process.env.OPENAI_API_KEY = 'test-secret'; process.env.DATABASE_URL = 'test-url'; process.env.NODE_OPTIONS = '--test';
@@ -36,11 +36,11 @@ test('child environment does not inherit keys, database URLs or Node injection',
     assert.equal(env.TMPDIR, '/tmp/ash-test');
   } finally { process.env = before; }
 });
-test('a reused or forged PID record is never enough to stop a process', async () => {
+scenarioTest('boundary-process', async () => {
   await stopProcess({ pid: process.pid, identity: 'not this process' }, true);
   assert.doesNotThrow(() => process.kill(process.pid, 0));
 });
-test('source fingerprints reflect deleted files before and after staging', async () => {
+scenarioTest('boundary-fingerprint', async () => {
   const root = await mkdtemp(join(tmpdir(), 'ash-fingerprint-'));
   const git = (...args:string[]) => exec('git',args,{cwd:root});
   try {

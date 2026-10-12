@@ -17,14 +17,17 @@
     "dev:verify": "node --import tsx scripts/dev/cli.ts explore",
     "typecheck": "tsc --noEmit && svelte-check --workspace packages/client --tsconfig ../../tsconfig.json",
     "build": "node --import tsx scripts/dev/build.ts",
-    "test": "node --import tsx --test tests/unit/*.test.ts packages/server/src/modules/context/*.test.ts packages/server/src/modules/attachments/*.test.ts packages/server/src/platform/models/*.test.ts",
+    "test": "pnpm test:boundary",
     "test:workflow": "node --import tsx --test --test-concurrency=1 tests/integration/*.test.ts",
     "verify": "node --import tsx scripts/dev/verify.ts",
     "db:generate": "pnpm --filter @ash/server exec prisma generate --schema prisma/schema.prisma",
-    "postinstall": "pnpm db:generate"
+    "postinstall": "pnpm db:generate",
+    "test:boundary": "node --import tsx --test tests/boundary/*.test.ts packages/server/src/modules/context/*.test.ts packages/server/src/modules/attachments/*.test.ts packages/server/src/platform/models/*.test.ts",
+    "test:desktop": "playwright test --config tests/playwright.config.ts"
   },
   "devDependencies": {
     "@dbml/cli": "10.3.1",
+    "@playwright/test": "1.58.2",
     "@sveltejs/vite-plugin-svelte": "5.1.1",
     "@types/node": "22.19.17",
     "electron": "39.8.5",
