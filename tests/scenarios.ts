@@ -53,6 +53,7 @@ export const scenarios: Scenario[] = [
   { id: 'boundary-fingerprint', title: 'Deleted source files hash consistently before and after staging', suite: 'boundary', requirements: ['DEV-11'], fixture: 'none' },
   { id: 'workflow-port', title: 'Saved frontend port conflicts preserve browser storage', suite: 'workflow', requirements: ['DEV-03', 'DEV-04'], fixture: 'scratchpad' },
   { id: 'chat-persistence', title: 'Keyboard messages and drafts survive desktop reopening', suite: 'desktop', requirements: ['DEV-04'], fixture: 'scratchpad' },
+  { id: 'desktop-background', title: 'Hidden windows support interaction without native focus', suite: 'desktop', requirements: ['DEV-11'], fixture: 'scratchpad' },
   { id: 'chat-layout', title: 'Conversation layout at normal and minimum window sizes', suite: 'desktop', requirements: ['DEV-11'], fixture: 'scratchpad' },
 ];
 

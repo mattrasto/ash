@@ -10,14 +10,18 @@ const config = JSON.parse(readFileSync(process.env.ASH_CLIENT_CONFIG!, 'utf8')) 
 };
 app.setPath('userData', join(config.root, 'electron'));
 app.setName(`Ash (${config.label})`);
+// Background verification must not activate a regular macOS app or add a Dock icon.
+if (config.background && process.platform === 'darwin') app.setActivationPolicy('accessory');
 await app.whenReady();
 session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
 const win = new BrowserWindow({
   width: 1040, height: 830, minWidth: 740, minHeight: 650,
   title: `Ash — ${config.label}`, backgroundColor: '#f7f7f2',
   titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 19 },
-  fullscreen: !config.windowed, show: false,
-  webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, preload: join(config.root, 'build/preload.cjs') },
+  fullscreen: !config.background && !config.windowed, show: false,
+  focusable: !config.background, skipTaskbar: config.background,
+  // Keep hidden renderers painting so automation, streaming and screenshots still run.
+  webPreferences: { backgroundThrottling: !config.background, contextIsolation: true, sandbox: true, nodeIntegration: false, preload: join(config.root, 'build/preload.cjs') },
 });
 function trusted(event:Electron.IpcMainInvokeEvent) {
   if(event.sender!==win.webContents || event.senderFrame!==win.webContents.mainFrame || new URL(event.senderFrame.url).origin!==new URL(config.url).origin)throw new Error('Invalid media request');
@@ -57,9 +61,9 @@ win.webContents.on('will-navigate', (event, url) => {
   if (new URL(url).origin !== new URL(config.url).origin) event.preventDefault();
 });
 await win.loadURL(config.url);
-if (config.background) win.showInactive(); else win.show();
+if (!config.background) win.show();
 process.send?.({type:'client-ready'});
-app.dock?.setBadge(config.label.slice(0, 3).toUpperCase());
+if (!config.background) app.dock?.setBadge(config.label.slice(0, 3).toUpperCase());
 app.on('window-all-closed', () => app.quit());
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => app.quit());
 // The supervisor's IPC channel disappearing means this client lost its owner.

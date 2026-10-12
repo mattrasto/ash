@@ -12,7 +12,7 @@ Revision `8a9650c`, macOS arm64, 2026-10-09: full automated verification passed 
 
 - No routine unit-test requirement or line-coverage target. Prefer integration tests over implementation-shaped mocks. Retain small invariant checks where they cheaply protect filesystem isolation, credentials, locking or process ownership.
 - Integration tests use real internal components, including PostgreSQL and filesystem state. Substitute controlled adapters at external boundaries. Test invalid input, retries, interruption and recovery as well as success.
-- Scripted E2E tests drive the real Electron UI. Seed through fixture infrastructure; do not bypass the operation under test with direct state edits.
+- Scripted E2E tests drive the real Electron UI in the hidden [background mode](development.md#startup-and-process-ownership). Seed through fixture infrastructure; do not bypass the operation under test with direct state edits.
 - UX checks include keyboard access, focus, visible status, draft preservation, scrolling and supported window sizes as relevant. Automated accessibility checks complement interaction testing when added.
 - Visual comparisons detect changes against reviewed baselines. Agent exploration evaluates clarity and design quality against the intended experience. Keep these judgments distinct from deterministic passes.
 - Write short manual procedures for critical flows and native behavior. Do not require a human to inspect reports or repeat every automated check.
@@ -52,7 +52,7 @@ Selection expands to whole suites because the lifecycle checks share ordered set
 
 Reuse the [instance lifecycle and data isolation](development.md#workspace-and-instance-identity). Test instances never reset the persistent preview. Ordinary desktop tests dispose their own instances while retaining the shared development database service. The infrastructure lifecycle suite owns and removes its separate temporary cluster.
 
-Desktop scenarios exercise keyboard message submission, persisted conversations, drafts, sidebar preferences and Artifact inspection after reopening, plus conversation screenshots at 1040×830 and 740×650 content sizes. Workflow checks retain database/file isolation, reset, crash recovery, hot reload and disposal coverage. The conversation, image and mocked OpenAI integration checks are registered in the scenario inventory; boundary checks also run the existing context, storage and model tests.
+Desktop scenarios assert that hidden windows remain invisible and non-focusable through interaction, resize and reload, then exercise keyboard message submission, persisted conversations, drafts, sidebar preferences and Artifact inspection after reopening, plus conversation screenshots at 1040×830 and 740×650 content sizes. Workflow checks retain database/file isolation, reset, crash recovery, hot reload and disposal coverage. The conversation, image and mocked OpenAI integration checks are registered in the scenario inventory; boundary checks also run the existing context, storage and model tests.
 
 ## Visual expectations
 

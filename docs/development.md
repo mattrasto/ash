@@ -8,7 +8,7 @@ The Electron/Svelte shell opens [persisted chat](features/conversations.md). Des
 
 ## Run the preview
 
-Prerequisites: macOS desktop session, Node 22.12 or later, pnpm 9 and running Docker Desktop. Versions are pinned in the lockfile and PostgreSQL image digest. `pnpm verify` opens temporary, windowed Electron apps; a graphical session is required. The [verified baseline](testing.md#verified-baseline) covers macOS automated and manual checks. Linux/Windows remain unverified.
+Prerequisites: macOS desktop session, Node 22.12 or later, pnpm 9 and running Docker Desktop. Versions are pinned in the lockfile and PostgreSQL image digest. `pnpm verify` runs hidden Electron windows; a graphical session is still required. The [verified baseline](testing.md#verified-baseline) covers macOS automated and manual checks. Linux/Windows remain unverified.
 
 ```sh
 pnpm dev:setup
@@ -100,7 +100,7 @@ A versioned manifest records workspace/instance IDs, checkout and source fingerp
 
 Unexpected supervisor loss must leave recoverable ownership records; the next status/start reconciles surviving processes before replacing them. Hot reload preserves the instance's data. If a service restart changes its address, republish configuration and reconnect or relaunch the client. Foreign listeners are never killed.
 
-The shell has a workspace label, stable accent color and Dock badge. Human previews default to fullscreen; `--windowed` keeps a normal window. Verification windows are labeled distinctly and stay windowed; `--background` requests inactive display. Native Spaces/focus changes follow the [manual verification policy](testing.md#evidence-and-handoff). DevTools are available through Electron's menu. Closing the client leaves the backend available for reconnect testing; **Stop Preview** ends the entire instance.
+The shell has a workspace label, stable accent color and Dock badge. Human previews default to fullscreen; `--windowed` keeps a normal window. Automated tests use `--background`: windows stay hidden and non-focusable, omit the macOS Dock icon, and keep rendering for interaction and screenshot checks. This takes precedence over fullscreen. `--headless` omits Electron entirely; `pnpm dev:verify` without `--background` opens a visible disposable window for manual checks. Native Spaces/focus changes follow the [manual verification policy](testing.md#evidence-and-handoff). DevTools are available through Electron's menu. Closing the client leaves the backend available for reconnect testing; **Stop Preview** ends the entire instance.
 
 ## Commands
 

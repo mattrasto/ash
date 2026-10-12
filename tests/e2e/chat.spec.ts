@@ -58,3 +58,27 @@ test('chat-layout: Conversation layout at normal and minimum window sizes', asyn
     });
   }
 });
+
+
+test('desktop-background: Hidden windows support interaction without native focus', async ({ ash }, testInfo) => {
+  const { app, page } = ash;
+  const nativeState = () => app.evaluate(({ app, BrowserWindow }) => ({
+    windows: BrowserWindow.getAllWindows().map(win => ({
+      visible: win.isVisible(), focused: win.isFocused(), focusable: win.isFocusable(), fullscreen: win.isFullScreen(),
+    })),
+    dockVisible: process.platform === 'darwin' ? app.dock!.isVisible() : false,
+  }));
+  const expected = { windows: [{ visible: false, focused: false, focusable: false, fullscreen: false }], dockVisible: false };
+  expect(await nativeState()).toEqual(expected);
+  await page.getByLabel('Message', { exact: true }).fill('Sent from a hidden test window');
+  await page.getByLabel('Message', { exact: true }).press('Enter');
+  await expect(page.getByTestId('run-status')).toHaveText('completed');
+  await page.getByRole('button', { name: 'Inspect Ash response', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Captured model request' })).toBeVisible();
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(900, 700));
+  await expect.poll(() => page.evaluate(() => innerWidth)).toBe(900);
+  await testInfo.attach('hidden-window', { body: await page.screenshot(), contentType: 'image/png' });
+  await page.reload();
+  await expect(page.getByTestId('message')).toHaveCount(2);
+  expect(await nativeState()).toEqual(expected);
+});
