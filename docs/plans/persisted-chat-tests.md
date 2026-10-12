@@ -41,12 +41,19 @@ PITR needs separate backup storage/retention decisions and an isolated restore d
 
 ## OpenAI adapter
 
+Run regression checks with deterministic responses and mocked provider streams; they have no paid-call budget and must not depend on live access. These cover persistence, context, cancellation, retries, failure handling and inspection.
+
+Keep live checks separate. Use a cheaper model such as [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) for basic API compatibility, plus a small check on the interactive model when validating model-specific options or behavior. Cheap-model results do not establish the interactive model's quality. Live cost comes from the selected model, small inputs/outputs and a targeted case set.
+
+If a live allowance is exhausted, record the affected cases as incomplete and continue independent offline checks. Resume only the outstanding live cases with an authorized allowance. Budget exhaustion is neither a passing result nor a reason to abandon unrelated testing; do not silently create fresh allowances or substitute models to turn a failed check green.
+
 | Scenario | Required result | Level |
 | --- | --- | --- |
 | Wire request | Frozen messages/model/options sent to Responses; `store:false`; no tools or implicit provider conversation. Only text/refusals and allowlisted identifiers/usage reach stored state. | SDK with mocked HTTP + PostgreSQL |
 | Provider outcomes | HTTP 401/403/404/429/500 and network failures make one attempt; raw errors/secrets are excluded. Incomplete/failed events, EOF and mismatched final text fail the Run. | Unit + PostgreSQL |
 | Stop and retry | Aborts reach transport; timeout includes streaming. Partial output freezes. Explicit retry preserves its captured request; follow-ups exclude incomplete answers. | Unit + PostgreSQL |
 | Live allowance | Concurrent reservations cannot exceed calls; expired sessions cannot dispatch. Reopen/reset retain counters. Sessions cannot cross instance ownership. | Unit + lifecycle integration |
+| Interactive chat | Persistent preview can exceed five calls and ten minutes without a session limit; call count survives reopen. Disposable live instances still require explicit paired limits. UI omits the countdown for interactive sessions. | Unit + desktop/lifecycle integration |
 | Credential boundary | Default launch ignores `.env.local` and inherited keys. Live mode reads only its key from an owner-only regular file. No session copy; API, inspection and frontend responses omit the key. Reset/disposal preserve the developer file. Tests use a fake key in a disposable checkout. | Unit + desktop/lifecycle integration |
 | Inspection | Desktop shows provider/model, reported usage and IDs. Test-response controls are hidden in live mode. Expired-session failure is visible before any network call. | Real Electron + expired backend session |
 

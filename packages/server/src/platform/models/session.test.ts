@@ -9,7 +9,7 @@ import { configureLiveModel } from '../../../../../scripts/dev/live-model.ts';
 
 async function fixture() {
   const root=await mkdtemp(join(tmpdir(),'ash-model-session-'));
-  const instance = {id:'a'.repeat(24),workspaceId:'b'.repeat(24),devRoot:root} as Instance;
+  const instance = {id:'a'.repeat(24),workspaceId:'b'.repeat(24),devRoot:root,profile:'preview'} as Instance;
   const session:Session={version:1,id:'c'.repeat(24),instanceId:instance.id,workspaceId:instance.workspaceId,
     model:'test-openai-model',options:{api:'responses',store:false,maxOutputTokens:1024,timeoutMs:60000},
     maxCalls:2,callsUsed:0,expiresAt:new Date(Date.now()+60000).toISOString()};
@@ -39,9 +39,37 @@ test('expired sessions cannot dispatch and default launches ignore inherited cre
     await assert.rejects((await openSession(instance,session.id)).reserve(),/expired/);
     assert.equal((await readSession(instance,session.id)).callsUsed,0);
     assert.equal(await configureLiveModel(instance,{}),undefined);
-    await assert.rejects(configureLiveModel(instance,{'openai-model':'test-model'}),/live-minutes/);
     await assert.rejects(configureLiveModel(instance,{'openai-model':'test-model','live-minutes':'10'}),/live-calls/);
+    await assert.rejects(configureLiveModel(instance,{'openai-model':'test-model','live-calls':'5'}),/live-minutes/);
     await assert.rejects(configureLiveModel(instance,{'live-session':session.id,'live-calls':'10'}),/without changing/);
     assert.equal(await configureLiveModel(instance,{'live-session':session.id}),session.id);
   } finally {await rm(root,{recursive:true,force:true});}
+});
+test('interactive sessions keep counting across reopen without a call cap or expiry',async t=>{
+  const {root,instance}=await fixture();
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const id=(await configureLiveModel(instance,{'openai-model':'test-model','reasoning-effort':'low'}))!;
+  const adapter=await openSession(instance,id);
+  const reservations=await Promise.all(Array.from({length:7},()=>adapter.reserve()));
+  assert.deepEqual(reservations,Array(7).fill(60000));
+  const later=Date.now()+11*60*1000;
+  t.mock.method(Date,'now',()=>later);
+  const reopened=await openSession(instance,id);
+  assert.equal(await reopened.reserve(),60000);
+  assert.deepEqual((await reopened.info()).session,{id,callsUsed:8,maxCalls:null,expiresAt:null});
+  assert.equal(await configureLiveModel(instance,{'live-session':id}),id);
+});
+test('disposable live tests require paired explicit limits, including on resume',async t=>{
+  const {root,instance,session}=await fixture();
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const disposable={...instance,profile:'test' as const};
+  await assert.rejects(configureLiveModel(disposable,{'openai-model':'test-model'}),/live-calls and --live-minutes/);
+  await assert.rejects(createSession(instance,{...session,maxCalls:null}),/both/);
+  await assert.rejects(createSession(instance,{...session,expiresAt:null}),/both/);
+  const interactive={...session,maxCalls:null,expiresAt:null};
+  await assert.rejects(createSession(disposable,interactive),/require call and time limits/);
+  await createSession(instance,interactive);
+  await assert.rejects(configureLiveModel(disposable,{'live-session':interactive.id}),/require call and time limits/);
+  const bounded=(await configureLiveModel(disposable,{'openai-model':'test-model','live-calls':'3','live-minutes':'5'}))!;
+  assert.equal((await readSession(disposable,bounded)).maxCalls,3);
 });

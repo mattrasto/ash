@@ -52,20 +52,20 @@ Use a development API key with access to the chosen model. In the checkout root,
 
 The key stays in `.env.local`; it is not copied into session storage or passed to supervisor/renderer environments. Stop and restart the backend to reload a changed key. Reset and disposal preserve this developer file. Remove its key while stopped to prevent local reuse.
 
-Stop the existing preview before changing modes. Example with an explicitly selected model and allowance:
+Stop the existing preview before changing modes. Interactive chat has no session call cap or expiry:
 
 ```sh
 pnpm dev:stop
-pnpm dev --openai-model MODEL_ID --live-calls 5 --live-minutes 10 --max-output-tokens 1024 --reasoning-effort low
+pnpm dev --openai-model MODEL_ID --max-output-tokens 1024 --reasoning-effort low
 ```
 
-Replace `MODEL_ID` with an available Responses model. No live model is selected by default. Reasoning effort is optional and must be supported by that model. For disposable exploration, use the same flags with `pnpm dev:verify --fixture empty`.
+Replace `MODEL_ID` with an available Responses model. No live model is selected by default. Reasoning effort is optional and must be supported by that model. For an explicitly bounded session, add both `--live-calls` and `--live-minutes`. Disposable live exploration with `pnpm dev:verify --fixture empty` requires those limits; ordinary `pnpm verify` uses no live calls.
 
-The launcher prints a session ID. After Stop/Run, use `pnpm dev --live-session SESSION_ID` (plus `--instance INSTANCE_ID` for disposable instances) to reuse its original allowance and expiry. Hot reload retains that session. Starting without live flags returns to the deterministic adapter. Each new `--openai-model` launch creates a new allowance; it is not a renewal of the prior session.
+The launcher prints a session ID. After Stop/Run, use `pnpm dev --live-session SESSION_ID` (plus `--instance INSTANCE_ID` for disposable instances) to retain its model, settings, call counter and any limits. Hot reload retains that session. Starting without live flags returns to the deterministic adapter. Each new `--openai-model` launch creates a new session; it does not renew a prior bounded allowance.
 
-`--live-calls` and `--live-minutes` are required. Output defaults to 1,024 tokens and each call has a 60-second deadline, shortened by session expiry. Input retains the [context bound](#execution-details). These limits bound work; they are not a dollar-denominated spending cap. Reasoning tokens count toward the output bound.
+Output defaults to 1,024 tokens and each call has a 60-second deadline, shortened by expiry when the session is bounded. Input retains the [context bound](#execution-details). These per-request limits still apply to interactive chat. Reasoning tokens count toward the output bound; no dollar-denominated spending cap is enforced.
 
-A slot is reserved on disk before HTTP dispatch; failed or ambiguous attempts still consume it. Concurrent threads share the allowance. Session records contain only settings and usage at `~/.ash-dev/workspaces/WORKSPACE_ID/model-sessions/SESSION_ID/`, outside resettable instance data. Restart, reset and disposal cannot replenish them.
+A call is counted on disk before HTTP dispatch, including failed or ambiguous attempts. Concurrent threads share the counter and any bounded allowance. Session records contain only settings and usage at `~/.ash-dev/workspaces/WORKSPACE_ID/model-sessions/SESSION_ID/`, outside resettable instance data. Restart, reset and disposal cannot replenish a bounded allowance. Interactive records explicitly store null call/expiry limits and are accepted only for the persistent preview.
 
 The backend uses the pinned OpenAI SDK and Responses API with `store:false`, no provider conversation ID and no enabled tools. It sends the saved message list and recorded options. SDK automatic retries are disabled. Each explicit OpenAI retry preserves provider/model/options as well as messages; its session must match the model and allow at least the original output limit. A different model requires a new submission.
 
@@ -79,7 +79,7 @@ The Responses API supports image inputs and a built-in image-generation tool. As
 
 The deterministic baseline passed `pnpm verify` on 2026-10-09; evidence: `~/.ash-dev/evidence/2ba6f2ea74eb63aa1c53b997/`.
 
-`pnpm verify` passed after moving the key to `.env.local`: typechecking, isolated build, 18 unit tests and 31 integration/desktop checks. Evidence: `~/.ash-dev/evidence/b6ff9bc787b39e5c6b8f721e/` (`report.json`, `checks.log`, `openai-inspection.png`); zero live calls. All assertions passed, but the workflow runner needed manual cleanup of one lingering Electron test process before exiting. A separate review checked live-only key loading, environment isolation, session counters and reset/disposal behavior; the screenshot confirms provider metadata remains visible.
+`pnpm verify` passed after separating interactive sessions from bounded live tests: typechecking, isolated build, 20 unit tests and 32 integration/desktop checks. Evidence: `~/.ash-dev/evidence/a3811acde49c79b7168d645d/` (`report.json`, `checks.log`, `openai-interactive.png`); zero live calls and automatic cleanup completed. Tests cover interactive calls beyond five requests and eleven simulated minutes, retained bounded-session enforcement, and the desktop without a countdown. A separate review checked paired limits, preview-only interactive sessions, backward compatibility with bounded records and preserved per-request deadlines.
 
 ### Live text smoke test
 

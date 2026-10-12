@@ -56,7 +56,9 @@ Private access does not specify provider data access, recording retention or spe
 
 **Initial live check:** the authorized model and bounded allowance passed the [text smoke test](../docs/features/conversations.md#verification).
 
-**Remaining:** ongoing spending policy and retention/access before personal-data use. Use synthetic fixtures without observation. Provider application storage is disabled, but separate provider retention policies still apply.
+**Interactive development:** remove the short session call/time cap from normal chat. Keep routine automated verification offline; isolate optional live checks and use cheaper models where the behavior under test permits. [Provider rule](features/conversations.md#requirements) · [Test strategy](../docs/plans/persisted-chat-tests.md#openai-adapter).
+
+**Remaining:** broader spending policy and retention/access before personal-data use. Use synthetic fixtures without observation. Provider application storage is disabled, but separate provider retention policies still apply.
 
 Before observation/dreamtime: set capture scope, exclusions, pause controls, storage/spending limits and notification rules. Specify retention of filtered inputs and what source erasure does to recordings and derived memories.
 

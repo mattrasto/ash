@@ -58,7 +58,7 @@ export interface ConversationView { thread: ThreadView; artifacts: ArtifactView[
 export interface InspectionView { selectedId: string; input: ArtifactView; artifacts: ArtifactView[]; runs: RunView[] }
 export interface ModelInfo {
   provider: 'deterministic' | 'openai'; model: string;
-  session?: { id: string; callsUsed: number; maxCalls: number; expiresAt: string };
+  session?: { id: string; callsUsed: number; maxCalls: number | null; expiresAt: string | null };
 }
 export const isActive = (status: string) => status === 'queued' || status === 'running';
 export const messageText = (payload: MessagePayload) => payload.content.map(block => block.text).join('');

@@ -136,7 +136,7 @@
   </aside>
   <div class="main-column">
     <header><div><span class="eyebrow">CONVERSATION</span><h1>{conversation?.thread.title ?? 'A place to think.'}</h1></div><span class="connection" data-testid="connection"><i class:offline={!connected}></i>{connected ? 'Connected' : 'Reconnecting…'}</span></header>
-    <div class="model-banner"><span class="model-dot"></span>{#if info?.model?.provider === 'openai'}OpenAI · {info.model.model}<span>· {info.model.session?.callsUsed ?? 0} / {info.model.session?.maxCalls ?? 0} calls · expires {new Date(info.model.session!.expiresAt).toLocaleTimeString()}</span>{:else}Deterministic test model <span>· No external calls</span>{/if}</div>
+    <div class="model-banner"><span class="model-dot"></span>{#if info?.model?.provider === 'openai'}OpenAI · {info.model.model}{#if info.model.session}<span>· {info.model.session.callsUsed}{#if info.model.session.maxCalls !== null} / {info.model.session.maxCalls}{/if} calls{#if info.model.session.expiresAt !== null} · expires {new Date(info.model.session.expiresAt).toLocaleTimeString()}{/if}</span>{/if}{:else}Deterministic test model <span>· No external calls</span>{/if}</div>
     {#if error}<div class="error" role="alert">{error}</div>{/if}
     <main class="transcript" bind:this={transcript} onscroll={() => stickToBottom = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 70}>
       {#if !conversation}<div class="empty"><span class="empty-glyph">✳</span><h2>Start a conversation.</h2><p>Create a thread to try persisted chat.<br>Each exchange keeps its context and Artifact trail.</p></div>

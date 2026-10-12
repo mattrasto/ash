@@ -17,10 +17,13 @@ export async function configureLiveModel(instance: Instance, options: LiveOption
     if (tuning.some(key=>options[key])) throw new Error('Live limits require --openai-model');
     return undefined;
   }
-  const minutes = Number(options['live-minutes']);
-  if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 120) throw new Error('Set --live-minutes between 0 and 120');
+  const bounded = options['live-calls'] !== undefined || options['live-minutes'] !== undefined;
+  if (bounded && (options['live-calls'] === undefined || options['live-minutes'] === undefined)) throw new Error('Set both --live-calls and --live-minutes for a bounded live session');
+  if (!bounded && instance.profile !== 'preview') throw new Error('Disposable live tests require --live-calls and --live-minutes');
+  const minutes = bounded ? Number(options['live-minutes']) : null;
+  if (minutes !== null && (!Number.isFinite(minutes) || minutes <= 0 || minutes > 120)) throw new Error('Set --live-minutes between 0 and 120');
   const session = Session.safeParse({version:1,id:id(),workspaceId:instance.workspaceId,instanceId:instance.id,
-    model:options['openai-model'],maxCalls:Number(options['live-calls']),callsUsed:0,expiresAt:new Date(Date.now()+minutes*60000).toISOString(),
+    model:options['openai-model'],maxCalls:bounded ? Number(options['live-calls']) : null,callsUsed:0,expiresAt:minutes === null ? null : new Date(Date.now()+minutes*60000).toISOString(),
     options:{api:'responses',store:false,maxOutputTokens:Number(options['max-output-tokens'] ?? 1024),timeoutMs:60000,
       ...(options['reasoning-effort'] ? {reasoningEffort:options['reasoning-effort']} : {})}});
   if (!session.success) throw new Error('Invalid live settings: choose a model, --live-calls 1–1000 and --max-output-tokens 16–16384');

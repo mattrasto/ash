@@ -17,6 +17,7 @@ import { openAIModel } from '../../packages/server/src/platform/models/openai.ts
 import { createSession, readSession, sessionDirectory, openSession, type Session } from '../../packages/server/src/platform/models/session.ts';
 import { sse, successEvents, providerResponse } from '../helpers/openai.ts';
 import { makeWorktree } from '../helpers/worktree.ts';
+import { configureLiveModel } from '../../scripts/dev/live-model.ts';
 
 async function until<T>(read:()=>Promise<T>,accept:(value:T)=>boolean):Promise<T> {
   for (let index=0;index<250;index++) {const value=await read();if(accept(value))return value;await sleep(40);}
@@ -150,6 +151,34 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
         assert.equal((await readSession(fresh,spent.id)).callsUsed,1);
         assert.equal(await readFile(envPath,'utf8'),envContent);
       } finally {await rm(sessionDirectory(instance,spent.id),{recursive:true,force:true});}
+    });
+    await t.test('interactive preview has no session cap or expiry and renders without a countdown',async()=>{
+      const preview=await createInstance(ws,'preview','empty');
+      let interactive:string|undefined;
+      try {
+        interactive=await configureLiveModel(preview,{'openai-model':'test-openai-model'});
+        const running=await startInstance(ws,preview.id,{headless:true,modelSessionId:interactive});
+        const config=ServerConfig.parse(await json(join(preview.root,'server.json')));
+        const response=await fetch(`${running.serverUrl}/api/info`,{headers:{authorization:`Bearer ${config.token}`}});
+        assert.equal(response.status,200);
+        const info=await response.json() as {model:{session:{callsUsed:number;maxCalls:null;expiresAt:null}}};
+        assert.equal(info.model.session.maxCalls,null);assert.equal(info.model.session.expiresAt,null);
+        const require=createRequire(join(preview.checkout,'package.json'));
+        const entry=await buildMain(preview.checkout,join(preview.root,'build'));
+        const path=join(preview.root,'interactive-test-client.json');
+        await atomic(path,{root:preview.root,label:preview.label,instanceId:preview.id,url:running.webUrl,windowed:true,background:true});
+        app=await _electron.launch({executablePath:require('electron'),args:[entry],cwd:preview.checkout,env:{...childEnvironment(join(preview.root,'tmp')),ASH_CLIENT_CONFIG:path} as Record<string,string>,timeout:30000});
+        const page=await app.firstWindow();
+        await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
+        const banner=await page.locator('.model-banner').innerText();
+        assert.match(banner,/OpenAI · test-openai-model/);assert.match(banner,/0 calls/);assert.doesNotMatch(banner,/expires|\//);
+        await page.screenshot({path:join(evidence,'openai-interactive.png')});
+        assert.equal((await readSession(preview,interactive!)).callsUsed,0);
+      } finally {
+        await app?.close();app=undefined;
+        await disposeInstance(ws,preview.id);
+        if(interactive)await rm(sessionDirectory(preview,interactive),{recursive:true,force:true});
+      }
     });
   } finally {
     await app?.close();await service.stop().catch(()=>{});await db.$disconnect();

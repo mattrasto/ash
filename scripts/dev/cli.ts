@@ -81,7 +81,7 @@ try {
         ? instance.profile === 'preview' ? 'Stop: pnpm dev:stop' : `Dispose: pnpm dev:dispose${target}`
         : command === 'explore' ? 'Ctrl+C to stop and discard this instance' : 'Ctrl+C to stop · data is kept',
       `Details: pnpm dev:status${target}`,
-      ...(modelSessionId ? [`OpenAI session: ${modelSessionId}`, `Resume with the same limits: pnpm dev${target} --live-session ${modelSessionId}`] : []),
+      ...(modelSessionId ? [`OpenAI session: ${modelSessionId}`, `Resume this session: pnpm dev${target} --live-session ${modelSessionId}`] : []),
     ]);
     if (!values.detach) {
       for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, cleanup);
