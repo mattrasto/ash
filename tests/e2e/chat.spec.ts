@@ -40,6 +40,8 @@ test('chat-persistence: Keyboard messages and drafts survive desktop reopening',
 
 test('chat-layout: Conversation layout at normal and minimum window sizes', async ({ ash }) => {
   const { page, app } = ash;
+  // Static baselines exclude entry/stream animation timing; integration tests cover motion.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.getByLabel('Message', { exact: true }).fill('Hello Ash.');
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await expect(page.getByTestId('run-status')).toHaveText('completed');
