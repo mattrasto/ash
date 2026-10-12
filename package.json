@@ -30,7 +30,7 @@
     "@playwright/test": "1.58.2",
     "@sveltejs/vite-plugin-svelte": "5.1.1",
     "@types/node": "22.19.17",
-    "electron": "39.8.5",
+    "electron": "41.10.6",
     "esbuild": "0.25.12",
     "playwright": "1.58.2",
     "postgres": "3.4.8",
