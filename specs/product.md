@@ -6,7 +6,7 @@ Source: [HUMAN_SPEC.md](HUMAN_SPEC.md) and the user’s development agreement.
 
 Ash is a private personal agent: part companion, helper and second brain. It should be capable, concise, helpful and honest, with deep personal context and a carefully crafted, simple architecture.
 
-- **Distinct identity:** Ash is not the user. The overview prohibits publishing writing or sending messages as the user; the scope of possible exceptions needs clarification before those capabilities exist (G08).
+- **Distinct identity:** Ash is not the user. Drafting and sending/publishing follow the configurable defaults in [PERM-R02](features/permissions.md#rules), which supersede the overview's original prohibition.
 - **Cross-device presence:** desktop, mobile and suitable wearables; input/output and behavior adapt to the device. Desktop is described as voice-first and the main work surface.
 - **Background capability:** Ash can continue work in the background. The overview also requests computer/browser work while the user's computer is off; deployment and local-device limitations remain open (G02).
 - **User control:** topic/thread guidance is editable and organizational automation is suggested by default. Statements implying automatic initial organization conflict with this default (G04).
@@ -31,7 +31,7 @@ Ash is a private personal agent: part companion, helper and second brain. It sho
 | Run | An Act workflow execution with inputs, status, a persisted checkpoint and resulting Artifacts; initially one response. See the [Run boundary](../docs/data-model.md#run-boundary). A retry is a new Run linked to the previous one. Durable waiting/resumption remains future scope. Not a task-list item. |
 | Task | A user-visible item of work, assigned to the user, Ash or neither. Exists independently of threads and can link to them. |
 | Decision | A request for user input, including but not limited to permission. The overview's candidate table “Approvals” does not establish a separate product concept. |
-| Permission | A rule controlling access or action, with always/ask/never settings. A Decision can request permission; the two are not interchangeable. |
+| Permission | A rule controlling access or action; [permission rules](features/permissions.md#rules) define effects, matchers and authorization. A Decision can request permission; the two are not interchangeable. |
 | Notification | An Ash-created item drawing attention to information or work; distinct from its eventual delivery on a device. |
 | Live Thread | A special thread recording a Live Mode interaction; cannot be typed into or converted into a normal thread. Can be resumed and referenced from other threads. |
 | Context | Information supplied to Ash for a particular action, from instructions, conversation and relevant other sources. |

@@ -24,7 +24,7 @@ Sequencing is proposed. Source names refer to overview headings.
 | Connectors and tools | API/MCP/filesystem access, external inputs, configurable listeners | Later; first integration to be chosen | Agent / Basics; Artifact Engine; G08, G09 |
 | Tasks | User/Ash ownership, unassigned work, snooze/complete/archive/delete; independent of threads with links | Later | Built-In Features / Tasks; G06, G07 |
 | Decisions | Collect required user input; snooze/respond; optional comments and urgent notification | Later, before gated agent actions | Built-In Features / Decisions; G08 |
-| Permissions | Always/ask/never access rules; integrate with Decisions | Before any external action | Permissions system; G08 |
+| [Permissions](features/permissions.md) | Deterministic and semantic rules, formalization, resource boundaries and user authorization; UI-only categories | Starting implementation accepted; isolated experiments complete; app integration pending | Permissions system; G08 |
 | Notifications | Ash-originated notifications; snooze/dismiss/comment; device-aware delivery | Later | Notifications; Interfaces; G02, G09 |
 | Built-in apps | Canvas, drawing and file viewer; versioning, search/citation, links from threads | Later | Built-In Features / Apps; G06, G10 |
 | Desktop | Topics/threads, chat, feature/app panels, companion, shortcuts, context and artifact inspectors | Conversation and minimal inspection first | Desktop App; G02 |

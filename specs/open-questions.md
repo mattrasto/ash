@@ -66,9 +66,11 @@ Before observation/dreamtime: set capture scope, exclusions, pause controls, sto
 
 ### G08 — Identity, permissions and Decisions
 
-The prohibition on sending/publishing as the user has unspecified exceptions. Approval scope, expiry and changed-action behavior are undefined; Decisions also cover ordinary questions.
+**Accepted, 2026-10-12:** [permission rules](features/permissions.md#rules), including configurable defaults, explicit requests as permission, fixed UI-only categories, mixed matchers, faithful formalization and discovery of sensitive actions that existing permissions have not addressed.
 
-**Recommend:** prohibit impersonation/publishing until exceptions are explicit. Enforce permissions outside editable prompts. Bind approvals to action, target and scope. Specify revocation, denial, timeout and waiting-run continuation before enabling tools.
+The [starting evaluator and implementation guidance](../docs/features/permissions.md#selected-evaluator) are accepted following the isolated experiments; app integration remains pending.
+
+**Remaining:** [PERM-Q01–06](features/permissions.md#open-decisions) cover defaults, conflicts, authorization lifetime, self-modification, delivery and sensitivity discovery. Decisions also cover ordinary questions; their full interaction and durable waiting/resumption contract remains undesigned.
 
 ### G10 — Custom apps and self-modification
 
