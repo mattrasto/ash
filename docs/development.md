@@ -178,4 +178,4 @@ The storage/lifecycle suite and deterministic chat checks cover the implemented 
 | DEV-11 | Verify while a human uses the preview: preview state/focus is preserved, evidence identifies the tested source, and changing source invalidates the result. |
 | DEV-12 | Dispose resources and remove the checkout: no owned processes/databases remain; reports survive. Unexpected checkout removal exposes orphaned resources without deleting them automatically. |
 
-Add the conversation driver, restore checks and evidence as the first journey lands. Live-provider model/allowance and personal-data decisions remain in G09; stronger execution isolation and rollout belong to G10.
+Restore checks remain pending. Ongoing spending and personal-data decisions remain in G09; stronger execution isolation and rollout belong to G10.

@@ -54,7 +54,9 @@ Private access does not specify provider data access, recording retention or spe
 
 **Selected provider:** OpenAI, using Responses for text first and its image capabilities later. [Live-mode behavior](features/conversations.md#requirements) and [configuration](../docs/features/conversations.md#openai-mode).
 
-**Remaining:** choose the live model and test allowance. Use synthetic fixtures without observation; settle retention/access before personal-data use. Provider application storage is disabled, but separate provider retention policies still apply.
+**Initial live check:** the authorized model and bounded allowance passed the [text smoke test](../docs/features/conversations.md#verification).
+
+**Remaining:** ongoing spending policy and retention/access before personal-data use. Use synthetic fixtures without observation. Provider application storage is disabled, but separate provider retention policies still apply.
 
 Before observation/dreamtime: set capture scope, exclusions, pause controls, storage/spending limits and notification rules. Specify retention of filtered inputs and what source erasure does to recordings and derived memories.
 

@@ -1,6 +1,6 @@
 # Persisted chat implementation
 
-Deterministic and mocked OpenAI paths verified · Live verification pending
+Deterministic, mocked OpenAI and bounded live text paths verified
 
 Scope and behavior: [conversation spec](../../specs/features/conversations.md). Verification scenarios: [test plan](../plans/persisted-chat-tests.md).
 
@@ -81,4 +81,10 @@ The deterministic baseline passed `pnpm verify` on 2026-10-09; evidence: `~/.ash
 
 `pnpm verify` passed after moving the key to `.env.local`: typechecking, isolated build, 18 unit tests and 31 integration/desktop checks. Evidence: `~/.ash-dev/evidence/b6ff9bc787b39e5c6b8f721e/` (`report.json`, `checks.log`, `openai-inspection.png`); zero live calls. All assertions passed, but the workflow runner needed manual cleanup of one lingering Electron test process before exiting. A separate review checked live-only key loading, environment isolation, session counters and reset/disposal behavior; the screenshot confirms provider metadata remains visible.
 
-Live model quality, account access and paid usage have not been tested. See the [test plan](../plans/persisted-chat-tests.md#openai-adapter).
+### Live text smoke test
+
+Passed 2026-10-12 on `8ef4380` using `gpt-6.1-sol`, low reasoning, with the approved maximum of five calls over ten minutes and 1,024 output tokens per call. Four calls covered a synthetic checklist, a follow-up with exact captured history, cancellation after partial output, and a completed retry with the original request. Electron inspection showed provider IDs and usage. Backend restart and desktop reopen preserved the conversation and call counter without another dispatch.
+
+Three completed calls reported 391 input and 370 output tokens (761 total). The cancelled call reported no usage; these totals exclude its unknown billable work. Provider dashboard/billing reconciliation was not performed. The disposable instance was removed and the persistent preview remained in deterministic mode.
+
+Evidence: `~/.ash-dev/evidence/live-f484cd4b6d74c96c340f9c56/` contains the source fingerprint, session ID/counter, individual Run outcomes, captured conversation/inspection, smoke driver and desktop screenshots. This establishes live text connectivity and the tested flows; image support and broader quality evaluation remain deferred. [Repeat procedure](../plans/persisted-chat-tests.md#live-smoke-test).

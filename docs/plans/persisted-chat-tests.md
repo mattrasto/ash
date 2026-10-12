@@ -50,9 +50,9 @@ PITR needs separate backup storage/retention decisions and an isolated restore d
 | Credential boundary | Default launch ignores `.env.local` and inherited keys. Live mode reads only its key from an owner-only regular file. No session copy; API, inspection and frontend responses omit the key. Reset/disposal preserve the developer file. Tests use a fake key in a disposable checkout. | Unit + desktop/lifecycle integration |
 | Inspection | Desktop shows provider/model, reported usage and IDs. Test-response controls are hidden in live mode. Expired-session failure is visible before any network call. | Real Electron + expired backend session |
 
-### Live smoke test · pending
+### Live smoke test
 
-After choosing the model, providing a [backend development key](../features/conversations.md#openai-mode) and assigning a session allowance, use an empty disposable instance. Suggested allowance: five calls over ten minutes, 1,024 output tokens per call. This is a proposed allowance, not authorization to spend.
+Use an empty disposable instance with a [backend development key](../features/conversations.md#openai-mode) and an authorized model and session allowance. [Latest result and tested limits](../features/conversations.md#live-text-smoke-test). Repeating this procedure requires an allowance for that session.
 
 1. Send a synthetic checklist request and follow-up; verify useful output and the exact captured context.
 2. Inspect provider IDs/model and available token usage; compare against the provider dashboard when available.

@@ -1,6 +1,6 @@
 # Conversations
 
-First-phase scope accepted · Deterministic chat verified · OpenAI adapter implemented; live verification pending
+First-phase scope accepted · Deterministic chat and bounded live OpenAI text verified
 
 [Source](../HUMAN_SPEC.md) · [Product principles](../product.md) · [Architecture](../../docs/architecture.md)
 
@@ -20,7 +20,7 @@ Current delivery: text conversation with a deterministic default and explicitly 
 
 Deferred from the broader design below: topic management, the instructions editor, archive/pin controls and PITR operation/restore verification. Requirement and acceptance IDs remain stable for those later deliveries. [Implementation](../../docs/features/conversations.md) · [Test plan](../../docs/plans/persisted-chat-tests.md).
 
-Deferred: voice and Live Threads, automatic naming/organization/archiving, artifact moves and references, split/merge, context from other threads, semantic memory, attachments, external tools and inputs, task execution, mobile and self-modification. OpenAI is the first live provider; model and live-test allowance remain to be selected under G09. Image support follows separately.
+Deferred: voice and Live Threads, automatic naming/organization/archiving, artifact moves and references, split/merge, context from other threads, semantic memory, attachments, external tools and inputs, task execution, mobile and self-modification. OpenAI is the first live provider; [live verification](../../docs/features/conversations.md#verification) records the tested model and allowance. Image support follows separately.
 
 ## User flow
 
