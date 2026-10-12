@@ -248,7 +248,9 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       await page.getByLabel('Response behavior').selectOption('slow');
       await page.getByLabel('Message',{exact:true}).fill('Line one');await page.getByLabel('Message',{exact:true}).press('Shift+Enter');await page.getByLabel('Message',{exact:true}).press('L');
       assert.equal(await page.getByLabel('Message',{exact:true}).inputValue(),'Line one\nL');
-      await page.locator('.transcript').evaluate(el=>{el.scrollTop=0;el.dispatchEvent(new Event('scroll'));});await sleep(220);
+      // A wheel gesture also signals user intent while layout is changing.
+      await page.locator('.transcript').hover();await page.mouse.wheel(0,-10000);
+      await until(()=>page.locator('.transcript').evaluate(el=>el.scrollTop),top=>top<5);
       await page.getByRole('button',{name:'New conversation',exact:true}).first().click();
       await page.getByRole('heading',{name:'New conversation',exact:true}).waitFor();
       await until(()=>page.getByLabel('Message',{exact:true}).evaluate(el=>el===document.activeElement),v=>v,1500);
@@ -256,7 +258,9 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       await page.getByRole('heading',{name:'Automatically named conversation',exact:true}).waitFor();
       await page.getByRole('button',{name:'Desktop conversation',exact:true}).click();
       assert.equal(await page.getByLabel('Message',{exact:true}).inputValue(),'Line one\nL');
-      assert.ok(await page.locator('.transcript').evaluate(el=>el.scrollTop<5));
+      // Draft selection is synchronous; history and its saved scroll position load afterward.
+      await until(()=>page.getByTestId('message').count(),count=>count===9);
+      await until(()=>page.locator('.transcript').evaluate(el=>el.scrollTop),top=>top<5,1500);
       await page.locator('.row').filter({has:page.getByRole('button',{name:'Automatically named conversation',exact:true})}).getByLabel('Unread response',{exact:true}).waitFor();
       await page.getByRole('button',{name:'Automatically named conversation',exact:true}).click();
       await page.getByRole('button',{name:'Archive Automatically named conversation',exact:true}).click();

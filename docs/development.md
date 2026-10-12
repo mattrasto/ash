@@ -8,7 +8,7 @@ The Electron/Svelte shell opens [persisted chat](features/conversations.md). Des
 
 ## Run the preview
 
-Prerequisites: macOS desktop session, Node 22.1 or later, pnpm 9 and running Docker Desktop. Versions are pinned in the lockfile and PostgreSQL image digest. `pnpm verify` opens temporary, windowed Electron apps; a graphical session is required. The [verified baseline](testing.md#verified-baseline) covers macOS automated and manual checks. Linux/Windows remain unverified.
+Prerequisites: macOS desktop session, Node 22.12 or later, pnpm 9 and running Docker Desktop. Versions are pinned in the lockfile and PostgreSQL image digest. `pnpm verify` opens temporary, windowed Electron apps; a graphical session is required. The [verified baseline](testing.md#verified-baseline) covers macOS automated and manual checks. Linux/Windows remain unverified.
 
 ```sh
 pnpm dev:setup

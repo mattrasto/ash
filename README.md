@@ -2,7 +2,7 @@
 
 A private personal agent. Separate from Asha. The desktop preview supports persisted chat, image input with descriptions, and Artifact inspection with a deterministic default and an opt-in [OpenAI adapter](docs/features/conversations.md#openai-mode).
 
-With Node 22, pnpm 9 and Docker running: `pnpm dev:setup`, then `pnpm dev`. Run `pnpm verify` for the automated workflow checks. See [development workflow](docs/development.md) for commands and prerequisites.
+With Node 22.12+, pnpm 9 and Docker running: `pnpm dev:setup`, then `pnpm dev`. Run `pnpm verify` for the automated workflow checks. See [development workflow](docs/development.md) for commands and prerequisites.
 
 - [Product specs](specs/README.md)
 - [Repository structure](docs/repository-structure.md)
