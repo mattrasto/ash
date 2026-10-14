@@ -20,9 +20,11 @@ import postgres from 'postgres';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ServerConfig, ScratchChange } from '@ash/shared';
+import { previewSource } from './platform/preview.ts';
 
 const config = ServerConfig.parse(JSON.parse(await readFile(process.argv[2], 'utf8')));
 const { instance, token } = config;
+const source = previewSource(instance.checkout);
 const db = postgres(config.databaseUrl, { max: 3, onnotice: () => {} });
 const [identity] = await db`SELECT instance_id, generation, schema_version FROM dev_meta`;
 if (identity.instance_id !== instance.id || identity.generation !== instance.generation || identity.schema_version !== instance.schemaVersion) { await db.end(); throw new Error('Database identity does not match this instance'); }
@@ -61,6 +63,7 @@ app.get('/health', async () => {
 });
 app.get('/api/info', async () => ({
   label: instance.label, workspaceId: instance.workspaceId, instanceId: instance.id,
+  checkout: instance.checkout, source: await source(),
   generation: instance.generation, profile: instance.profile, fixture: instance.fixture, schemaVersion: instance.schemaVersion,
   model: await model.info(),
 }));

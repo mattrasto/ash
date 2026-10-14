@@ -11,7 +11,7 @@ import { workspace, createInstance, instancePath, type Workspace } from '../../s
 import { startInstance, stopInstance, resetInstance, disposeInstance, runtime } from '../../scripts/dev/lifecycle.ts';
 import { desktop, request } from '../support/desktop.ts';
 import { scenarioStep } from '../support/node-scenarios.ts';
-import { ServerConfig, type Instance } from '../../packages/shared/src/index.ts';
+import { ServerConfig, type Instance, type PreviewInfo } from '../../packages/shared/src/index.ts';
 import { connect, ensureCluster, type Cluster } from '../../scripts/dev/database.ts';
 import { makeWorktree } from '../helpers/worktree.ts';
 
@@ -136,6 +136,29 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
     await scenarioStep(t, 'workflow-identity', async () => {
       const path = join(bPath, '.ash-dev/workspace.json'); const original = await json(path);
       await atomic(path, wa); await assert.rejects(workspace(bPath, root), /Copied/); await atomic(path, original);
+      const info = async () => (await (await request(b, '/api/info')).json()) as PreviewInfo;
+      const detached = await info();
+      assert.equal(detached.source!.branch, null); assert.ok(detached.source!.revision);
+      assert.equal(detached.checkout, bPath);
+      const branch = `codex/identity-${b.id}`;
+      let currentBranch = branch;
+      const waitForBranch = async (expected: string | null) => {
+        let current = await info();
+        for (let i = 0; i < 30 && current.source?.branch !== expected; i++) { await sleep(250); current = await info(); }
+        assert.equal(current.source!.branch, expected);
+        assert.equal(current.workspaceId, detached.workspaceId); assert.equal(current.instanceId, detached.instanceId);
+      };
+      await exec('git', ['switch', '-c', branch], { cwd: bPath });
+      try {
+        await waitForBranch(branch);
+        await exec('git', ['branch', '-m', `${branch}-renamed`], { cwd: bPath }); currentBranch = `${branch}-renamed`;
+        await waitForBranch(currentBranch);
+        assert.deepEqual(await json(path), original);
+      } finally {
+        await exec('git', ['switch', '--detach'], { cwd: bPath });
+        await exec('git', ['branch', '-D', currentBranch], { cwd: bPath });
+      }
+      await waitForBranch(null);
     });
     await scenarioStep(t, 'workflow-native', async () => {
       await stopInstance(wa, a.id);

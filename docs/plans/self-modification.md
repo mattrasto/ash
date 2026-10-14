@@ -10,7 +10,7 @@ Build toward a small code change completed through Ash: screenshot → discussio
 
 In an “Ash development” Topic, paste a screenshot and ask Ash to improve a small part of its own interface. Ash reads relevant specifications/source and prior threads in the Topic, then delegates an agreed change to the detached Codex harness. The user can follow progress, stop work, inspect the diff and verification evidence, try an isolated preview, and approve the exact revision to apply. After restarting Ash, the change works and existing threads/images remain. Reverting restores the previous application version without erasing subsequent chat.
 
-Use a UI-only change for this demonstration. Database migrations, dependency upgrades and changes to permissions, credentials or the runner require additional rollout contracts. Custom apps, automatic organization, semantic memory, voice and general computer control are outside this path. Add image generation when a change needs new assets; screenshot understanding is the immediate dependency.
+Use a UI-only change for this demonstration. Database migrations, dependency upgrades and changes to permissions, credentials or the runner require additional rollout contracts. Custom apps, automatic organization, semantic memory, realtime voice and general computer control are outside this path. Add image generation when a change needs new assets; screenshot understanding is the immediate dependency.
 
 ## Delivery sequence
 
@@ -51,6 +51,35 @@ Reuse the existing Topic, ThreadTopic and Instruction ownership model; no new se
 Verify zero/multiple Topics, instruction edits between submission and dispatch, removed/deleted Topics, independent ownership, exclusion of routing guidance from responses, context limits and isolation from unrelated threads. A request already captured must not change when memberships or instructions change. Ash-authored instruction edits remain unavailable until the Decision gate below exists.
 
 ## 4. Codex workspaces, Decisions and application
+
+### Proposed parallel work
+
+Start by agreeing on the workspace/job, Decision and candidate-revision contracts. Keep one owner for shared schema/contracts; each track can then use a fake adapter until integration.
+
+| Track | First deliverable | Integration dependency |
+| --- | --- | --- |
+| Codex runner and isolation | Disposable harness experiment proving progress, Stop, reconnect, authentication and denied access; then a durable workspace/job adapter. | Agreed job lifecycle and permission-request contract. |
+| Permissions and Decisions | Backend permission evaluation connected to persisted requests, approve/deny/cancel, restart-safe resumption and exact-action checks. Demonstrate with an Ash-proposed instruction edit. | Shared action/authorization/Decision contract; runner can remain fake. |
+| Recording feedback | Import a narrated recording, inspect synchronized commentary and visual evidence, and send it to a Thread. Add in-app capture after proving understanding. | Attachment/context contracts; independent of the Codex runner. |
+| Review workspace | Progress, diff, test evidence, preview identity and Decision controls using representative fixtures. | Job/candidate/evidence contracts; wire to the runner afterward. |
+| Verification and apply/revert controller | External controller checks the exact revision, retains the previous runnable version, restarts, checks health and reverts while preserving later chat. | Candidate/approval contract; prove initially with hand-prepared UI-only commits. |
+
+The runner experiment is the first uncertainty to resolve. Defer broader tools, automatic organization and memory until the first complete demonstration works. Keep feature work in isolated previews and integrate in dependency order under the [Git requirements](../development.md#git-integration).
+
+### Permissions and Decisions together
+
+Implement these as one end-to-end slice with separate responsibilities: [Permissions](../../specs/features/permissions.md) evaluates authority; Decisions records and presents requests for user input, including requests unrelated to permissions. Reuse the [selected evaluator](../features/permissions.md#selected-evaluator); settle the relevant defaults, conflict and authorization-lifetime questions before wiring execution.
+
+Start with an Ash-proposed instruction edit: prepare the exact diff, evaluate permission, persist a Decision when required, wait through a restart, then recheck authority and the instruction revision before applying once. Exercise denial, cancellation, duplicate answers and changed targets. Explicit authorization must satisfy an ask rule without another question; approving one edit must not create a standing rule. Add the minimal rule editor and independent Decision list needed to operate this flow before expanding to more tools.
+
+### Recording feedback
+
+Workflow priority raised on 2026-10-14; design proposed. Support “record with comments → send to agent” alongside screenshots, without blocking the delegated-change demonstration.
+
+1. **Import and understand:** attach an existing clip with spoken or written commentary; retain playable source video, timestamped transcript/comments and selected frames. Let the agent inspect additional frames in a requested time range when a transition is unclear. Responses should point to timestamps, with missing or ambiguous evidence explicit. Keep user commentary distinct from text observed inside recorded applications.
+2. **Capture in Ash:** select a window/screen and optional microphone, record, stop, review and send to the chosen Thread. Reuse the import path. [Electron screen capture](https://www.electronjs.org/docs/latest/api/desktop-capturer) provides the underlying screen/window sources; verify the installed Electron version's OS permission and audio behavior in a small capture experiment first.
+
+Agree on the clip/derivative/context contract and duration, size and processing-cost limits before implementation. Test short UI transitions and “this, here” narration against the original clip; frame sampling alone can miss the event being described. Model/provider selection remains open. Keep autonomous capture, system-audio mixing and live conversation outside the first slice.
 
 ### Integration check
 

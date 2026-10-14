@@ -1,4 +1,10 @@
 /* Normalize the random workspace accent; preserve application layout and content. */
-.shell { --accent: #467451 !important; --tint: #eaf0e9 !important; }
+.preview-shell { --accent: #467451 !important; --tint: #eaf0e9 !important; }
 /* Elapsed response time and relative thread age vary across deterministic runs. */
 .metadata, .sidebar time { visibility: hidden !important; }
+
+/* Identity text is checked against the live API separately. */
+.preview-bar .branch, .preview-bar .worktree, .preview-bar .instance { font-size: 0 !important; }
+.preview-bar .branch::after { content: "codex/preview-layout"; font-size: 12px; }
+.preview-bar .worktree::after { content: "worktree/ash"; font-size: 12px; }
+.preview-bar .instance::after { content: "abcdef"; font-size: 10px; }

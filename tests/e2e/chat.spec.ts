@@ -1,5 +1,6 @@
 import { test, expect } from '../support/fixtures.ts';
-import { desktop } from '../support/desktop.ts';
+import { desktop, request } from '../support/desktop.ts';
+import type { PreviewInfo } from '../../packages/shared/src/index.ts';
 import { fileURLToPath } from 'node:url';
 
 test('chat-persistence: Keyboard messages and drafts survive desktop reopening', async ({ ash, instance }, testInfo) => {
@@ -60,8 +61,14 @@ test('chat-layout: Thread layout at normal and minimum window sizes', async ({ a
 });
 
 
-test('desktop-background: Hidden windows support interaction without native focus', async ({ ash }, testInfo) => {
+test('desktop-background: Hidden windows support interaction without native focus', async ({ ash, instance }, testInfo) => {
   const { app, page } = ash;
+  const info = await (await request(instance, '/api/info')).json() as PreviewInfo;
+  const branch = info.source!.branch ?? `Detached · ${info.source!.revision}`;
+  await expect(page.getByLabel('Preview identity')).toBeVisible();
+  await expect(page.getByTestId('preview-branch')).toHaveText(branch);
+  await expect(page.getByTestId('preview-worktree')).toHaveText(instance.checkout.split('/').slice(-2).join('/'));
+  await expect(page.getByTestId('preview-worktree')).toHaveAttribute('title', new RegExp(instance.workspaceId));
   const nativeState = () => app.evaluate(({ app, BrowserWindow }) => ({
     windows: BrowserWindow.getAllWindows().map(win => ({
       visible: win.isVisible(), focused: win.isFocused(), focusable: win.isFocusable(), fullscreen: win.isFullScreen(),
@@ -80,5 +87,6 @@ test('desktop-background: Hidden windows support interaction without native focu
   await testInfo.attach('hidden-window', { body: await page.screenshot(), contentType: 'image/png' });
   await page.reload();
   await expect(page.getByTestId('message')).toHaveCount(2);
+  await expect(page.getByTestId('preview-branch')).toHaveText(branch);
   expect(await nativeState()).toEqual(expected);
 });
