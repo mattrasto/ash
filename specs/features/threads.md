@@ -1,12 +1,12 @@
-# Conversations
+# Threads
 
-First-phase scope accepted · Chat, images and conversation UX implemented and verified
+First-phase scope accepted · Chat, images and thread UX implemented and verified
 
 [Source](../HUMAN_SPEC.md) · [Product principles](../product.md) · [Architecture](../../docs/architecture.md)
 
 ## Goal
 
-The user can have a useful text conversation with Ash, organize it explicitly, see what informed a response, and recover the same recorded conversation after reconnecting or restarting.
+The user can work with Ash in a Thread, organize it explicitly, see what informed a response, and recover the same recorded Thread after reconnecting or restarting.
 
 ## Source requirements
 
@@ -16,52 +16,52 @@ The accepted [artifact rules](artifacts.md#rules) refine membership and chains, 
 
 ## Scope
 
-Current delivery: conversation with [image input and descriptions](images.md), OpenAI previews and an offline test adapter, one-click creation, first-message titles, manual rename/archive, persisted messages and Run outcomes, cancellation/retry, reconnect/restart handling, and context/lineage inspection. Base instructions are captured with each request.
+Current delivery: Threads with [image input and descriptions](images.md), OpenAI previews and an offline test adapter, one-click creation, first-message titles, manual rename/archive, persisted messages and Run outcomes, cancellation/retry, reconnect/restart handling, and context/lineage inspection. Applicable instructions are captured with each request. [Topics and working context](topics-context.md) add sidebar organization, owned instruction editing and bounded retrieval across linked Threads.
 
-Deferred from the broader design below: topic management, the instructions editor, pin controls and PITR operation/restore verification. Requirement and acceptance IDs remain stable for those later deliveries. [Implementation](../../docs/features/conversations.md) · [Test plan](../../docs/plans/persisted-chat-tests.md).
+Deferred from the broader design below: pin controls and PITR operation/restore verification. Requirement and acceptance IDs remain stable for those later deliveries. [Implementation](../../docs/features/threads.md) · [Test plan](../../docs/plans/persisted-chat-tests.md).
 
-Deferred: voice and Live Threads, model-generated naming, automatic organization/archiving, artifact moves and references, split/merge, context from other threads, semantic memory, other file attachments, external integrations and inputs, task execution, mobile and self-modification. OpenAI is the first live provider; [live verification](../../docs/features/conversations.md#verification) records the tested model and allowance. [Image rules and acceptance](images.md) and [tool execution and inspection](tools.md) extend this scope.
+Deferred: voice and Live Threads, model-generated naming, automatic organization/archiving, artifact moves and references, split/merge, semantic memory, other file attachments, external integrations and inputs, task execution, mobile and self-modification. OpenAI is the first live provider; [live verification](../../docs/features/threads.md#verification) records the tested model and allowance. [Image rules and acceptance](images.md) and [tool execution and inspection](tools.md) extend this scope.
 
 ## User flow
 
 1. Open Ash and create a “Home” topic and “Repair checklist” thread. The user can also start without a topic.
 2. Send a text request: “Help me organize a repair checklist for the apartment.” The message appears once, with a visible response status.
-3. Read Ash's response and send a follow-up: “Put the kitchen items first.” The follow-up uses the preceding conversation.
-4. Explicitly add the thread to a second topic or remove a topic association. The conversation remains the same continuing matter.
-5. Inspect a response to see its originating input, run outcome and supplied context. Internal processing records do not clutter the ordinary conversation.
-6. Close/reopen or reconnect the client. The saved conversation, organization and settled run outcomes remain available.
+3. Read Ash's response and send a follow-up: “Put the kitchen items first.” The follow-up uses the preceding thread.
+4. Explicitly add the thread to a second topic or remove a topic association. The thread remains the same continuing matter.
+5. Inspect a response to see its originating input, run outcome and supplied context. Internal processing records do not clutter the ordinary thread.
+6. Close/reopen or reconnect the client. The saved thread, organization and settled run outcomes remain available.
 
 ## Requirements
 
 - **CONV-R01 — Interface:** normal threads in the existing desktop client, with text and image input under [IMG-R01–09](images.md#rules). Hosting and further native requirements remain G02.
 - **CONV-R02 — Manual organization:** the user can create/rename topics and threads and explicitly link/unlink topics; starting a thread without a topic is allowed.
-- **CONV-R03 — Topic context boundary:** a topic link organizes the first-delivery UI. Context from other threads in that topic is deferred and documented as a temporary limitation (G05).
-- **CONV-R04 — Instruction edits:** the user can view/edit current base instructions under [INST-R03–04](instructions.md#rules). Ash does not edit instructions in this milestone.
-- **CONV-R05 — Context:** include active base instructions and the current Thread's Surface messages up to the submitted user message, subject to CONV-R15 and context limits. Include the user message once; its Input and internal Act records are not additional conversation messages. The inspector identifies limits and omissions.
+- **CONV-R03 — Topic context boundary:** cross-thread retrieval follows [CTX-R03–07](topics-context.md#what-enters-an-answer).
+- **CONV-R04 — Instruction edits:** the user can view/edit independently owned instructions under [INST-R03–04](instructions.md#rules) through the [shared editor](instructions.md#editor). Ash does not edit instructions in this milestone.
+- **CONV-R05 — Context:** include applicable response instructions under [INST-R05](instructions.md#rules) and the current Thread's Surface messages up to the submitted user message, subject to CONV-R15 and context limits. Include the user message once; its Input and internal Act records are not additional thread messages. The inspector identifies limits and omissions.
 - **CONV-R06 — Accepted input:** durably record input before its response run starts. Retrying transport delivery of the same submission does not create a second message or run.
 - **CONV-R07 — Concurrent input:** execute one response run at a time per thread. While it runs, block further submissions there and preserve typed draft text. Different threads may work independently.
 - **CONV-R08 — Outcomes:** distinguish running, completed, failed, cancelled and interrupted outcomes. The displayed response derives its generation state from its Run under [ART-R09](artifacts.md#rules); stopped output must not appear to be a successful final answer.
-- **CONV-R09 — Recovery:** a client disconnect does not itself cancel a backend run. Reconnecting restores recorded output/status without creating a new run. Restarting preserves completed conversations and topic associations.
+- **CONV-R09 — Recovery:** a client disconnect does not itself cancel a backend run. Reconnecting restores recorded output/status without creating a new run. Restarting preserves completed threads and topic associations.
 - **CONV-R10 — Retry:** provider failure or server interruption is visible. User-requested retry creates a new Run linked to the previous Run and original input, preserving prior outcomes and partial responses.
 - **CONV-R11 — Cancellation:** prevent later output from being presented as a successful completion for the cancelled Run. Cancellation cannot guarantee reversal of provider work already started.
-- **CONV-R12 — Inspection:** show the originating input, supplied context, exact instruction text and identities, model identifier, run outcome and recorded processing metadata. Do not promise private model reasoning or retain credentials in conversation history.
-- **CONV-R13 — Backup recovery:** restore conversation data under [ART-R08](artifacts.md#rules). Restore verification must cover organization, Surface content/order, current instructions, captured requests and run outcomes at the chosen time. Do not automatically resume restored work.
+- **CONV-R12 — Inspection:** show the originating input, supplied context, exact instruction text and identities, model identifier, run outcome and recorded processing metadata. Do not promise private model reasoning or retain credentials in thread history.
+- **CONV-R13 — Backup recovery:** restore thread data under [ART-R08](artifacts.md#rules). Restore verification must cover organization, Surface content/order, current instructions, captured requests and run outcomes at the chosen time. Do not automatically resume restored work.
 - **CONV-R14 — Manual visibility:** archive hides a Thread from the ordinary view while retaining archive access, content and context eligibility. Unarchive restores ordinary visibility. Pin/unpin is independent of archive state; pinning does not unarchive a Thread. Both states persist across client restarts. Automatic archive deadlines, revival and pin ordering remain deferred.
 - **CONV-R15 — Retry context:** later follow-ups include only the latest completed response for each Input. Failed, cancelled, interrupted, partial and superseded attempts remain visible but are omitted from model context. A failed retry does not displace an earlier completed response. If no response completed, include the user message without an answer. Existing captured requests remain unchanged.
 
 - **CONV-R16 — Live provider:** Human previews use OpenAI by default and retain their selected model/session on restart. Missing credentials fail with setup guidance; they never silently select fake responses. The deterministic adapter is reserved for automated tests or an explicit offline demo. Interactive chat has no session call cap or expiry; disposable live tests use explicit call/time limits. Default verification makes no external calls. Record provider identifiers and reported usage when available; missing usage is unknown. Incomplete provider output is a failed Run, not a completed reply. OpenAI retries preserve the captured provider/model/options and do not execute automatically.
 
-## Conversation UX
+## Thread UX
 
 Accepted 2026-10-12 · Align interactions with Asha; retain Ash's appearance and Artifact model.
 
-- **UX01 — Start and name:** open an empty conversation immediately on first use. **New conversation** creates and focuses another composer without requiring a title. The first accepted message names an untitled conversation from its text; image-only input uses “Image conversation.” Manual rename persists. Model-based naming belongs with the future visibility layer.
-- **UX02 — Sidebar:** show recent activity, running responses and unseen settled responses. Archive/unarchive uses the row icon; the actions menu contains Rename. Archive access is a collapsible list; archiving the current conversation selects another active conversation or creates an empty one. Archived conversations remain readable and writable; writing does not unarchive them. Collapse, width, archive expansion and read markers are local desktop preferences. Archive persistence follows CONV-R14; pin controls remain deferred.
-- **UX03 — Compose and read:** Enter sends, Shift+Enter inserts a line, and IME composition never submits. Input grows up to a scrollable maximum and returns focus after sending. Preserve drafts and reading position across conversation switches. Sending anchors the latest user message with room for its response; new output must not pull a reader through the reply. **Latest messages** resumes following with breathing room below the last message. Concurrent input follows CONV-R07.
-- **UX04 — Stream and act:** progressively reveal new prose and code lines while preserving settled Markdown nodes. Returning to a running conversation shows its recorded content immediately. Completion does not replace the message or replay its reveal. Copy, Inspect and Retry are available on hover, keyboard focus and a context menu; stopped/failed outcomes stay visible. Message copy exports text; image-containing messages label it “Copy text.” Copy images individually in the viewer or thumbnail menu; copying text and multiple images together is deferred. Compact response details expand to recorded timing, model and usage when available. Full inspection follows CONV-R12.
-- **UX05 — Accessibility:** icon actions have labels and tooltips; menus support arrows, Escape and focus restoration. Escape closes inspection and the image viewer. Sidebar resizing supports arrows and Home. Respect reduced-motion preferences for message, stream, sidebar and viewer animations. Desktop shortcuts: Cmd/Ctrl+N creates a conversation; Cmd/Ctrl+\ toggles the sidebar.
+- **UX01 — Start and name:** open an empty thread immediately on first use. **New thread** creates and focuses another composer without requiring a title. The first accepted message names an untitled thread from its text; image-only input uses “Image thread.” Manual rename persists. Model-based naming belongs with the future visibility layer.
+- **UX02 — Sidebar:** show recent activity, running responses and unseen settled responses. Archive/unarchive uses the row icon; the actions menu contains Rename. Archive access is a collapsible list; archiving the current thread selects another active thread or creates an empty one. Archived threads remain readable and writable; writing does not unarchive them. Collapse, width, archive expansion and read markers are local desktop preferences. Archive persistence follows CONV-R14; pin controls remain deferred.
+- **UX03 — Compose and read:** Enter sends, Shift+Enter inserts a line, and IME composition never submits. Input grows up to a scrollable maximum and returns focus after sending. Preserve drafts and reading position across thread switches. Sending anchors the latest user message with room for its response; new output must not pull a reader through the reply. **Latest messages** resumes following with breathing room below the last message. Concurrent input follows CONV-R07.
+- **UX04 — Stream and act:** progressively reveal new prose and code lines while preserving settled Markdown nodes. Returning to a running thread shows its recorded content immediately. Completion does not replace the message or replay its reveal. Copy, Inspect and Retry are available on hover, keyboard focus and a context menu; stopped/failed outcomes stay visible. Message copy exports text; image-containing messages label it “Copy text.” Copy images individually in the viewer or thumbnail menu; copying text and multiple images together is deferred. Compact response details expand to recorded timing, model and usage when available. Full inspection follows CONV-R12.
+- **UX05 — Accessibility:** icon actions have labels and tooltips; menus support arrows, Escape and focus restoration. Escape closes inspection and the image viewer. Sidebar resizing supports arrows and Home. Respect reduced-motion preferences for message, stream, sidebar and viewer animations. Desktop shortcuts: Cmd/Ctrl+N creates a thread; Cmd/Ctrl+\ toggles the sidebar.
 
-[Reference review, implementation and verification plan](../../docs/features/conversation-ux.md).
+[Reference review, implementation and verification plan](../../docs/features/thread-ux.md).
 
 ## Acceptance examples
 
@@ -75,7 +75,7 @@ Given a thread in Home, when the user links it to Planning and unlinks Home, the
 
 ### C03 — Follow-up context · CONV-R03, CONV-R05
 
-Given a completed response, when the user asks a follow-up about it, supplied context includes the preceding conversation and follow-up. A separate thread's content is absent.
+Given a Thread with no Topics and a completed response, when the user asks a follow-up about it, supplied context includes the preceding Thread and follow-up. A separate Thread's content is absent.
 
 ### C04 — Response inspection · CONV-R12
 
@@ -107,11 +107,11 @@ Given a base backup and continuous archived WAL, restore to a chosen time in an 
 
 ### C11 — Restart · CONV-R09
 
-When restarting after a completed exchange, the same recorded conversation and topic associations remain available.
+When restarting after a completed exchange, the same recorded thread and topic associations remain available.
 
 ### C12 — Context limit · CONV-R05, CONV-R12
 
-When conversation history exceeds the configured context limit, the response inspector identifies omitted content and the context actually used.
+When thread history exceeds the configured context limit, the response inspector identifies omitted content and the context actually used.
 
 ### C13 — Archive and pin · CONV-R14
 

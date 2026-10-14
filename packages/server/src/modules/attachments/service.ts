@@ -3,7 +3,7 @@ import { Prisma, type PrismaClient, type Attachment, type Run } from '@prisma/cl
 import { ImageMetadata, IMAGE_LIMITS, RequestPayload, RunState, DescriptionPayload, imageDescription,
   type AttachmentView, type ModelExecution } from '@ash/shared';
 import { ModelFailure, type ModelAdapter } from '../../platform/models/adapter.ts';
-import { runView } from '../conversations/views.ts';
+import { runView } from '../threads/views.ts';
 import { ImageStorage, AttachmentError, processImage } from './storage.ts';
 
 type Tx=Prisma.TransactionClient;

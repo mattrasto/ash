@@ -25,8 +25,9 @@ Table threads {
   updated_at timestamptz [not null]
   is_archived boolean [not null, default: false, note: 'Hidden from the ordinary thread list; accessible in the archive.']
   is_pinned boolean [not null, default: false, note: 'Pinned in the thread list. Does not override is_archived.']
+  topics_version integer [not null, default: 0, check: `topics_version >= 0`, note: 'Rejects stale membership edits without changing thread activity.']
 
-  Note: 'Normal conversations; Topic membership is optional.'
+  Note: 'Normal threads; Topic membership is optional.'
 }
 
 Table thread_topics {
@@ -79,7 +80,7 @@ Table instructions {
 Table runs {
   id uuid [pk, not null, note: 'New for each execution, including explicit retries.']
   input_artifact_id uuid [not null, note: 'Input that triggered the Run; reused by retries.']
-  thread_id uuid [note: 'Conversation target; null for standalone image description Runs. Unchanged by Surface moves.']
+  thread_id uuid [note: 'Thread target; null for standalone image description Runs. Unchanged by Surface moves.']
   retry_of_id uuid [note: 'Previous settled Run for an explicit retry; null for the initial execution.']
   status text [not null, check: `status IN ('queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted')`, note: 'Current execution state; starts queued.']
   state jsonb [not null, note: 'Latest workflow checkpoint, including request/output references. Contract: docs/data-model.md#run-state-and-errors.']

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { _electron, type ElectronApplication } from 'playwright';
 import { DEFAULT_TOOL_LIMITS, ServerConfig, ToolArtifact, RunState, type ToolCall, type RequestPayload, type ToolResult, type ToolLimits } from '../../packages/shared/src/index.ts';
-import { Conversations } from '../../packages/server/src/modules/conversations/service.ts';
+import { Threads } from '../../packages/server/src/modules/threads/service.ts';
 import { deterministicModel } from '../../packages/server/src/platform/models/deterministic.ts';
 import { openAIModel } from '../../packages/server/src/platform/models/openai.ts';
 import type { ModelAdapter, ModelOutput } from '../../packages/server/src/platform/models/adapter.ts';
@@ -54,16 +54,16 @@ test('Filesystem tools: scoped observations and desktop inspection', { timeout: 
   const ws = await workspace(checkout, await devRoot()), instance = await createInstance(ws, 'test', 'empty');
   await writeFile(join(instance.root, '.ash-tools.json'), JSON.stringify(configuration));
   const cfg = ServerConfig.parse(await json(join(instance.root, 'server.json'))), db = connectProduct(cfg.databaseUrl);
-  const services: Conversations[] = [];
+  const services: Threads[] = [];
   const service = (model: ModelAdapter = deterministicModel, runtime: ToolRuntime = fs, limits?: ToolLimits, auto = true) => {
-    const value = new Conversations(db, model, auto, undefined, runtime, limits); services.push(value); return value;
+    const value = new Threads(db, model, auto, undefined, runtime, limits); services.push(value); return value;
   };
-  const settle = async (value: Conversations, id: string, attempts = 500) => {
+  const settle = async (value: Threads, id: string, attempts = 500) => {
     const row = await db.run.findUniqueOrThrow({ where: { id } });
     const view = await until(() => value.readThread(row.threadId!), view => view.runs.some(run => run.id === id && !['queued', 'running'].includes(run.status)), attempts);
     return view.runs.find(run => run.id === id)!;
   };
-  const start = async (value: Conversations, text = 'Find source', mode: 'normal' | 'slow' = 'normal') => {
+  const start = async (value: Threads, text = 'Find source', mode: 'normal' | 'slow' = 'normal') => {
     const thread = randomUUID(); await value.createThread(thread, 'Tool fixture');
     const run = await value.submit(thread, randomUUID(), text, mode); return { thread, run };
   };
@@ -278,8 +278,8 @@ test('Filesystem tools: scoped observations and desktop inspection', { timeout: 
       app = await _electron.launch({ executablePath: require('electron'), args: [entry], cwd: checkout, env: { ...childEnvironment(join(instance.root, 'tmp')), ASH_CLIENT_CONFIG: path } as Record<string, string> });
       const page = await app.firstWindow(); const pageErrors:string[]=[];page.on('pageerror',error=>pageErrors.push(error.message));
       await page.getByTestId('connection').filter({ hasText: 'Connected' }).waitFor().catch(async error=>{throw new Error(`${error.message}\n${pageErrors.join('\n')}\n${(await page.locator('body').innerText()).slice(0,2000)}`);});
-      await page.getByRole('button', { name: 'New conversation', exact: true }).click();
-      await page.getByRole('heading', { name: 'New conversation', exact: true }).waitFor();
+      await page.getByTitle('New Thread · ⌘N', { exact: true }).click();
+      await page.getByRole('heading', { name: 'New Thread', exact: true }).waitFor();
       await page.getByText('Test response settings',{exact:true}).click();
       await page.locator('#mode').selectOption('slow');
       await page.getByLabel('Message', { exact: true }).fill('Where is response cancellation implemented?');

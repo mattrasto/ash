@@ -88,7 +88,7 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       await da.page.getByLabel('Message',{exact:true}).fill('An unsent draft');
       await da.page.getByRole('button',{name:'Hide sidebar',exact:true}).click();
       assert.equal(await db.page.getByRole('button',{name:'Hide sidebar',exact:true}).count(),1);
-      const renderer = join(a.checkout, 'packages/client/src/renderer/features/conversations/Chat.svelte');
+      const renderer = join(a.checkout, 'packages/client/src/renderer/features/threads/Chat.svelte');
       const original = await readFile(renderer, 'utf8');
       const changedPlaceholder = 'Workflow hot reload check';
       try {

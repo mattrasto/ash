@@ -7,13 +7,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { _electron, type ElectronApplication } from 'playwright';
-import { ServerConfig, type ConversationView, type RunView, type RequestPayload, type InspectionView } from '../../packages/shared/src/index.ts';
+import { ServerConfig, type ThreadDetail, type RunView, type RequestPayload, type InspectionView } from '../../packages/shared/src/index.ts';
 import { devRoot, json, id, atomic, childEnvironment, sleep, exec } from '../../scripts/dev/io.ts';
 import { workspace, createInstance } from '../../scripts/dev/workspace.ts';
 import { startInstance, stopInstance, disposeInstance, resetInstance, runtime } from '../../scripts/dev/lifecycle.ts';
 import { buildMain } from '../../scripts/dev/build.ts';
 import { connectProduct } from '../../packages/server/src/platform/db/client.ts';
-import { Conversations } from '../../packages/server/src/modules/conversations/service.ts';
+import { Threads } from '../../packages/server/src/modules/threads/service.ts';
 import { openAIModel } from '../../packages/server/src/platform/models/openai.ts';
 import { createSession, readSession, sessionDirectory, openSession, type Session } from '../../packages/server/src/platform/models/session.ts';
 import { sse, successEvents, providerResponse } from '../helpers/openai.ts';
@@ -62,7 +62,7 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
     }),{headers:{'content-type':'text/event-stream'}});
     return sse(successEvents());
   });
-  const service=new Conversations(db,model);
+  const service=new Threads(db,model);
   let target='';let lastRun:RunView;
   const settle=async(thread:string,run:string)=>until(()=>service.readThread(thread),v=>v.runs.some(r=>r.id===run && !['queued','running'].includes(r.status)));
   async function api<T>(path:string,body?:object):Promise<T> {
@@ -138,9 +138,9 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
       await app.close();app=undefined;
     });
     await scenarioStep(t, 'openai-budget',async()=>{
-      const before=await api<ConversationView>(`threads/${target}`);
+      const before=await api<ThreadDetail>(`threads/${target}`);
       await stopInstance(ws,instance.id);await startInstance(ws,instance.id,{headless:true,modelSessionId:session.id});
-      assert.deepEqual(await api<ConversationView>(`threads/${target}`),before);
+      assert.deepEqual(await api<ThreadDetail>(`threads/${target}`),before);
       const info=await api<object>('info');assert.ok(!JSON.stringify(info).includes('synthetic-private-key'));
       const spent={...session,id:id(),expiresAt:new Date(Date.now()+60000).toISOString(),maxCalls:1};
       await createSession(instance,spent);

@@ -10,13 +10,13 @@ One private Ash instance uses one database and initially one backend. Current ro
 
 ### First-phase coverage
 
-The initial [conversation journey](../specs/features/conversations.md) uses six tables; [image input](../specs/features/images.md) adds two attachment tables and permits threadless description Runs. The schema also anticipates organization/instruction editors that are not yet implemented.
+The initial [thread journey](../specs/features/threads.md) uses six tables; [image input](../specs/features/images.md) adds two attachment tables and permits threadless description Runs. [Topics and instruction editing](features/topics-context.md) add a membership version to Threads.
 
 | Capability | Stored data |
 | --- | --- |
 | Create/rename Topics and Threads; change membership | `topics.name`, `threads.title`, `thread_topics`; Topic soft deletion uses `deleted_at`. |
 | Archive/pin Threads | `threads.is_archived`, `threads.is_pinned`. |
-| Edit base instructions | `instructions.key/name/text`; owner FKs also support later Topic/Thread editors. |
+| Edit independently owned instructions | `instructions.key/name/text`; global slots use keys, Topic/Thread editors use owner FKs. |
 | Save and order messages | Surface `payload.speaker/content`, `thread_id`, `created_at` and `id`. |
 | Submit without duplicates | `runs.input_artifact_id`, `request_key`, `request_hash`; unique constraints. |
 | Stream, reconnect, cancel and retry | Saved Surface content; Run `state`, `status`, `error`, timestamps and `retry_of_id`. |
@@ -32,7 +32,7 @@ A Run tracks an Act workflow and its outputs, including Surface Artifacts. Routi
 
 A workflow may contain several model calls using different providers or models. Each call has its own Artifact payload. Find produced Artifacts through `artifacts.run_id`; the checkpoint references those currently needed by the workflow.
 
-Conversation Runs produce one answer through one or more model/tool calls. User Input and its directly mirrored Surface precede that Run and have no producing `run_id`. Image-description Runs consume an upload Input, have null `thread_id`, and produce an internal result Act without a Surface. [Tool execution](features/tools.md#execution-and-inspection) defines multi-call checkpoints; durable waits/resumption and other threadless workflows still need contracts.
+Thread Runs produce one answer through one or more model/tool calls. User Input and its directly mirrored Surface precede that Run and have no producing `run_id`. Image-description Runs consume an upload Input, have null `thread_id`, and produce an internal result Act without a Surface. [Tool execution](features/tools.md#execution-and-inspection) defines multi-call checkpoints; durable waits/resumption and other threadless workflows still need contracts.
 
 ## Artifacts and placement
 
@@ -114,13 +114,13 @@ Structured request messages embed immutable image descriptors, detail settings a
 
 The unique constraints prevent sharing within each owner type, but not across Topics and Threads. For ownership changes, use a `READ COMMITTED` transaction: lock the Instruction row, then check both owner tables in a separate query so the check sees changes committed while waiting for the lock. Reject a different owner or a global key. All attachment/key changes must follow this lock protocol; an owned document cannot become a global prompt. Create/copy and attach a document atomically. Soft-deleting a Topic retains its document; erasure remains G06. See [PostgreSQL snapshot behavior](https://www.postgresql.org/docs/current/transaction-iso.html#XACT-READ-COMMITTED).
 
-A `model_request` Act stores the exact ordered model-visible messages, instruction IDs/owner identities, message-array indexes and exclusions/limits. Selected instruction text is already in the messages; do not resolve current Instructions to inspect an old execution. Capture provider-adapter additions too; credentials and private model reasoning are excluded.
+A `model_request` Act stores the exact ordered model-visible messages, instruction IDs/owner identities, message-array indexes, Topic scope and factual omissions/limits. Selected instruction text is already in the messages; do not resolve current Instructions to inspect an old execution. Capture provider-adapter additions too; credentials and private model reasoning are excluded. [Scoped selection and retrieval](features/topics-context.md#capture-and-retrieval) define the additive metadata and compatibility rules.
 
-Build conversation context from Surface messages under [CONV-R05 and CONV-R15](../specs/features/conversations.md#requirements). Do not include their Input or Act copies as additional messages. For each Input, choose its completed Run with the greatest `(ended_at, id)` and include that Run's response if it is in the current Thread. Apply context limits after selection and record omitted attempts/content in the request. An Input without a completed response contributes its user message only.
+Build thread context from Surface messages under [CONV-R05 and CONV-R15](../specs/features/threads.md#requirements). Do not include their Input or Act copies as additional messages. For each Input, choose its completed Run with the greatest `(ended_at, id)` and include that Run's response if it is in the current Thread. Apply context limits after selection and record compact omission counts in the request. An Input without a completed response contributes its user message only.
 
 Select and record the call's provider, exact model identifier and generation options before committing that request. Dispatch must use those recorded values; choosing a different request requires another Artifact, not mutation of a frozen one. A saved request records prepared work, not proof that the provider accepted or completed it.
 
-Each call gets its own request Artifact, including explicit retries. A retry copies the previous frozen model-visible content instead of reading current instructions or conversation; its call record retains that retry's selected provider/model/options. The original input and `retry_of_id` retain the relationship to the earlier execution. The initial live retry policy follows [CONV-R16](../specs/features/conversations.md#requirements).
+Each call gets its own request Artifact, including explicit retries. A retry copies the previous frozen model-visible content instead of reading current instructions or thread; its call record retains that retry's selected provider/model/options. The original input and `retry_of_id` retain the relationship to the earlier execution. The initial live retry policy follows [CONV-R16](../specs/features/threads.md#requirements).
 
 ## Run state and errors
 
@@ -154,18 +154,18 @@ Optional `state.tools` has version 1, a checkpoint counter, ordered model rounds
 
 Each captured source excerpt gains a dispatcher-owned `citationId`; the handler's reference `id` stays unchanged. Call checkpoints retain both `referenceIds` and optional `citationIds`. [Citation lookup and historical compatibility](features/tools.md#execution-and-inspection).
 
-`provider_continuations` links one private JSON output-item array to its output Artifact and Run. Runtime roles can select/insert, not update/delete; inspection never joins this table. Public output payloads retain its hash/byte count, checked before replay. A database trigger prevents updating captured request/output/call/result payloads or deleting conversation captures; expired threadless image summaries retain their existing cleanup path.
+`provider_continuations` links one private JSON output-item array to its output Artifact and Run. Runtime roles can select/insert, not update/delete; inspection never joins this table. Public output payloads retain its hash/byte count, checked before replay. A database trigger prevents updating captured request/output/call/result payloads or deleting thread captures; expired threadless image summaries retain their existing cleanup path.
 
 Persisting state does not implement safe continuation. The initial restart behavior remains interruption and explicit retry under [execution and transactions](#execution-and-transactions).
 
 ## Thread visibility
 
-[CONV-R14](../specs/features/conversations.md#requirements) defines manual archive and pin behavior. `is_archived` and `is_pinned` are independent booleans, defaulting to false. Update the changed flag and `updated_at` together. Neither flag records when it changed or schedules a future action. Derive ongoing activity from Runs.
+[CONV-R14](../specs/features/threads.md#requirements) defines manual archive and pin behavior. `is_archived` and `is_pinned` are independent booleans, defaulting to false. Update the changed flag and `updated_at` together. Neither flag records when it changed or schedules a future action. Derive ongoing activity from Runs.
 
 ## Execution and transactions
 
 1. Check `request_key` before rejecting a busy thread. A matching command hash returns the existing Run; conflicting reuse fails. Recheck under the target thread lock so concurrent duplicate submissions cannot create two Runs. The unique key is the final guard.
-2. In one transaction, persist Input, user Surface and queued Run; capture a consistent conversation/instruction selection, select the provider/model/options, insert the request Act and complete `state`. Insert the Run before its Act; an incomplete checkpoint is allowed only inside this transaction. Retry transaction conflicts before dispatch. Commit before any provider call.
+2. In one transaction, persist Input, user Surface and queued Run; capture a consistent thread/instruction selection, select the provider/model/options, insert the request Act and complete `state`. Insert the Run before its Act; an incomplete checkpoint is allowed only inside this transaction. Retry transaction conflicts before dispatch. Commit before any provider call.
 3. Claim work with an atomic queued-to-running transition and set `started_at`. Only the process that successfully claims the row dispatches the captured request. Persist the response Surface and checkpoint reference together, then persist content before delivering it to the client.
 4. Every response-content or checkpoint write locks the Run and verifies it is still running. Cancellation and settlement use the same row lock. Commit any final content/checkpoint together with status/error/end time; late output cannot overwrite a stopped Run. Completed empty responses still have a Surface with an empty content array.
 
@@ -198,7 +198,7 @@ CREATE UNIQUE INDEX one_initial_run_per_input
 Transactional writers must also enforce:
 
 - Artifact layer/type references, valid payload shapes, immutable provenance and allowed response-content writes. Surface ownership is required directly on its row.
-- A Run's input is Input. Its checkpoint and error follow the [state contract](#run-state-and-errors); no accepted conversation Run commits without its complete request snapshot.
+- A Run's input is Input. Its checkpoint and error follow the [state contract](#run-state-and-errors); no accepted thread Run commits without its complete request snapshot.
 - A retry points to a previously settled Run with the same input/thread and copies its captured model-visible content; it cannot form a cycle.
 - A completed first-journey Run has a persisted response, including an explicitly empty one. Terminal Runs reject further content/checkpoint writes.
 - Instruction ownership follows the [cross-table locking rule](#instructions-and-captured-requests). Memberships and new Instruction attachments cannot target soft-deleted Topics.
@@ -223,4 +223,4 @@ Validate the diagram with the official [DBML CLI](https://dbml.dbdiagram.io/cli/
 dbml2sql specs/data/model.dbml --postgres -o /tmp/ash-model.sql
 ```
 
-SQL export validates structure only. Implementation must verify conversation C01–C14, artifact A01–A09 and instruction I01–I03, including backup restoration with no external dispatch. Backup restore drills are separate from [development resets](development.md). After implementation, follow the [migration-to-DBML workflow](architecture.md#schema-workflow).
+SQL export validates structure only. Implementation must verify thread C01–C14, artifact A01–A09 and instruction I01–I03, including backup restoration with no external dispatch. Backup restore drills are separate from [development resets](development.md). After implementation, follow the [migration-to-DBML workflow](architecture.md#schema-workflow).

@@ -24,11 +24,15 @@ Suggestion-only defaults conflict with automatic topic assignment and backfillin
 
 ### G05 — Context selection
 
-“All Artifacts” may duplicate messages or expose untrusted internal records. System/topic/thread instruction precedence is unspecified.
+“All Artifacts” may duplicate messages or expose untrusted internal records.
 
-**Accepted first-phase design:** current-thread context and retry selection follow [CONV-R03, R05 and R15](features/conversations.md#requirements); ownership, edits and captured requests follow the [instruction rules](features/instructions.md#rules).
+**Accepted first-phase design:** current-thread context and retry selection follow [CONV-R03, R05 and R15](features/threads.md#requirements); ownership, edits and captured requests follow the [instruction rules](features/instructions.md#rules).
 
-**Remaining:** concrete context limits and selection/precedence across global, Topic and Thread scopes. External text cannot override permissions.
+**Accepted, 2026-10-12:** instruction applicability, scope priority and the authority boundary follow [INST-R05–06 and R09](features/instructions.md#rules). Topic instructions guide Route; they are excluded from response guidance.
+
+**Accepted, 2026-10-12:** [Topics and working context](features/topics-context.md), including bounded linked-Topic retrieval, immutable captures and membership changes during work.
+
+**Accepted, 2026-10-12:** concrete limits and coverage in the [engineering test plan](../docs/plans/topics-context-tests.md). Automatic Route composition remains deferred.
 
 ### G06 — Deletion and retention
 
@@ -42,7 +46,7 @@ Deletion may mean hiding or erasing content from live data, captured requests, s
 
 Durable continuation lacks rules for cancellation, disconnection, crashes, duplicate delivery and concurrent inputs. Mistakes can duplicate output, actions and cost.
 
-**Accepted first-phase design:** concurrency, outcomes, recovery and cancellation follow [CONV-R07–11](features/conversations.md#requirements). Checkpoints and explicit retries follow the [execution contract](../docs/data-model.md#execution-and-transactions).
+**Accepted first-phase design:** concurrency, outcomes, recovery and cancellation follow [CONV-R07–11](features/threads.md#requirements). Checkpoints and explicit retries follow the [execution contract](../docs/data-model.md#execution-and-transactions).
 
 **Initial OpenAI policy:** explicit retries preserve the original model/options; cancellation aborts the local stream without promising reversal of provider work.
 
@@ -52,11 +56,11 @@ Durable continuation lacks rules for cancellation, disconnection, crashes, dupli
 
 Private access does not specify provider data access, recording retention or spending. Logging “thinking” cannot assume access to private model reasoning.
 
-**Selected provider:** OpenAI, using Responses for text first and its image capabilities later. [Live-mode behavior](features/conversations.md#requirements) and [configuration](../docs/features/conversations.md#openai-mode).
+**Selected provider:** OpenAI, using Responses for text first and its image capabilities later. [Live-mode behavior](features/threads.md#requirements) and [configuration](../docs/features/threads.md#openai-mode).
 
-**Initial live check:** the authorized model and bounded allowance passed the [text smoke test](../docs/features/conversations.md#verification).
+**Initial live check:** the authorized model and bounded allowance passed the [text smoke test](../docs/features/threads.md#verification).
 
-**Interactive development:** remove the short session call/time cap from normal chat. Keep routine automated verification offline; isolate optional live checks and use cheaper models where the behavior under test permits. [Provider rule](features/conversations.md#requirements) · [Test strategy](../docs/plans/persisted-chat-tests.md#openai-adapter).
+**Interactive development:** remove the short session call/time cap from normal chat. Keep routine automated verification offline; isolate optional live checks and use cheaper models where the behavior under test permits. [Provider rule](features/threads.md#requirements) · [Test strategy](../docs/plans/persisted-chat-tests.md#openai-adapter).
 
 **Remaining:** broader spending policy and retention/access before personal-data use. Use synthetic fixtures without observation. Provider application storage is disabled, but separate provider retention policies still apply.
 
@@ -84,7 +88,7 @@ Isolated per-app stores/runtimes must coexist with one core backend/database. Sa
 
 - Causality: [ART-R07](features/artifacts.md#rules) settles single-source chains initially; revisit merging only for a concrete workflow.
 - Moves/references: see [remaining artifact scope](features/artifacts.md#remaining-scope).
-- Visibility: manual archive/pin state is accepted under [CONV-R14](features/conversations.md#requirements). Automatic archive timing/revival, automation overrides, read markers, pin ordering and notification effects remain open.
+- Visibility: manual archive/pin state is accepted under [CONV-R14](features/threads.md#requirements). Automatic archive timing/revival, automation overrides, read markers, pin ordering and notification effects remain open.
 - Tasks: assignment does not define scheduling, completion or permission.
 - Live Mode: closing/resuming, interruptions, focus changes and device conflicts.
 - Scale: expected input volume and response/processing latency targets.

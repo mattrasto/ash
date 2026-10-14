@@ -4,7 +4,7 @@ Workflow accepted, 2026-10-09 · Persisted chat with live OpenAI previews
 
 Give each feature a Git worktree, a persistent preview and disposable verification environments. Repository commands own the runtime; Codex supplies worktrees and launch actions. Ash can later invoke the same commands for [self-modification](../specs/HUMAN_SPEC.md#modifying-ashs-code).
 
-The Electron/Svelte shell opens [persisted chat](features/conversations.md). Desktop verification uses conversations, drafts and sidebar preferences. The authenticated scratchpad API and `dev_scratch` fixture remain internal database/file isolation probes; there is no storage test screen or developer-info panel. Use `pnpm dev:status --json` for instance diagnostics. PITR operation, signed packaging, personal-data imports and production rollout remain deferred.
+The Electron/Svelte shell opens [persisted chat](features/threads.md). Desktop verification uses threads, drafts and sidebar preferences. The authenticated scratchpad API and `dev_scratch` fixture remain internal database/file isolation probes; there is no storage test screen or developer-info panel. Use `pnpm dev:status --json` for instance diagnostics. PITR operation, signed packaging, personal-data imports and production rollout remain deferred.
 
 ## Run the preview
 
@@ -15,7 +15,7 @@ pnpm dev:setup
 pnpm dev
 ```
 
-Use Codex's checked-in `.codex/environments/environment.toml` for automatic worktree setup and the [preview and test actions](#commands). In the current Codex layout, hide the sidebar to reveal Actions. The same commands work from a terminal. Setup uses `node scripts/dev/setup.mjs` so installation works before dependencies exist. Setup and automated tests require no credentials; the normal preview requires the checkout's [OpenAI key](features/conversations.md#openai-mode). Use `pnpm dev --deterministic` only for an explicit offline demo.
+Use Codex's checked-in `.codex/environments/environment.toml` for automatic worktree setup and the [preview and test actions](#commands). In the current Codex layout, hide the sidebar to reveal Actions. The same commands work from a terminal. Setup uses `node scripts/dev/setup.mjs` so installation works before dependencies exist. Setup and automated tests require no credentials; the normal preview requires the checkout's [OpenAI key](features/threads.md#openai-mode). Use `pnpm dev --deterministic` only for an explicit offline demo.
 
 The launcher requires process inspection, loopback sockets and Docker access. A coding-agent sandbox may need permission to run it; denial of process inspection fails closed. Logs live in the instance's `logs/` directory, and `pnpm dev:status --json` reports safe endpoints and errors. After changing launcher code or dependencies, stop and start again; app source changes reload automatically. Startup reuses the verified healthy database container unless its identity or Compose configuration changes. After restarting Docker, Run Preview restores the development service and reconnects the preview without reseeding, including when Docker assigns a different database port.
 
@@ -30,7 +30,13 @@ Read-only tools require an explicit [filesystem configuration](features/filesyst
 5. The coding agent reviews the diff and evidence, then demonstrates the feature and presents any targeted manual checks. Follow the [delivery agreement](../specs/product.md#confirmed-engineering-agreement) for review and integration.
 6. Preserve source changes in a Git checkpoint or saved patch, including relevant untracked files. Dispose of development resources before archiving the checkout; retain verification evidence.
 
-Keep `master` linear. Squash-merge completed pull requests; for local work, rebase onto current `master` and fast-forward. Rebase active feature branches when they need trunk updates instead of merging `master` into them. Remove completed branches after integration; preserve preview data and local configuration before retiring worktrees. Published history rewrites require explicit user approval and a recovery backup.
+## Git integration
+
+Each feature worktree must contribute exactly one commit to `master`, including its fixes and documentation. Keep recoverable checkpoint commits while developing, then squash them before integration. For multiple worktrees, retain one commit per worktree in dependency order; fold conflict resolutions and integration fixes into the corresponding feature commit.
+
+Keep `master` linear: squash-merge pull requests, or squash and rebase local work onto current `master`, verify the resulting revision, then fast-forward. Do not fast-forward an unsquashed feature branch or create merge commits. Rebase active feature branches when they need trunk updates.
+
+Remove completed branches after integration; preserve preview data and local configuration before retiring worktrees. Published history rewrites require explicit user approval and a recovery backup.
 
 ## Workspace and instance identity
 
@@ -80,7 +86,7 @@ This provides application data isolation for trusted local development. Processe
 
 ### Fixtures and personal data
 
-Versioned `empty` and `scratchpad` fixtures both seed the base response instructions; they start with no conversations. Seeding a new instance is automatic; starting an existing preview never reseeds it. Add `conversation` and failure/interruption scenarios with product features, seeded through application commands or validated synthetic data. Freeze clock/ID sources where assertions require repeatability.
+Versioned `empty` and `scratchpad` fixtures both seed the base response instructions; they start with no threads. Seeding a new instance is automatic; starting an existing preview never reseeds it. Add `thread` and failure/interruption scenarios with product features, seeded through application commands or validated synthetic data. Freeze clock/ID sources where assertions require repeatability.
 
 Personal snapshots remain outside the initial workflow under [G06 and G09](../specs/open-questions.md). A later import must be explicit, sanitize sensitive content, exclude credentials, mark unfinished runs interrupted, and leave external actions disabled. Copy database state and referenced files at a consistent boundary. Use a non-disruptive export, not a template clone that terminates the source's sessions. Import never overwrites a preview implicitly.
 
@@ -88,7 +94,7 @@ Personal snapshots remain outside the initial workflow under [G06 and G09](../sp
 
 `scripts/dev/` is the TypeScript lifecycle library and CLI; its launcher supervises child processes. Package scripts and Codex actions call it; a later Ash/MCP adapter can do the same. A bootstrap entry uses only Node built-ins until pinned dependencies are installed. Workspace lifecycle logic stays outside product feature modules; the application consumes validated runtime configuration.
 
-Resolve checked-in defaults, local development options and explicit command arguments in that order. The launcher generates instance identity, storage roots, database access, service addresses and an authentication token. Reject conflicting inherited `DATABASE_URL`, application-home or port settings instead of silently mixing configurations. Keep generated runtime secrets in protected instance files; the developer's OpenAI key uses [`.env.local`](features/conversations.md#openai-mode). Status output exposes only safe metadata.
+Resolve checked-in defaults, local development options and explicit command arguments in that order. The launcher generates instance identity, storage roots, database access, service addresses and an authentication token. Reject conflicting inherited `DATABASE_URL`, application-home or port settings instead of silently mixing configurations. Keep generated runtime secrets in protected instance files; the developer's OpenAI key uses [`.env.local`](features/threads.md#openai-mode). Status output exposes only safe metadata.
 
 A versioned manifest records workspace/instance IDs, checkout and source fingerprint, profile, fixture version, schema version, service addresses, storage paths and lifecycle state. Backend, desktop launcher and test driver consume that resolved configuration or a safe subset. None independently hashes a name, appends a database suffix or adds a port offset.
 
@@ -97,7 +103,7 @@ A versioned manifest records workspace/instance IDs, checkout and source fingerp
 1. Lock the instance; prepare its directories, database and migrations. A second start attaches to or opens the existing healthy instance. An incompatible database stops startup with a migration/reset diagnostic; it never triggers an automatic reset.
 2. Start only the declared backend, frontend and desktop processes. Experimental packages have separate commands rather than joining a recursive `dev` invocation.
 3. Bind the backend on loopback with an OS-assigned port. On first launch, Vite retries actual binds for a random frontend port, then stores it in the instance's `frontend.json`. Reuse that port across restarts so browser drafts and preferences keep their origin; an occupied saved port fails startup instead of moving storage. Existing desktops adopt the URL from `client.json`. Stop the conflicting listener before retrying. Disposal removes the port record; reset clears client state. Never probe availability before binding. [Node server listen](https://nodejs.org/api/net.html#serverlistenport-host-backlog-callback)
-4. Require an authenticated readiness response matching the expected instance and schema before launching the client. A listening socket alone is insufficient. UI verification also waits for a connected conversation.
+4. Require an authenticated readiness response matching the expected instance and schema before launching the client. A listening socket alone is insufficient. UI verification also waits for a connected thread.
 5. Record owned process groups and process start identity. Stop by ownership, never by port number or a bare remembered PID. On normal stop, startup failure or cancellation, close owned clients/workers and terminate their process groups with a bounded graceful period and forced fallback.
 
 Unexpected supervisor loss must leave recoverable ownership records; the next status/start reconciles surviving processes before replacing them. Hot reload preserves the instance's data. If a service restart changes its address, republish configuration and reconnect or relaunch the client. Foreign listeners are never killed.
@@ -145,12 +151,12 @@ Later, Ash can attach a workspace ID and verification report to a Run and use th
 
 ## Workflow acceptance
 
-The storage/lifecycle suite and deterministic chat checks cover the implemented slice. Conversation/PITR recovery (DEV-10), full worker parallelism, foreground-focus guarantees, exhaustive startup cancellation and orphan tooling remain deferred or unverified.
+The storage/lifecycle suite and deterministic chat checks cover the implemented slice. Thread/PITR recovery (DEV-10), full worker parallelism, foreground-focus guarantees, exhaustive startup cancellation and orphan tooling remain deferred or unverified.
 
 | ID | Scenario and required result |
 | --- | --- |
 | DEV-01 | Set up two worktrees simultaneously: each gets distinct identities/data; the shared database service is created once and neither setup clears existing state. |
-| DEV-02 | Run two previews plus verification: change conversations, instructions, settings and files in one; all others remain unchanged, and its runtime database credentials cannot connect to a sibling. |
+| DEV-02 | Run two previews plus verification: change threads, instructions, settings and files in one; all others remain unchanged, and its runtime database credentials cannot connect to a sibling. |
 | DEV-03 | Occupy a candidate port with an unrelated process: startup selects another valid address or fails clearly; the unrelated process remains alive and no client connects to it. |
 | DEV-04 | Start the same preview twice: one backend remains; both commands identify the same instance. Restart/reconnect preserves its data. |
 | DEV-05 | Run tests in parallel across and within worktrees: no shared mutable database, file directory or build output; one worker's cleanup cannot affect another. |
@@ -158,7 +164,7 @@ The storage/lifecycle suite and deterministic chat checks cover the implemented 
 | DEV-07 | Reset a populated preview: all mutable application state returns to the fixture, old client credentials fail, and source/evidence/sibling state is unchanged. A forged target or symlink escape is rejected. |
 | DEV-08 | Run with inherited personal connection/path/key settings: launcher rejects conflicts and synthetic children receive no personal credentials. Inspect written paths and captured external actions. |
 | DEV-09 | Rename a branch or start from detached HEAD: resource ownership remains stable. A copied workspace marker cannot take ownership of the original instance. |
-| DEV-10 | Restore conversation data under C10 in an isolated PostgreSQL instance: state matches the selected recovery point, external-call count is zero, and startup does not redispatch restored work. |
+| DEV-10 | Restore thread data under C10 in an isolated PostgreSQL instance: state matches the selected recovery point, external-call count is zero, and startup does not redispatch restored work. |
 | DEV-11 | Verify while a human uses the preview: preview state/focus is preserved, evidence identifies the tested source, and changing source invalidates the result. |
 | DEV-12 | Dispose resources and remove the checkout: no owned processes/databases remain; reports survive. Unexpected checkout removal exposes orphaned resources without deleting them automatically. |
 

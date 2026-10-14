@@ -2,7 +2,7 @@
 
 Behavior accepted, 2026-10-12 · Implemented · [Verification](../../docs/features/tools.md#verification)
 
-[Conversations](conversations.md) · [Artifact rules](artifacts.md) · [Permissions](permissions.md) · [Asha reference review](../../docs/features/tool-use-reference.md)
+[Threads](threads.md) · [Artifact rules](artifacts.md) · [Permissions](permissions.md) · [Asha reference review](../../docs/features/tool-use-reference.md)
 
 ## Goal
 
@@ -10,25 +10,25 @@ Ash can use available tools to complete a request while the user follows progres
 
 ## Scope and flow
 
-One Run can make several model calls, execute tools, return their results to the model and produce an answer. Filesystem tools and Topic retrieval are separate feature registrations on the shared execution system. Existing text/image conversations remain available.
+One Run can make several model calls, execute tools, return their results to the model and produce an answer. Filesystem tools and Topic retrieval are separate feature registrations on the shared execution system. Existing text/image threads remain available.
 
 1. The user requests work. Ash receives descriptions of the tools and resources available for that request.
 2. Ash calls tools as needed and uses their results to decide what comes next. Progress shows proposed, active and finished work.
 3. The user can stop the Run or expand a step to inspect its arguments, result and outcome.
-4. Ash provides an answer or explains why work stopped. The saved conversation and execution evidence remain available after reopening.
+4. Ash provides an answer or explains why work stopped. The saved thread and execution evidence remain available after reopening.
 
 This slice excludes filesystem writes, shell execution, delegation and its feasibility investigation, general MCP/plugins, permission management, Decisions and self-modification.
 
 ## Rules
 
-- **TOOL-R01 — Workflow and concurrency:** one active Run per thread does not mean one active tool call. Independent calls may run concurrently within a bounded allowance; dependent calls wait for their inputs, and calls that cannot safely overlap are serialized. A call keeps its identity and result regardless of completion order. The [conversation draft and concurrency rules](conversations.md#requirements) still apply.
+- **TOOL-R01 — Workflow and concurrency:** one active Run per thread does not mean one active tool call. Independent calls may run concurrently within a bounded allowance; dependent calls wait for their inputs, and calls that cannot safely overlap are serialized. A call keeps its identity and result regardless of completion order. The [thread draft and concurrency rules](threads.md#requirements) still apply.
 - **TOOL-R02 — Available capabilities:** Ash knows each available tool's purpose, arguments, limits and accessible resources. Tool availability and permission are distinct: a tool appearing in a request does not authorize every use. Capture the definitions, scope information and availability problems actually supplied; later configuration changes cannot rewrite that record. An unavailable optional capability leaves ordinary chat and healthy capabilities usable; its limitation remains visible in progress and inspection.
 - **TOOL-R03 — Tool-specific behavior:** each tool defines its operation, accepted inputs, possible results, effects and whether calls can safely overlap or be repeated. The execution system does not assume every tool reads a repository, returns text or uses a frozen source. The initial capabilities are listed below.
 - **TOOL-R04 — Authorization boundary:** check the concrete action and targets before execution through a common authorization boundary. Permissions owns access policy and protected-resource defaults under [PERM-R01, R07, R09–13](permissions.md#rules). This spec adds no permanent list of forbidden paths. Configured scopes still apply to canonical targets, including every target reached through search or symlinks. Tool results cannot grant authority.
 - **TOOL-R05 — Results and evidence:** preserve the result actually returned, including structured data, supported attachment references, errors and omissions. Identify the source and observation time/version where meaningful. Source citations lead to captured supporting excerpts and distinguish successive observations of the same resource. Ash distinguishes observed results from inference and does not claim a current action succeeded based only on an old result or its own narration.
 - **TOOL-R06 — Progress and answer:** show a concise label, relevant target and status for each call, with public commentary alongside progress. Preparing a call must not look like executing it. Keep progress visible while working and collapse completed work to a summary; errors stay discoverable and user expansion choices are respected. Stop remains available throughout. Preserve keyboard access, focus and reading position.
 - **TOOL-R07 — Inspection:** expose each model request, supplied tool definitions, complete call arguments, validation/access outcomes, results, timing, provider identity when relevant and the final Run outcome. Show which results informed each continuation and which calls overlapped. Inspection is a normal product capability. Exclude credentials and private reasoning; provider continuation material remains opaque and outside public inspection. Public commentary is labeled commentary, not private reasoning.
-- **TOOL-R08 — Durable history:** save requests, calls, results and progress boundaries as work happens. Captured records remain immutable when source data, instructions or configuration change. Preserve [single-source Artifact lineage](artifacts.md#rules), historical text/image readability and existing [follow-up context selection](conversations.md#requirements).
+- **TOOL-R08 — Durable history:** save requests, calls, results and progress boundaries as work happens. Captured records remain immutable when source data, instructions or configuration change. Preserve [single-source Artifact lineage](artifacts.md#rules), historical text/image readability and existing [follow-up context selection](threads.md#requirements).
 - **TOOL-R09 — Failures and limits:** invalid/incomplete calls do not execute. Return actionable, structured errors; a denial is not a success with an error hidden in its body. Recoverable errors may lead to corrected calls within the Run. Bound work, concurrency, time, repeated failures and result size. Report truncation and skipped content explicitly; if work cannot continue, retain progress and explain the stop reason.
 - **TOOL-R10 — Stop and interruption:** Stop prevents further dispatch and requests cancellation of all active calls. Keep completed results; distinguish calls never started from cancelled or interrupted calls and unknown outcomes. Late events cannot revive a stopped Run. Reconnect reads saved state; backend restart never automatically repeats work. Cancellation cannot promise reversal of an effect already started.
 - **TOOL-R11 — Retry and duplicate delivery:** deliberate Retry creates a linked Run from the captured request, with access checked again. Its new observations do not replace earlier results. Whether an operation can be repeated depends on its effects and known outcome; Retry does not authorize blind replay of future writes. Duplicate delivery of a submission or execution step does not repeat that work.

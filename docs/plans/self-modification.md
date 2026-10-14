@@ -1,14 +1,14 @@
 # Path to the first self-modification
 
-Direction accepted, 2026-10-12 · Images and inspectable tools implemented · Later designs proposed
+Direction accepted, 2026-10-12 · Images, inspectable tools and Topics/context implemented · Later designs proposed
 
 Build toward a small code change completed through Ash: screenshot → discussion → isolated Codex workspace → tests and preview → reviewed application → revert. Start with image understanding and usable chat; add tools and explicit context before delegating code changes.
 
-[Product intent](../../specs/HUMAN_SPEC.md#modifying-ashs-code) · [Open decisions](../../specs/open-questions.md) · [Existing implementation](../features/conversations.md)
+[Product intent](../../specs/HUMAN_SPEC.md#modifying-ashs-code) · [Open decisions](../../specs/open-questions.md) · [Existing implementation](../features/threads.md)
 
 ## First complete demonstration
 
-In an “Ash development” Topic, paste a screenshot and ask Ash to improve a small part of its own interface. Ash reads relevant specifications/source, uses the Topic's guidance, and delegates an agreed change to the detached Codex harness. The user can follow progress, stop work, inspect the diff and verification evidence, try an isolated preview, and approve the exact revision to apply. After restarting Ash, the change works and existing conversations/images remain. Reverting restores the previous application version without erasing subsequent chat.
+In an “Ash development” Topic, paste a screenshot and ask Ash to improve a small part of its own interface. Ash reads relevant specifications/source and prior threads in the Topic, then delegates an agreed change to the detached Codex harness. The user can follow progress, stop work, inspect the diff and verification evidence, try an isolated preview, and approve the exact revision to apply. After restarting Ash, the change works and existing threads/images remain. Reverting restores the previous application version without erasing subsequent chat.
 
 Use a UI-only change for this demonstration. Database migrations, dependency upgrades and changes to permissions, credentials or the runner require additional rollout contracts. Custom apps, automatic organization, semantic memory, voice and general computer control are outside this path. Add image generation when a change needs new assets; screenshot understanding is the immediate dependency.
 
@@ -20,14 +20,14 @@ Each slice follows the [delivery agreement](../../specs/product.md#confirmed-eng
 | --- | --- | --- |
 | 1. Images and usable chat | Persisted image input, multimodal request capture, thumbnails/full-size view, readable Markdown and code, clear pending/error states. | Paste a screenshot, discuss it over two turns, restart, inspect the exact images sent, and retry from the original snapshot. |
 | 2. Inspectable tools | Common execution/inspection for multi-call Runs; general read-only filesystem tools; progress and cancellation. | Ask where a behavior is implemented. Ash reads permitted source and answers with references; inspection explains each call. |
-| 3. Topics and working context | Manual Topic membership, global/Topic/Thread instruction editors, explicit references and retrieval within linked Topics. | Continue development in a new thread using selected prior findings and Topic guidance; inspect what entered context and what was omitted. |
+| 3. Topics and working context | Manual Topic membership, global/Topic/Thread instruction editors and retrieval within linked Topics. Topic instructions guide Route; automatic routing and explicit references are deferred. | Continue development in a new thread using retrieved prior findings; inspect the supplied context and factual limit/truncation metadata. |
 | 4. Delegated changes | Contained Codex runner, durable workspace records, Decisions, diff/test/preview UI, and controlled apply/revert. | Complete the first demonstration above, including a denied action, restart during work, stale approval rejection and a successful revert. |
 
 The user deferred the Codex integration feasibility check on 2026-10-12. It is not a prerequisite for slice 2 and does not enable delegation or self-modification in that slice.
 
 ## 1. Images and usable chat
 
-Accepted and implemented under the [image spec](../../specs/features/images.md). [Implementation and test plan](../features/images.md) covers the Asha adaptations, description model/cost, persistence, context limits, viewer and Markdown. Offline and bounded live verification passed. The subsequent [conversation UX alignment](../features/conversation-ux.md) extends this slice before tool execution.
+Accepted and implemented under the [image spec](../../specs/features/images.md). [Implementation and test plan](../features/images.md) covers the Asha adaptations, description model/cost, persistence, context limits, viewer and Markdown. Offline and bounded live verification passed. The subsequent [thread UX alignment](../features/thread-ux.md) extends this slice before tool execution.
 
 ## 2. Inspectable tool execution
 
@@ -44,11 +44,11 @@ The plan owns implementation details, limits and test cases; the product spec ow
 Reuse the existing Topic, ThreadTopic and Instruction ownership model; no new semantic-memory store is needed.
 
 - Add manual Topic creation/renaming and thread linking/unlinking, plus editors for global, Topic and Thread instructions. User edits update current documents; historical requests retain their snapshots under [INST-R04](../../specs/features/instructions.md#rules).
-- Proposed composition: global instructions, linked Topic instructions in stable `linkedAt`/ID order, then Thread instructions. Show this order. Thread guidance can refine broader guidance; conflicting Topic guidance needs clarification rather than a hidden priority. Editable instructions cannot grant tool permissions. Finalize this proposal under [G05](../../specs/open-questions.md#g05--context-selection) before implementation.
-- Let the user explicitly reference prior messages/images. Add bounded keyword search/read tools across linked Topics; unrelated threads stay out unless deliberately selected. Capture the returned excerpts and identities actually sent to the model, including truncation. Defer embeddings, automatic summaries and inferred membership.
-- Expose a context view with instructions, selected history, references, tool results and omissions. Replace the selector's assumption that every Instruction has a global `key` with explicit scope and identity.
+- Instruction applicability, priority and authority follow [INST-R05–06 and R09](../../specs/features/instructions.md#rules). Show the captured order in inspection.
+- Add bounded keyword search/read tools across linked Topics; unrelated threads stay out. Capture the returned excerpts and identities actually sent to the model, including truncation. Defer explicit references, embeddings, automatic summaries and inferred membership.
+- Expose a context view with applicable instructions, selected history, tool results and compact limit/truncation metadata. Do not record selection reasoning. Replace the selector's assumption that every Instruction has a global `key` with explicit scope and identity.
 
-Verify zero/multiple Topics, instruction edits between submission and dispatch, removed/deleted Topics, independent ownership, conflicting guidance, context-budget omissions and isolation from unrelated threads. A request already captured must not change when memberships or instructions change. Ash-authored instruction edits remain unavailable until the Decision gate below exists.
+Verify zero/multiple Topics, instruction edits between submission and dispatch, removed/deleted Topics, independent ownership, exclusion of routing guidance from responses, context limits and isolation from unrelated threads. A request already captured must not change when memberships or instructions change. Ash-authored instruction edits remain unavailable until the Decision gate below exists.
 
 ## 4. Codex workspaces, Decisions and application
 

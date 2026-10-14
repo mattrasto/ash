@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
   import { isActive, type AttachmentView } from '@ash/shared';
-  import Menu from '../conversations/Menu.svelte';
-  import Icon from '../conversations/Icon.svelte';
+  import Menu from '../threads/Menu.svelte';
+  import Icon from '../threads/Icon.svelte';
   let {images,startIndex=0,onClose,onRetry}:{images:AttachmentView[];startIndex?:number;onClose:()=>void;onRetry:(image:AttachmentView)=>Promise<void>}=$props();
   let index=$state(untrack(()=>startIndex));
   let dialog:HTMLDialogElement,strip=$state<HTMLDivElement>();

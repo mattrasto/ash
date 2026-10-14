@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderMarkdown } from '../../packages/client/src/renderer/features/conversations/markdown.ts';
-import { citationResult, parseSourceCitation } from '../../packages/client/src/renderer/features/conversations/citations.ts';
+import { renderMarkdown } from '../../packages/client/src/renderer/features/threads/markdown.ts';
+import { citationResult, parseSourceCitation } from '../../packages/client/src/renderer/features/threads/citations.ts';
 test('Markdown renders useful structure without active HTML, unsafe links or remote image fetches',()=>{
   const rendered=renderMarkdown('# Heading\n\n- One\n- Two\n\n```ts\nconst x = "<script>";\n```\n\n<script>alert(1)</script>\n\n![secret](https://example.com/pixel.png)\n\n[bad](javascript:alert%281%29) [good](https://example.com)');
   assert.match(rendered,/<h1>Heading<\/h1>/);assert.match(rendered,/<ul>/);assert.match(rendered,/data-copy-code/);

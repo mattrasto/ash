@@ -8,7 +8,7 @@ import { mkdir, readFile, copyFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { _electron, type ElectronApplication } from 'playwright';
-import { ServerConfig, modelContentText, type ThreadView, type Instance, type ConversationView, type RunView, type InspectionView, type RequestPayload } from '../../packages/shared/src/index.ts';
+import { ServerConfig, modelContentText, type ThreadView, type Instance, type ThreadDetail, type RunView, type InspectionView, type RequestPayload } from '../../packages/shared/src/index.ts';
 import { devRoot, json, id, atomic, childEnvironment, sleep, exec } from '../../scripts/dev/io.ts';
 import { workspace, createInstance } from '../../scripts/dev/workspace.ts';
 import { startInstance, stopInstance, disposeInstance, runtime } from '../../scripts/dev/lifecycle.ts';
@@ -16,15 +16,15 @@ import { buildMain } from '../../scripts/dev/build.ts';
 import { ensureCluster, connect } from '../../scripts/dev/database.ts';
 import { migrateProduct } from '../../scripts/dev/product-database.ts';
 import { connectProduct } from '../../packages/server/src/platform/db/client.ts';
-import { Conversations } from '../../packages/server/src/modules/conversations/service.ts';
+import { Threads } from '../../packages/server/src/modules/threads/service.ts';
 
 const require = createRequire(join(process.cwd(),'package.json'));
 async function until<T>(read:()=>Promise<T>,accept:(value:T)=>boolean,timeout=12000):Promise<T> {
   const deadline=Date.now()+timeout;
   do { const value=await read(); if (accept(value)) return value; await sleep(40); } while(Date.now()<deadline);
-  throw new Error('Timed out waiting for conversation state');
+  throw new Error('Timed out waiting for thread state');
 }
-test('persisted deterministic conversation and Artifact inspection', {timeout:180_000}, async t=>{
+test('persisted deterministic thread and Artifact inspection', {timeout:180_000}, async t=>{
   const ws=await workspace(process.cwd(),await devRoot());
   const evidence=process.env.ASH_TEST_EVIDENCE ?? join(ws.devRoot,'evidence',id());
   await mkdir(evidence,{recursive:true});
@@ -32,14 +32,14 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
   let app:ElectronApplication|undefined;
   const cfg=ServerConfig.parse(await json(join(instance.root,'server.json')));
   const db=connectProduct(cfg.databaseUrl);
-  const direct=new Conversations(db,undefined,false);
+  const direct=new Threads(db,undefined,false);
   async function request(path:string,body?:object) {
     const state=(await runtime(instance))!;
     return fetch(`${state.serverUrl}/api/${path}`,{method:body ? 'POST':'GET',headers:{authorization:`Bearer ${cfg.token}`,'content-type':'application/json'},...(body ? {body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(10000)});
   }
   async function api<T>(path:string,body?:object):Promise<T> {const response=await request(path,body); assert.equal(response.status,200,await response.clone().text());return response.json();}
   const newThread=async(title:string)=>{const threadId=randomUUID(); await api('threads',{id:threadId,title});return threadId;};
-  const view=(threadId:string)=>api<ConversationView>(`threads/${threadId}`);
+  const view=(threadId:string)=>api<ThreadDetail>(`threads/${threadId}`);
   const settled=(threadId:string,runId:string)=>until(()=>view(threadId),value=>value.runs.some(run=>run.id===runId && !['queued','running'].includes(run.status)));
   const send=(threadId:string,text:string,mode='normal',requestKey=randomUUID())=>api<RunView>(`threads/${threadId}/messages`,{text,mode,requestKey});
   let threadId='';
@@ -59,7 +59,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
         const checks=await admin`SELECT conname FROM pg_constraint WHERE contype='c' AND conrelid IN ('runs'::regclass,'artifacts'::regclass)`;
         assert.equal(checks.length,11);
         const columns=await admin`SELECT table_name,column_name,data_type,is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name IN ('topics','threads','thread_topics','artifacts','instructions','runs')`;
-        assert.equal(columns.length,43);
+        assert.equal(columns.length,44);
         await checkDiagram(admin,evidence);
       } finally {await admin.end();}
       await assert.rejects(db.$executeRawUnsafe('CREATE TABLE forbidden (id integer)'),/permission denied/);
@@ -69,20 +69,20 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       assert.match(difference.stdout,/No difference detected/);
     });
     await scenarioStep(t, 'chat-organization',async()=>{
-      const target=await newThread('New conversation');
+      const target=await newThread('New Thread');
       const run=await send(target,'A first message\nwith a useful title','slow');
       assert.equal((await view(target)).thread.title,'A first message with a useful title');
-      const unicode=await newThread('New conversation');const named=await send(unicode,'🙂'.repeat(90),'empty');await settled(unicode,named.id);assert.equal((await view(unicode)).thread.title,'🙂'.repeat(79)+'…');
+      const unicode=await newThread('New Thread');const named=await send(unicode,'🙂'.repeat(90),'empty');await settled(unicode,named.id);assert.equal((await view(unicode)).thread.title,'🙂'.repeat(79)+'…');
       const before=(await view(target)).thread;
-      await api(`threads/${target}`,{title:'Renamed conversation',isArchived:true});
+      await api(`threads/${target}`,{title:'Renamed thread',isArchived:true});
       const archived=(await api<ThreadView[]>('threads')).find(thread=>thread.id===target)!;
-      assert.equal(archived.isArchived,true);assert.equal(archived.title,'Renamed conversation');
+      assert.equal(archived.isArchived,true);assert.equal(archived.title,'Renamed thread');
       assert.equal(archived.updatedAt,before.updatedAt);assert.equal(archived.latestRun?.id,run.id);
       assert.ok(['queued','running'].includes(archived.latestRun!.status));
       await settled(target,run.id);assert.equal((await view(target)).artifacts.length,2);
       await api(`threads/${target}`,{isArchived:false});
       const followup=await send(target,'Keep the manual title','normal');await settled(target,followup.id);
-      assert.equal((await view(target)).thread.title,'Renamed conversation');
+      assert.equal((await view(target)).thread.title,'Renamed thread');
       for(const body of [{title:' '},{isArchived:'yes'},{isPinned:true},{}])assert.equal((await request(`threads/${target}`,body)).status,400);
       await assert.rejects(db.thread.update({where:{id:target},data:{isPinned:true}}),/permission denied/);
     });
@@ -136,7 +136,8 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       const request=(await db.artifact.findUniqueOrThrow({where:{id:followup.state.request_artifact_id}})).payload as RequestPayload;
       const good=(await view(threadId)).runs.find(r=>r.id===retry.id)!;
       assert.ok(request.selection.artifacts.some(a=>a.id===good.state.response_artifact_id));
-      assert.ok(request.selection.omitted.some(a=>a.reason==='not-completed'));
+      assert.ok(request.selection.omissions!.notCompleted>0);
+      assert.deepEqual(request.selection.omitted,[]);
       assert.equal(await db.artifact.count({where:{layer:'surface',sourceId:failed.inputArtifactId}}),1);
       const empty=await send(threadId,'Empty output','empty');const emptyState=await settled(threadId,empty.id);
       assert.deepEqual((emptyState.artifacts.find(a=>a.runId===empty.id)!.payload as {content:unknown[]}).content,[]);
@@ -164,7 +165,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       for (let index=0;index<3;index++) {const accepted=await send(target,`${index}:`+'x'.repeat(2998),'empty');await settled(target,accepted.id);}
       const current=await send(target,'Latest '+ 'y'.repeat(3990),'empty');await settled(target,current.id);
       const captured=(await db.artifact.findUniqueOrThrow({where:{id:current.state.request_artifact_id}})).payload as RequestPayload;
-      assert.ok(captured.selection.omitted.some(item=>item.reason==='context-limit'));
+      assert.ok(captured.selection.omissions!.history>0);
       assert.ok(captured.messages.reduce((sum,message)=>sum+message.content.length,0)<=captured.selection.maxCharacters);
       assert.ok(modelContentText(captured.messages.at(-1)!.content).startsWith('Latest'));
       assert.equal((await requestOversized()).status,400);
@@ -209,10 +210,10 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       app=await launch();let page=await app.firstWindow();
       const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
       await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
-      await page.getByRole('button',{name:'New conversation',exact:true}).first().click();
-      await page.getByRole('button',{name:'Actions for New conversation',exact:true}).first().click();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
-      await page.getByLabel('Conversation title').fill('Desktop conversation');await page.getByRole('button',{name:'Save title',exact:true}).click();
-      await page.getByRole('heading',{name:'Desktop conversation',exact:true}).waitFor();
+      await page.getByRole('button',{name:'New Thread',exact:true}).first().click();
+      await page.getByRole('button',{name:'Actions for New Thread',exact:true}).first().click();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
+      await page.getByLabel('Thread title').fill('Desktop thread');await page.getByRole('button',{name:'Save title',exact:true}).click();
+      await page.getByRole('heading',{name:'Desktop thread',exact:true}).waitFor();
       await page.getByLabel('Message',{exact:true}).fill('Hello from Electron');await page.getByRole('button',{name:'Send message',exact:true}).click();
       await page.getByTestId('run-status').filter({hasText:'completed'}).waitFor();
       await page.getByLabel('Message',{exact:true}).fill('What did I just say?');await page.getByRole('button',{name:'Send message',exact:true}).click();
@@ -224,7 +225,7 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       await page.getByRole('button',{name:'Close inspector'}).click();
       await page.getByLabel('Message',{exact:true}).fill('Keep this draft');
       await page.getByRole('navigation',{name:'Threads'}).getByRole('button',{name:'Persisted repair checklist',exact:true}).click();
-      await page.getByRole('navigation',{name:'Threads'}).getByRole('button',{name:'Desktop conversation',exact:true}).click();
+      await page.getByRole('navigation',{name:'Threads'}).getByRole('button',{name:'Desktop thread',exact:true}).click();
       assert.equal(await page.getByLabel('Message',{exact:true}).inputValue(),'Keep this draft');
       await page.getByText('Test response settings',{exact:true}).click();await page.getByLabel('Response behavior').selectOption('slow');
       await page.getByLabel('Message',{exact:true}).fill('Finish while the client is closed');await page.getByRole('button',{name:'Send message',exact:true}).click();
@@ -244,33 +245,33 @@ test('persisted deterministic conversation and Artifact inspection', {timeout:18
       await until(()=>page.getByTestId('run-status').filter({hasText:'completed'}).count(),count=>count===4);
       assert.equal(await page.getByTestId('message').count(),9);
       await checkStreaming(page);
-      // Composer keyboard behavior, per-conversation scroll, background indicators and archive recovery.
+      // Composer keyboard behavior, per-thread scroll, background indicators and archive recovery.
       await page.getByLabel('Response behavior').selectOption('slow');
       await page.getByLabel('Message',{exact:true}).fill('Line one');await page.getByLabel('Message',{exact:true}).press('Shift+Enter');await page.getByLabel('Message',{exact:true}).press('L');
       assert.equal(await page.getByLabel('Message',{exact:true}).inputValue(),'Line one\nL');
       // A wheel gesture also signals user intent while layout is changing.
       await page.locator('.transcript').hover();await page.mouse.wheel(0,-10000);
       await until(()=>page.locator('.transcript').evaluate(el=>el.scrollTop),top=>top<5);
-      await page.getByRole('button',{name:'New conversation',exact:true}).first().click();
-      await page.getByRole('heading',{name:'New conversation',exact:true}).waitFor();
+      await page.getByRole('button',{name:'New Thread',exact:true}).first().click();
+      await page.getByRole('heading',{name:'New Thread',exact:true}).waitFor();
       await until(()=>page.getByLabel('Message',{exact:true}).evaluate(el=>el===document.activeElement),v=>v,1500);
-      await page.getByLabel('Message',{exact:true}).fill('Automatically named conversation');await page.getByLabel('Message',{exact:true}).press('Enter');
-      await page.getByRole('heading',{name:'Automatically named conversation',exact:true}).waitFor();
-      await page.getByRole('button',{name:'Desktop conversation',exact:true}).click();
+      await page.getByLabel('Message',{exact:true}).fill('Automatically named thread');await page.getByLabel('Message',{exact:true}).press('Enter');
+      await page.getByRole('heading',{name:'Automatically named thread',exact:true}).waitFor();
+      await page.getByRole('button',{name:'Desktop thread',exact:true}).click();
       assert.equal(await page.getByLabel('Message',{exact:true}).inputValue(),'Line one\nL');
       // Draft selection is synchronous; history and its saved scroll position load afterward.
       await until(()=>page.getByTestId('message').count(),count=>count===9);
       await until(()=>page.locator('.transcript').evaluate(el=>el.scrollTop),top=>top<5,1500);
-      await page.locator('.row').filter({has:page.getByRole('button',{name:'Automatically named conversation',exact:true})}).getByLabel('Unread response',{exact:true}).waitFor();
-      await page.getByRole('button',{name:'Automatically named conversation',exact:true}).click();
-      await page.getByRole('button',{name:'Archive Automatically named conversation',exact:true}).click();
+      await page.locator('.row').filter({has:page.getByRole('button',{name:'Automatically named thread',exact:true})}).getByLabel('Unread response',{exact:true}).waitFor();
+      await page.getByRole('button',{name:'Automatically named thread',exact:true}).click();
+      await page.getByRole('button',{name:'Archive Automatically named thread',exact:true}).click();
       await page.getByRole('button',{name:/Archived \(1\)/}).click();
-      await page.getByRole('button',{name:'Automatically named conversation',exact:true}).click();
-      await page.getByRole('heading',{name:'Automatically named conversation',exact:true}).waitFor();
+      await page.getByRole('button',{name:'Automatically named thread',exact:true}).click();
+      await page.getByRole('heading',{name:'Automatically named thread',exact:true}).waitFor();
       assert.equal(await page.getByTestId('message').count(),2);
-      await page.getByRole('button',{name:'Unarchive Automatically named conversation',exact:true}).click();
-      await page.getByRole('button',{name:'Actions for Automatically named conversation',exact:true}).click();
-      await page.getByRole('menuitem',{name:'Rename',exact:true}).click();await page.getByLabel('Conversation title').fill('Renamed in sidebar');
+      await page.getByRole('button',{name:'Unarchive Automatically named thread',exact:true}).click();
+      await page.getByRole('button',{name:'Actions for Automatically named thread',exact:true}).click();
+      await page.getByRole('menuitem',{name:'Rename',exact:true}).click();await page.getByLabel('Thread title').fill('Renamed in sidebar');
       await page.getByRole('button',{name:'Save title',exact:true}).click();await page.getByRole('heading',{name:'Renamed in sidebar',exact:true}).waitFor();
       await page.getByRole('separator',{name:'Resize sidebar'}).press('ArrowRight');
       assert.equal(await page.getByRole('separator',{name:'Resize sidebar'}).getAttribute('aria-valuenow'),'270');

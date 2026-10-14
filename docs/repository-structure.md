@@ -1,6 +1,6 @@
 # Repository structure
 
-Product layout. Desktop, Prisma persistence, conversations and image modules exist; unused feature folders remain proposed.
+Product layout. Desktop, Prisma persistence, threads and image modules exist; unused feature folders remain proposed.
 
 ```text
 ash/
@@ -48,7 +48,7 @@ ash/
 │   │   │   ├── main.ts               # Process startup/shutdown
 │   │   │   ├── app.ts                # App assembly
 │   │   │   ├── modules/
-│   │   │   │   ├── conversations/    # Threads and conversation operations
+│   │   │   │   ├── threads/    # Threads and thread operations
 │   │   │   │   ├── attachments/      # Image storage, descriptions and cleanup
 │   │   │   │   ├── organization/     # Topics and membership
 │   │   │   │   ├── artifacts/        # Engine records, lineage and Surface content

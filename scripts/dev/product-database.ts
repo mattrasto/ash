@@ -38,6 +38,11 @@ export async function migrateProduct(instance: Instance, cluster: Cluster) {
       await tx.unsafe(`GRANT SELECT ON topics, threads, thread_topics, artifacts, instructions, runs, attachments, artifact_attachments TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT INSERT ON threads, artifacts, runs TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT SELECT, INSERT ON provider_continuations TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT INSERT ON topics, thread_topics, instructions TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT DELETE ON thread_topics TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT UPDATE (name, instruction_id, deleted_at, updated_at) ON topics TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT UPDATE (text, updated_at) ON instructions TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT UPDATE (instruction_id, topics_version) ON threads TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT INSERT, DELETE ON attachments, artifact_attachments TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT DELETE ON artifacts, runs TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT UPDATE (summary_run_id, summary, expires_at) ON attachments TO "${instance.runtimeRole}"`);

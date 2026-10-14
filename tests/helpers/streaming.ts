@@ -3,8 +3,8 @@ import type { Page } from 'playwright';
 
 export async function checkStreaming(page:Page) {
   const result=await page.evaluate(async()=>{
-    const modulePath='/src/renderer/features/conversations/streaming.ts';
-    const markdownPath='/src/renderer/features/conversations/markdown.ts';
+    const modulePath='/src/renderer/features/threads/streaming.ts';
+    const markdownPath='/src/renderer/features/threads/markdown.ts';
     const {StreamingMarkdown}=await import(modulePath),{renderMarkdown}=await import(markdownPath);
     const host=document.createElement('div');document.body.append(host);host.style.cssText='position:fixed;left:-10000px;width:500px';
     const renderer=new StreamingMarkdown(host);
@@ -29,7 +29,7 @@ export async function checkStreaming(page:Page) {
   await page.emulateMedia({reducedMotion:'reduce'});
   try {
     assert.equal(await page.evaluate(async()=>{
-      const path='/src/renderer/features/conversations/streaming.ts';const {StreamingMarkdown}=await import(path);
+      const path='/src/renderer/features/threads/streaming.ts';const {StreamingMarkdown}=await import(path);
       const host=document.createElement('div'),renderer=new StreamingMarkdown(host);renderer.prime('');renderer.update('Immediate accessible text',true);
       const immediate=host.textContent?.trim()==='Immediate accessible text'&&!host.querySelector('[style*="display: none"]');renderer.dispose();return immediate;
     }),true);

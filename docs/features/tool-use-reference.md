@@ -19,7 +19,7 @@ Reference checkout: `/Users/mattrasto/Documents/Programming/asha`, HEAD `0b0593c
 
 ## Differences and limits
 
-- **Scheduling:** [`runConversationTurn`](/Users/mattrasto/Documents/Programming/asha/packages/server/src/conversation/turn.ts) executes `toolUses` with sequential `await dispatchTool` (around line 1610). Ash's accepted TOOL-R01 permits bounded concurrent independent calls, so its scheduler needs a different design.
+- **Scheduling:** [`runThreadTurn`](/Users/mattrasto/Documents/Programming/asha/packages/server/src/conversation/turn.ts) executes `toolUses` with sequential `await dispatchTool` (around line 1610). Ash's accepted TOOL-R01 permits bounded concurrent independent calls, so its scheduler needs a different design.
 - **Freshness:** filesystem handlers read the live filesystem, with no per-Run source snapshot. Ash accepted this direction under [TOOL-R12](../../specs/features/tools.md#initial-filesystem-tools), adding immutable captured results for inspection.
 - **Policy:** Asha's `inHardDenylist` blocks `.ssh`, `.aws`, `.gnupg`, `.asha`, `.env*` and paths outside the home directory. Ash's PERM-R07 explicitly does not adopt these defaults. The accepted [TOOL-Q01 staging](../../specs/features/tools.md#accepted-decisions) keeps policy separate from handlers.
 - **Durability:** `recordStep` updates an in-memory map and emits progress; the main turn saves steps with the final assistant interaction. Unresolved running steps are filtered out at settlement. Ash must persist intermediate boundaries and preserve interrupted/unknown outcomes instead of dropping them.

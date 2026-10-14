@@ -7,13 +7,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { _electron,type ElectronApplication } from 'playwright';
-import { ServerConfig,RequestPayload,modelContentText,type AttachmentView,type ConversationView,type RunView,type InspectionView } from '../../packages/shared/src/index.ts';
+import { ServerConfig,RequestPayload,modelContentText,type AttachmentView,type ThreadDetail,type RunView,type InspectionView } from '../../packages/shared/src/index.ts';
 import { devRoot,json,id,atomic,childEnvironment,sleep,exec } from '../../scripts/dev/io.ts';
 import { workspace,createInstance } from '../../scripts/dev/workspace.ts';
 import { startInstance,stopInstance,disposeInstance,runtime } from '../../scripts/dev/lifecycle.ts';
 import { buildMain } from '../../scripts/dev/build.ts';
 import { connectProduct } from '../../packages/server/src/platform/db/client.ts';
-import { Conversations } from '../../packages/server/src/modules/conversations/service.ts';
+import { Threads } from '../../packages/server/src/modules/threads/service.ts';
 import { Attachments } from '../../packages/server/src/modules/attachments/service.ts';
 import { ImageStorage } from '../../packages/server/src/modules/attachments/storage.ts';
 import { deterministicModel } from '../../packages/server/src/platform/models/deterministic.ts';
@@ -30,10 +30,10 @@ test('persisted images, description Runs and desktop workflow (no external calls
   await makeWorktree(source,checkout);
   const ws=await workspace(checkout,await devRoot()),instance=await createInstance(ws,'test','empty');
   const cfg=ServerConfig.parse(await json(join(instance.root,'server.json'))),db=connectProduct(cfg.databaseUrl),storage=new ImageStorage(instance.root);
-  const images=new Attachments(db,storage,deterministicModel,false),conversations=new Conversations(db,deterministicModel,false,storage);
+  const images=new Attachments(db,storage,deterministicModel,false),threads=new Threads(db,deterministicModel,false,storage);
   const evidence=process.env.ASH_TEST_EVIDENCE??join(ws.devRoot,'evidence',id());await mkdir(evidence,{recursive:true});
   const bytes=await screenshotFixture();let app:ElectronApplication|undefined;
-  const settle=(thread:string,run:string)=>until(()=>conversations.readThread(thread),view=>view.runs.some(r=>r.id===run&&!['queued','running'].includes(r.status)));
+  const settle=(thread:string,run:string)=>until(()=>threads.readThread(thread),view=>view.runs.some(r=>r.id===run&&!['queued','running'].includes(r.status)));
   async function request(path:string,body?:object){const live=(await runtime(instance))!;return fetch(`${live.serverUrl}/api/${path}`,{method:body?'POST':'GET',headers:{authorization:`Bearer ${cfg.token}`,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});}
   async function api<T>(path:string,body?:object):Promise<T>{const result=await request(path,body);assert.equal(result.status,200,await result.clone().text());return result.json();}
   async function upload(filename:string,data=bytes,uploadId=randomUUID()){
@@ -48,17 +48,17 @@ test('persisted images, description Runs and desktop workflow (no external calls
       const uploadId=randomUUID();const [a,b]=await Promise.all([images.upload(uploadId,'screenshot.png',bytes),images.upload(uploadId,'screenshot.png',bytes)]);
       attachment=a;assert.equal(a.id,b.id);assert.equal(a.summaryRun!.id,b.summaryRun!.id);assert.equal(a.summaryRun!.threadId,null);
       await assert.rejects(images.upload(uploadId,'different.png',bytes),/another image/);
-      thread=randomUUID();await conversations.createThread(thread,'Frozen image context');
-      const key=randomUUID();first=await conversations.submit(thread,key,'What shapes do you see?','normal',[a.id]);
-      assert.equal((await conversations.submit(thread,key,'What shapes do you see?','normal',[a.id])).id,first.id);
+      thread=randomUUID();await threads.createThread(thread,'Frozen image context');
+      const key=randomUUID();first=await threads.submit(thread,key,'What shapes do you see?','normal',[a.id]);
+      assert.equal((await threads.submit(thread,key,'What shapes do you see?','normal',[a.id])).id,first.id);
       assert.equal((await images.get(a.id)).expiresAt,null);
       const frozen=RequestPayload.parse((await db.artifact.findUniqueOrThrow({where:{id:first.state.request_artifact_id}})).payload);
       assert.match(modelContentText(frozen.messages.at(-1)!.content),/Description unavailable/);
       images.dispatch(a.summaryRun!.id);const complete=await captionDone(a.id);assert.equal(complete.summaryRun!.status,'completed');assert.match(complete.summary!,/Deterministic test description/);
-      conversations.dispatch(first.id);await settle(thread,first.id);
-      const retry=await conversations.retry(first.id,randomUUID(),'normal');conversations.dispatch(retry.id);await settle(thread,retry.id);
+      threads.dispatch(first.id);await settle(thread,first.id);
+      const retry=await threads.retry(first.id,randomUUID(),'normal');threads.dispatch(retry.id);await settle(thread,retry.id);
       const retried=RequestPayload.parse((await db.artifact.findUniqueOrThrow({where:{id:retry.state.request_artifact_id}})).payload);assert.deepEqual(retried,frozen);
-      const followup=await conversations.submit(thread,randomUUID(),'Keep discussing the screenshot','empty');conversations.dispatch(followup.id);await settle(thread,followup.id);
+      const followup=await threads.submit(thread,randomUUID(),'Keep discussing the screenshot','empty');threads.dispatch(followup.id);await settle(thread,followup.id);
       const next=RequestPayload.parse((await db.artifact.findUniqueOrThrow({where:{id:followup.state.request_artifact_id}})).payload);assert.ok(next.messages.some(m=>modelContentText(m.content).includes('Deterministic test description')));
       const inspection=await api<InspectionView>(`artifacts/${complete.summaryRun!.state.response_artifact_id}`);
       assert.deepEqual(inspection.artifacts.map(a=>a.payload.type),['image_upload','model_request','image_description']);
@@ -73,10 +73,10 @@ test('persisted images, description Runs and desktop workflow (no external calls
       const duplicate=await request(`threads/${thread}/messages`,{requestKey:randomUUID(),text:'No duplicates',attachmentIds:[attachment.id,attachment.id]});assert.equal(duplicate.status,400);
       const foreign=await createInstance(ws,'test','empty');
       const foreignConfig=ServerConfig.parse(await json(join(foreign.root,'server.json'))),foreignDb=connectProduct(foreignConfig.databaseUrl);
-      try{const other=new Conversations(foreignDb);const id=randomUUID();await other.createThread(id,'Other instance');await assert.rejects(other.submit(id,randomUUID(),'Foreign image','normal',[attachment.id]),/unavailable/);}finally{await foreignDb.$disconnect();await disposeInstance(ws,foreign.id);}
+      try{const other=new Threads(foreignDb);const id=randomUUID();await other.createThread(id,'Other instance');await assert.rejects(other.submit(id,randomUUID(),'Foreign image','normal',[attachment.id]),/unavailable/);}finally{await foreignDb.$disconnect();await disposeInstance(ws,foreign.id);}
       const asset=await images.upload(randomUUID(),'corrupt.png',bytes);images.dispatch(asset.summaryRun!.id);await captionDone(asset.id);
       await writeFile(join(storage.root,asset.id,asset.metadata.model.hash),Buffer.alloc(asset.metadata.model.sizeBytes));
-      const run=await conversations.submit(thread,randomUUID(),'Broken bytes','normal',[asset.id]);conversations.dispatch(run.id);
+      const run=await threads.submit(thread,randomUUID(),'Broken bytes','normal',[asset.id]);threads.dispatch(run.id);
       const failed=await settle(thread,run.id);assert.equal(failed.runs.find(r=>r.id===run.id)!.status,'failed');
     });
     await scenarioStep(t, 'images-description-retry',async()=>{
@@ -113,8 +113,8 @@ test('persisted images, description Runs and desktop workflow (no external calls
       finally{release();await cleanup;storage.remove=remove;}
       const replacement=await images.upload(retiring.id,'retiring.png',bytes);assert.ok(await storage.read(replacement.id,replacement.metadata.original));
       const race=await images.upload(randomUUID(),'race.png',bytes);images.dispatch(race.summaryRun!.id);await captionDone(race.id);
-      const [submission]=await Promise.allSettled([conversations.submit(thread,randomUUID(),'Retain despite cleanup','empty',[race.id]),images.cleanup(new Date(Date.now()+25*60*60*1000))]);
-      if(submission.status==='fulfilled'){assert.equal((await images.get(race.id)).expiresAt,null);assert.ok(await storage.read(race.id,race.metadata.original));conversations.dispatch(submission.value.id);await settle(thread,submission.value.id);}
+      const [submission]=await Promise.allSettled([threads.submit(thread,randomUUID(),'Retain despite cleanup','empty',[race.id]),images.cleanup(new Date(Date.now()+25*60*60*1000))]);
+      if(submission.status==='fulfilled'){assert.equal((await images.get(race.id)).expiresAt,null);assert.ok(await storage.read(race.id,race.metadata.original));threads.dispatch(submission.value.id);await settle(thread,submission.value.id);}
       else assert.match(String(submission.reason),/expired or is unavailable/);
     });
     await scenarioStep(t, 'images-desktop',async()=>{
@@ -124,9 +124,9 @@ test('persisted images, description Runs and desktop workflow (no external calls
       const launch=()=>_electron.launch({executablePath:require('electron'),args:[entry],cwd:instance.checkout,env:{...childEnvironment(join(instance.root,'tmp')),ASH_CLIENT_CONFIG:path} as Record<string,string>,timeout:30000});
       app=await launch();let page=await app.firstWindow();const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
       await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
-      await page.getByRole('button',{name:'New conversation',exact:true}).first().click();
-      await page.getByRole('button',{name:'Actions for New conversation',exact:true}).first().click();assert.deepEqual(await page.getByRole('menuitem').allTextContents(),['Rename']);await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
-      await page.getByLabel('Conversation title').fill('Image workspace');await page.getByRole('button',{name:'Save title',exact:true}).click();
+      await page.getByRole('button',{name:'New Thread',exact:true}).first().click();
+      await page.getByRole('button',{name:'Actions for New Thread',exact:true}).first().click();assert.equal(await page.getByRole('menuitem').count(),3);for(const name of ['Topics','Instructions','Rename'])await page.getByRole('menuitem',{name,exact:true}).waitFor();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
+      await page.getByLabel('Thread title').fill('Image workspace');await page.getByRole('button',{name:'Save title',exact:true}).click();
       await page.getByRole('heading',{name:'Image workspace',exact:true}).waitFor();
       const uploads=[{name:'screenshot.png',mimeType:'image/png',buffer:bytes},{name:'portrait.jpg',mimeType:'image/jpeg',buffer:await orientedFixture()},{name:'second.png',mimeType:'image/png',buffer:await screenshotFixture('SECOND IMAGE')}];
       await page.getByLabel('Choose images',{exact:true}).setInputFiles(uploads);
@@ -203,7 +203,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       await until(()=>page.getByTestId('run-status').filter({hasText:'completed'}).count(),n=>n===2);
       assert.equal(await page.getByTestId('draft-image').count(),0);
       const current=(await api<Array<{id:string;title:string}>>('threads')).find(t=>t.title==='Image workspace')!;
-      const markdown=new Conversations(db,{...deterministicModel,async *stream(){yield '## Image notes\n\n- A yellow rectangle\n- A blue circle\n\n```ts\nconst ready = true;\n```\n\n<script>window.imageUnsafe = true</script>\n\n![Remote](https://example.com/tracker.png)';}},true,storage);
+      const markdown=new Threads(db,{...deterministicModel,async *stream(){yield '## Image notes\n\n- A yellow rectangle\n- A blue circle\n\n```ts\nconst ready = true;\n```\n\n<script>window.imageUnsafe = true</script>\n\n![Remote](https://example.com/tracker.png)';}},true,storage);
       try{const run=await markdown.submit(current.id,randomUUID(),'Format the notes','normal');await settle(current.id,run.id);}finally{await markdown.stop();}
       await page.getByRole('heading',{name:'Image notes',exact:true}).waitFor();assert.equal(await page.locator('img[src^="https:"]').count(),0);assert.equal(await page.evaluate(()=>(window as any).imageUnsafe),undefined);
       await app.evaluate(({clipboard})=>{clipboard.writeText=(text)=>{(globalThis as any).__textCopy=text;};});
@@ -211,7 +211,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       assert.equal(await app.evaluate(()=>(globalThis as any).__textCopy),'const ready = true;');
       await page.screenshot({path:join(evidence,'images-chat.png')});assert.deepEqual(errors,[]);
       let continueStream!:()=>void;const streamGate=new Promise<void>(resolve=>continueStream=resolve);
-      const streaming=new Conversations(db,{...deterministicModel,async *stream(){yield '## Reading position\n\n'+('A long paragraph for the scroll fixture.\n\n'.repeat(45));await streamGate;yield '\nMore text arrived while you were reading.';}},true,storage);
+      const streaming=new Threads(db,{...deterministicModel,async *stream(){yield '## Reading position\n\n'+('A long paragraph for the scroll fixture.\n\n'.repeat(45));await streamGate;yield '\nMore text arrived while you were reading.';}},true,storage);
       try {
         const run=await streaming.submit(current.id,randomUUID(),'Continue while I read above','normal');
         await page.getByRole('heading',{name:'Reading position',exact:true}).waitFor();
@@ -224,8 +224,8 @@ test('persisted images, description Runs and desktop workflow (no external calls
         assert.ok(await page.locator('.transcript').evaluate(el=>{const last=el.querySelector('.messages')!.lastElementChild!;const gap=el.getBoundingClientRect().bottom-last.getBoundingClientRect().bottom;return Math.abs(gap-el.clientHeight*.2)<3;}));
       }finally{continueStream();await streaming.stop();}
       // More than both former count caps survives composition, request capture and reload.
-      await page.getByRole('button',{name:'New conversation',exact:true}).click();
-      await page.getByRole('heading',{name:'New conversation',exact:true}).waitFor();
+      await page.getByRole('button',{name:'New Thread',exact:true}).click();
+      await page.getByRole('heading',{name:'New Thread',exact:true}).waitFor();
       await page.getByLabel('Choose images',{exact:true}).setInputFiles(Array.from({length:9},(_,i)=>({name:`batch-${i+1}.png`,mimeType:'image/png',buffer:bytes})));
       await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),v=>v);
       assert.equal(await page.getByTestId('draft-image').count(),9);
@@ -242,9 +242,9 @@ test('persisted images, description Runs and desktop workflow (no external calls
       await until(()=>page.locator('.gallery .tile').count(),n=>n===9);
       await page.screenshot({path:join(evidence,'images-many.png')});
       await app.close();app=undefined;
-      const before=await api<ConversationView>(`threads/${current.id}`);await stopInstance(ws,instance.id);await startInstance(ws,instance.id,{headless:true});assert.deepEqual(await api<ConversationView>(`threads/${current.id}`),before);
+      const before=await api<ThreadDetail>(`threads/${current.id}`);await stopInstance(ws,instance.id);await startInstance(ws,instance.id,{headless:true});assert.deepEqual(await api<ThreadDetail>(`threads/${current.id}`),before);
     });
   }finally{
-    await app?.close();await conversations.stop().catch(()=>{});await images.stop().catch(()=>{});await db.$disconnect();await disposeInstance(ws,instance.id);
+    await app?.close();await threads.stop().catch(()=>{});await images.stop().catch(()=>{});await db.$disconnect();await disposeInstance(ws,instance.id);
   }
 });

@@ -10,13 +10,13 @@ Sequencing is proposed. Source names refer to overview headings.
 
 | Feature | Scope from the source | Proposed placement | Source / unresolved issues |
 | --- | --- | --- | --- |
-| [Conversations](features/conversations.md) | Text input, visible artifacts, follow-up within a continuing matter | First | Interaction Model; G03, G05, G07 |
-| Topics and organization | Zero or more topics per thread; instructions; suggestions for linking, splitting, merging, moving, and references | Manual topic creation/linking first; intelligent organization later | Topics, Threads, and Artifacts; G04 |
+| [Threads](features/threads.md) | Text input, visible artifacts, follow-up within a continuing matter | First | Interaction Model; G03, G05, G07 |
+| [Topics and organization](features/topics-context.md) | Zero or more topics per thread; instructions; suggestions for linking, splitting, merging, moving, and references | Manual Topics and bounded context implemented; intelligent organization later | Topics, Threads, and Artifacts; G04 |
 | [Artifact processing and inspection](features/artifacts.md) | Listen → Input → Filter → Route → Act → Surface; trace results to inputs; inspect processing | Ownership and single-source chains accepted; application audit history deferred; direct text path first | Artifact Engine; Open Questions / Notes; remaining G03, G09 |
 | Backup recovery and history | PITR for database recovery; retained Artifacts and model requests for inspection | Replaces application-event replay under ART-R08; restore verification in first journey | Replayable State superseded; G03, G06 |
 | Runs and background work | Durable execution, waiting, cancellation, retries, related entities and results | One response run first; general background execution later | Artifact Engine, Act; G02, G07 |
-| Context and retrieval | Instructions, thread history, topic context, memories, tools, observed events, tasks and decisions | Bounded current-thread context first; broader retrieval later | Context Engine; G05, G09 |
-| [Instructions](features/instructions.md), agent configuration and skills | Personality, model routing, reproducible skills, user-visible and editable instructions | Owned editable documents and captured requests accepted; base editing first; broader routing and skills later | Agent / Basics; Instructions; G05, G08, G09 |
+| [Context and retrieval](features/topics-context.md#what-enters-an-answer) | Instructions, thread history, topic context, memories, tools, observed events, tasks and decisions | Applicable instructions and bounded Topic retrieval implemented; explicit references deferred | Context Engine; G05, G09 |
+| [Instructions](features/instructions.md), agent configuration and skills | Personality, model routing, reproducible skills, user-visible and editable instructions | Owned instruction editor and captured requests implemented; broader routing and skills later | Agent / Basics; Instructions; G05, G08, G09 |
 | Semantic memory | Durable facts/preferences, freshness and forgetting | Later; design unresolved | Memory Engine; G06 |
 | Thread visibility | Intelligent archive timing, revival, activity indicators; consider overrides, pinning and undo | Manual archive/pin and Run status first; archive automation later | Visibility; G04, G06 |
 | Live Mode | Continuous voice/video; separate Live Threads; focus on other threads; pause, resume and device handoff | Later | Live Mode; G02, G09 |
@@ -27,7 +27,7 @@ Sequencing is proposed. Source names refer to overview headings.
 | [Permissions](features/permissions.md) | Deterministic and semantic rules, formalization, resource boundaries and user authorization; UI-only categories | Starting implementation accepted; isolated experiments complete; app integration pending | Permissions system; G08 |
 | Notifications | Ash-originated notifications; snooze/dismiss/comment; device-aware delivery | Later | Notifications; Interfaces; G02, G09 |
 | Built-in apps | Canvas, drawing and file viewer; versioning, search/citation, links from threads | Later | Built-In Features / Apps; G06, G10 |
-| Desktop | Topics/threads, chat, feature/app panels, companion, shortcuts, context and artifact inspectors | Conversation and minimal inspection first | Desktop App; G02 |
+| Desktop | Topics/threads, chat, feature/app panels, companion, shortcuts, context and artifact inspectors | Thread and minimal inspection first | Desktop App; G02 |
 | Mobile and wearables | Mobile viewing/chat/features; quick capture; microphone and audio devices; device-aware responses | Later | Mobile App; Wearables; G02, G09 |
 | Computer and browser use | Control personal or separate environments, including away-from-computer use | Later; execution environment unresolved | Computer / Browser Use; G02, G08 |
 | Custom apps | User/Ash collaboration, versioned apps, isolated data/files/runtime and separate version control | Later | Self-Modding / Custom Apps; G10 |
@@ -39,6 +39,6 @@ Sequencing is proposed. Source names refer to overview headings.
 
 ## First journey
 
-Current delivery: [persisted chat and Artifact inspection](features/conversations.md#scope), extended with [images and descriptions](features/images.md). Topic management and instruction editing follow separately. [Implementation](../docs/features/conversations.md) · [Test plan](../docs/plans/persisted-chat-tests.md).
+Current delivery: [persisted chat and Artifact inspection](features/threads.md#scope), extended with [images and descriptions](features/images.md). [Topics and working context](features/topics-context.md) add manual membership, owned instruction editing and inspectable retrieval. [Implementation and verification](../docs/features/topics-context.md). [Implementation](../docs/features/threads.md) · [Test plan](../docs/plans/persisted-chat-tests.md).
 
 Next direction, accepted 2026-10-12: usable self-modification through images, tools and Topics/context. [Inspectable tools and read-only filesystem access](features/tools.md) are implemented under the approved [test plan](../docs/plans/inspectable-tools-tests.md). The [delivery plan](../docs/plans/self-modification.md) records the sequence and acceptance targets, superseding the broad placement above for that path.

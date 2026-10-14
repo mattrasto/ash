@@ -1,6 +1,6 @@
 <script lang="ts">
   import { isActive,type AttachmentView } from '@ash/shared';
-  import Menu from '../conversations/Menu.svelte';
+  import Menu from '../threads/Menu.svelte';
   let {images,onOpen}:{images:AttachmentView[];onOpen:(images:AttachmentView[],index:number)=>void}=$props();
   let hovered=$state<string|null>(null),feedback=$state('');
   let menu=$state<{image:AttachmentView;index:number;x:number;y:number}|null>(null);

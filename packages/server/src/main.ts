@@ -1,7 +1,7 @@
 import { ZodError } from '@ash/shared';
 import { connectProduct } from './platform/db/client.ts';
-import { Conversations, ConversationError } from './modules/conversations/service.ts';
-import { conversationRoutes } from './modules/conversations/routes.ts';
+import { Threads, ThreadError } from './modules/threads/service.ts';
+import { threadRoutes } from './modules/threads/routes.ts';
 import { deterministicModel } from './platform/models/deterministic.ts';
 import { openAIModel } from './platform/models/openai.ts';
 import { openSession } from './platform/models/session.ts';
@@ -11,6 +11,10 @@ import { ImageStorage, AttachmentError } from './modules/attachments/storage.ts'
 import { attachmentRoutes } from './modules/attachments/routes.ts';
 import { filesystemRuntime, loadFilesystemConfig } from './modules/filesystem/runtime.ts';
 import { composeToolRuntimes } from './modules/tools/contract.ts';
+import { topicRuntime } from './modules/context/tools.ts';
+import { TopicRetrieval } from './modules/context/retrieval.ts';
+import { Organization, OrganizationError } from './modules/organization/service.ts';
+import { organizationRoutes } from './modules/organization/routes.ts';
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -37,16 +41,17 @@ const model = modelSessionId ? openAIModel({...await openSession(instance,modelS
 const imageStorage=new ImageStorage(instance.root);
 await imageStorage.prepare();
 const attachments=new Attachments(product,imageStorage,model);
-const conversations = new Conversations(product,model,true,imageStorage,composeToolRuntimes(filesystemRuntime(()=>loadFilesystemConfig(instance.profile === 'preview' ? instance.checkout : instance.root))));
-await conversations.recover();
+const threads = new Threads(product,model,true,imageStorage,composeToolRuntimes(topicRuntime(new TopicRetrieval(product)),filesystemRuntime(()=>loadFilesystemConfig(instance.profile === 'preview' ? instance.checkout : instance.root))));
+await threads.recover();
 await attachments.recover();await attachments.cleanup();
 const cleanupTimer=setInterval(()=>{void attachments.cleanup().catch(()=>console.error('Image cleanup failed'));},60*60*1000);cleanupTimer.unref();
 const app = Fastify({ logger: false });
 app.addHook('onRequest', async (request, reply) => {
   if (request.headers.authorization !== `Bearer ${token}`) return reply.code(401).send({ error: 'Unauthorized' });
 });
-conversationRoutes(app, conversations);
+threadRoutes(app, threads);
 attachmentRoutes(app,attachments);
+organizationRoutes(app,new Organization(product));
 app.get('/health', async () => {
   const [meta] = await db`SELECT instance_id, generation, schema_version FROM dev_meta`;
   if (meta.instance_id !== instance.id || meta.generation !== instance.generation || meta.schema_version !== instance.schemaVersion) {
@@ -74,8 +79,9 @@ app.patch('/api/state', async (request, reply) => {
   return state();
 });
 app.setErrorHandler((error, _request, reply) => {
-  if (error instanceof ZodError) return reply.code(400).send({error:'Invalid conversation request.'});
-  if (error instanceof ConversationError) return reply.code(error.status).send({error:error.message});
+  if (error instanceof ZodError) return reply.code(400).send({error:'Invalid thread request.'});
+  if (error instanceof ThreadError) return reply.code(error.status).send({error:error.message});
+  if (error instanceof OrganizationError) return reply.code(error.status).send({error:error.message});
   if (error instanceof AttachmentError) return reply.code(error.status).send({error:error.message});
   if ((error as {statusCode?:number}).statusCode===413)return reply.code(413).send({error:'Each image must be at most 10 MiB.'});
   console.error(JSON.stringify({ event: 'request-error', message: (error instanceof Error ? error.message : 'Unknown error').replaceAll(token, '[redacted]') }));
@@ -88,7 +94,7 @@ process.send?.({ type: 'listening', url: `http://127.0.0.1:${address.port}` });
 async function stop() {
   if (stopping) return;
   stopping = true;
-  clearInterval(cleanupTimer);await app.close(); await conversations.stop();await attachments.stop(); await product.$disconnect(); ownership.release(); await ownerDb.end(); await db.end(); process.exit(0);
+  clearInterval(cleanupTimer);await app.close(); await threads.stop();await attachments.stop(); await product.$disconnect(); ownership.release(); await ownerDb.end(); await db.end(); process.exit(0);
 }
 process.on('SIGINT', stop); process.on('SIGTERM', stop);
 process.on('disconnect', stop);

@@ -5,7 +5,7 @@ import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_TOOL_LIMITS, ServerConfig, ToolArtifact, RunState, type ToolCall, type RequestPayload, type ToolResult, type ToolLimits, type ToolJson } from '../../packages/shared/src/index.ts';
-import { Conversations } from '../../packages/server/src/modules/conversations/service.ts';
+import { Threads } from '../../packages/server/src/modules/threads/service.ts';
 import { deterministicModel } from '../../packages/server/src/platform/models/deterministic.ts';
 import type { ModelAdapter, ModelOutput } from '../../packages/server/src/platform/models/adapter.ts';
 import { openAIModel } from '../../packages/server/src/platform/models/openai.ts';
@@ -38,16 +38,16 @@ test('Inspectable tools: real persistence, dispatch and provider protocol', { ti
   const defaultRuntime = fixtureRuntime([retrievalTool(async (_run, query) => success(query))]);
   const ws = await workspace(checkout, await devRoot()), instance = await createInstance(ws, 'test', 'empty');
   const cfg = ServerConfig.parse(await json(join(instance.root, 'server.json'))), db = connectProduct(cfg.databaseUrl);
-  const services: Conversations[] = [];
+  const services: Threads[] = [];
   const service = (model: ModelAdapter = deterministicModel, runtime: ToolRuntime = defaultRuntime, limits?: ToolLimits, auto = true) => {
-    const value = new Conversations(db, model, auto, undefined, runtime, limits); services.push(value); return value;
+    const value = new Threads(db, model, auto, undefined, runtime, limits); services.push(value); return value;
   };
-  const settle = async (value: Conversations, id: string, attempts = 500) => {
+  const settle = async (value: Threads, id: string, attempts = 500) => {
     const row = await db.run.findUniqueOrThrow({ where: { id } });
     const view = await until(() => value.readThread(row.threadId!), view => view.runs.some(run => run.id === id && !['queued', 'running'].includes(run.status)), attempts);
     return view.runs.find(run => run.id === id)!;
   };
-  const start = async (value: Conversations, text = 'Find source', mode: 'normal' | 'slow' = 'normal') => {
+  const start = async (value: Threads, text = 'Find source', mode: 'normal' | 'slow' = 'normal') => {
     const thread = randomUUID(); await value.createThread(thread, 'Tool fixture');
     const run = await value.submit(thread, randomUUID(), text, mode); return { thread, run };
   };
@@ -201,7 +201,7 @@ test('Inspectable tools: real persistence, dispatch and provider protocol', { ti
       const resultId=RunState.parse(original.state).tools!.calls[0].resultArtifactId!;
       await assert.rejects(db.artifact.delete({where:{id:resultId}}));
       await assert.rejects(db.providerContinuation.updateMany({ data: { items: [] } }));
-      const value = new Conversations(db, deterministicModel), { run } = await start(value, 'Hello'); await settle(value, run.id);
+      const value = new Threads(db, deterministicModel), { run } = await start(value, 'Hello'); await settle(value, run.id);
       assert.equal((await value.readThread(run.threadId!)).runs[0].state.tools, undefined); await value.stop();
     });
     await scenarioStep(t, 'TOOL-17', async () => {

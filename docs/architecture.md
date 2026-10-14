@@ -1,16 +1,16 @@
 # Architecture
 
-Persisted chat, deterministic/OpenAI adapters and desktop bootstrap implemented; [bounded live text verification passed](features/conversations.md#verification). File layout: [repository structure](repository-structure.md).
+Persisted chat, deterministic/OpenAI adapters and desktop bootstrap implemented; [bounded live text verification passed](features/threads.md#verification). File layout: [repository structure](repository-structure.md).
 
 ## Stack and runtime
 
-The bootstrap uses TypeScript, Svelte, Electron, Node/Fastify and PostgreSQL. Prisma implements the product schema; execution details are in the [chat implementation](features/conversations.md).
+The bootstrap uses TypeScript, Svelte, Electron, Node/Fastify and PostgreSQL. Prisma implements the product schema; execution details are in the [chat implementation](features/threads.md).
 
 Use one backend and one core database. The client handles presentation and native integration; the backend owns rules, context, model calls, execution and persistence. Keep credentials out of renderer contracts.
 
 Run the backend independently of desktop windows. Laptop-off operation needs an always-on host; local-only applications still need a reachable device. Hosting remains open in [G02](../specs/open-questions.md).
 
-Asha's conversations/interactions/log-events model does not establish Ash's topic membership or recovery contract. Ash has a [separate codebase](decisions/0001-separate-codebase.md); evaluate components individually for reuse.
+Asha's data model does not establish Ash's topic membership or recovery contract. Ash has a [separate codebase](decisions/0001-separate-codebase.md); evaluate components individually for reuse.
 
 ## Processing and persistence
 
@@ -24,7 +24,7 @@ Asha's conversations/interactions/log-events model does not establish Ash's topi
 
 ## First model
 
-The [data model](data-model.md) defines ownership, causal links, context capture, Run checkpoints and recovery for the conversation core. The [DBML](../specs/data/model.dbml) contains tables, columns and foreign keys. Physical details and remaining product decisions are marked in the model.
+The [data model](data-model.md) defines ownership, causal links, context capture, Run checkpoints and recovery for the thread core. The [DBML](../specs/data/model.dbml) contains tables, columns and foreign keys. Physical details and remaining product decisions are marked in the model.
 
 ## Schema workflow
 
@@ -37,8 +37,8 @@ Keep its schema, committed migrations and the UML/DBML diagram synchronized in t
 3. Generate DBML from that database with `db2dbml` and normalize its output. Preserve field usage notes; document constraints the diagram cannot represent.
 4. Compare tables, columns, nullability, keys and relationships with the Prisma schema and migration, then inspect the diagram in dbdiagram. The chat integration suite checks schema drift.
 
-Pinned versions and migration commands: [schema operations](features/conversations.md#schema-operations). References: [Prisma migrations](https://www.prisma.io/docs/orm/migrations/applying-a-migration), [DBML CLI](https://dbml.dbdiagram.io/cli/), [DBML syntax](https://dbml.dbdiagram.io/docs/).
+Pinned versions and migration commands: [schema operations](features/threads.md#schema-operations). References: [Prisma migrations](https://www.prisma.io/docs/orm/migrations/applying-a-migration), [DBML CLI](https://dbml.dbdiagram.io/cli/), [DBML syntax](https://dbml.dbdiagram.io/docs/).
 
 ## Bootstrap and verification
 
-The [development workflow](development.md) implements workspace isolation, a synthetic desktop preview, startup/reset commands and lifecycle checks. Conversation coverage and deferred features are recorded in the [chat test plan](plans/persisted-chat-tests.md).
+The [development workflow](development.md) implements workspace isolation, a synthetic desktop preview, startup/reset commands and lifecycle checks. Thread coverage and deferred features are recorded in the [chat test plan](plans/persisted-chat-tests.md).

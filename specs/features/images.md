@@ -2,13 +2,13 @@
 
 Accepted and implemented, 2026-10-12 · Offline and bounded live verification passed
 
-Extend [persisted conversations](conversations.md) with screenshot/image input and the asynchronous descriptions requested from Asha's design. [Implementation and verification](../../docs/features/images.md).
+Extend [persisted threads](threads.md) with screenshot/image input and the asynchronous descriptions requested from Asha's design. [Implementation and verification](../../docs/features/images.md).
 
 ## Rules
 
 - **IMG-R01 — Compose:** paste, drop or choose PNG/JPEG/WebP images without a count cap, with optional text. Keep order, immediate previews, upload status, remove/retry controls and per-thread drafts. Send waits for uploads, not descriptions. An upload error must be resolved or removed; never silently discard it.
 - **IMG-R02 — Limits:** validate actual decoded format, reject animated/invalid images, and bound each upload to 10 MiB and 20 megapixels; the combined original bytes in a message are at most 20 MiB. Reject before provider dispatch and preserve the draft.
-- **IMG-R03 — Persistence:** accepted messages reference immutable, instance-owned images. Preserve the original and cached model/thumbnail derivatives. Existing text conversations remain readable. Delivery retry reuses upload/submission identities; execution retry preserves the captured image bytes and description text.
+- **IMG-R03 — Persistence:** accepted messages reference immutable, instance-owned images. Preserve the original and cached model/thumbnail derivatives. Existing text threads remain readable. Delivery retry reuses upload/submission identities; execution retry preserves the captured image bytes and description text.
 - **IMG-R04 — Description:** upload starts an independent, inspectable description Run. Live mode uses GPT-6 Luna for one or two concrete sentences about the subject, layout and notable visible text; deterministic mode labels its synthetic description. Description failure/interruption does not fail the upload or chat. Explicit retry creates a new Run; restart never repeats a paid call automatically.
 - **IMG-R05 — Context:** provide stable attachment IDs beside image content. Include every image in the current input, subject to a whole-request limit of 16 MiB of model image bytes. Include images from the last six user turns until the request has eight images; the current input may exceed that count. Prioritize newer images; represent older/excess images with labeled generated descriptions. A missing description is explicitly unavailable, never inferred from a filename. Record the representation and reason in each request. Text-only context export uses these same frozen descriptions. Reattaching an older image includes its pixels again.
 - **IMG-R06 — Inspection:** show original/model dimensions, hashes, description status, description Run and captured image representations. Description completion can affect later context but cannot rewrite earlier requests. Never expose credentials or base64 image bodies in inspection.

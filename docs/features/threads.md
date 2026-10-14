@@ -2,7 +2,7 @@
 
 Deterministic, mocked OpenAI and bounded live text paths verified · [Image extension](images.md) verified
 
-Scope and behavior: [conversation spec](../../specs/features/conversations.md). Verification scenarios: [test plan](../plans/persisted-chat-tests.md).
+Scope and behavior: [thread spec](../../specs/features/threads.md). Verification scenarios: [test plan](../plans/persisted-chat-tests.md).
 
 ## Try it
 
@@ -18,11 +18,11 @@ Chat drafts and pending delivery keys live in the isolated desktop's browser sto
 | --- | --- |
 | `packages/server/prisma/` | Product tables, development baseline and committed SQL migrations. |
 | `scripts/dev/product-database.ts` | Guarded baseline/deploy, seeded base instructions and restricted runtime grants. |
-| `packages/server/src/modules/conversations/` | HTTP routes, submission transactions, streaming persistence, cancellation, retries and inspection. |
+| `packages/server/src/modules/threads/` | HTTP routes, submission transactions, streaming persistence, cancellation, retries and inspection. |
 | `packages/server/src/modules/context/select.ts` | Current-thread Surface selection and omission metadata. |
 | `packages/server/src/platform/models/` | Deterministic and OpenAI adapters, safe provider metadata, bounded live sessions. |
-| `packages/shared/src/contracts/conversations.ts` | Command validation, payload/checkpoint schemas and client contracts. |
-| `packages/client/src/renderer/features/conversations/Chat.svelte` | Thread list, transcript, composer, pending delivery and inspector. |
+| `packages/shared/src/contracts/threads.ts` | Command validation, payload/checkpoint schemas and client contracts. |
+| `packages/client/src/renderer/features/threads/Chat.svelte` | Thread list, transcript, composer, pending delivery and inspector. |
 
 ## Execution details
 
@@ -32,13 +32,13 @@ Submission uses a serializable transaction and thread lock. Conflicting transact
 
 The desktop polls saved snapshots every 150 ms while a response is active and every 800 ms otherwise. This is the initial incremental delivery transport; no durable event stream is added. A reconnect fetches state without dispatching work. Snapshots use a consistent database transaction so content and Run outcome agree.
 
-Context uses a 12,000-character budget and a 4,000-character input limit; this is an application bound for both adapters, not a token estimate. Selection follows CONV-R15. Older conversation groups are omitted together when they do not fit; the current message and base instructions must fit. The captured request records every selected source and excluded Surface.
+Initial context follows the [capture design](topics-context.md#capture-and-retrieval) and [accepted limits](../plans/topics-context-tests.md#accepted-numeric-limits). Selection follows CONV-R15. Older Thread groups are omitted together when they do not fit; the current message and applicable instructions must fit. New captures identify included sources and factual omission counts; historical per-Surface omission lists remain readable.
 
-## Conversation controls
+## Thread controls
 
-The [UX review](conversation-ux.md) records the Asha comparison and test plan. `Sidebar.svelte`, `Message.svelte`, `Menu.svelte`, `scroll.ts` and `streaming.ts` own the interaction behavior; `Chat.svelte` owns API/draft state and inspection.
+The [UX review](thread-ux.md) records the Asha comparison and test plan. `Sidebar.svelte`, `Message.svelte`, `Menu.svelte`, `scroll.ts` and `streaming.ts` own the interaction behavior; `Chat.svelte` owns API/draft state and inspection.
 
-`GET /api/threads` includes archived rows and each thread's latest Run identity/outcome. `POST /api/threads/:id` accepts only a nonempty title and/or archive flag. Metadata changes preserve activity order and do not alter Runs. The first-message title is committed in the same transaction as accepted input and only replaces an empty conversation's “New conversation” placeholder (80-character display bound). UI names never enter captured model requests.
+`GET /api/threads` includes archived rows and each thread's latest Run identity/outcome. `POST /api/threads/:id` accepts only a nonempty title and/or archive flag. Metadata changes preserve activity order and do not alter Runs. The first-message title is committed in the same transaction as accepted input and only replaces an empty thread's “New thread” placeholder (80-character display bound).
 
 No product migration is needed: the existing `threads.is_archived` field is used. Restart an existing development instance once to apply its additive runtime column grant. Preserve the current live session ID when restarting.
 
@@ -52,7 +52,7 @@ The schema test compares DBML-exported tables with the migrated database and che
 
 ## Limits
 
-Topic management, instruction editing, pin controls, Artifact moves, image generation and generalized background execution remain deferred. [Image input and descriptions](images.md) are implemented separately from chat response Runs. A persisted checkpoint does not imply automatic continuation. PITR operation and restore drills remain pending; restart tests establish persistence, not recovery from lost database storage.
+[Topic management, instruction editing and scoped context](topics-context.md) extend this journey. Pin controls, Artifact moves, image generation and generalized background execution remain deferred. [Image input and descriptions](images.md) are implemented separately from chat response Runs. A persisted checkpoint does not imply automatic continuation. PITR operation and restore drills remain pending; restart tests establish persistence, not recovery from lost database storage.
 
 ## OpenAI mode
 
@@ -77,17 +77,17 @@ Output defaults to 1,024 tokens and each call has a 60-second deadline, shortene
 
 A call is counted on disk before HTTP dispatch, including failed or ambiguous attempts. Concurrent threads share the counter and any bounded allowance. Session records contain only settings and usage at `~/.ash-dev/workspaces/WORKSPACE_ID/model-sessions/SESSION_ID/`, outside resettable instance data. Restart, reset and disposal cannot replenish a bounded allowance. Interactive records explicitly store null call/expiry limits and are accepted only for the persistent preview.
 
-The backend uses the pinned OpenAI SDK and Responses API with `store:false` and no provider conversation ID. It sends the saved message list and recorded options; configured tools use the [multi-call executor](tools.md#execution-and-inspection). SDK automatic retries are disabled. Each explicit OpenAI retry preserves provider/model/options as well as messages; its session must match the model and allow at least the original output limit. A different model requires a new submission.
+The backend uses the pinned OpenAI SDK and Responses API with `store:false` and no provider thread ID. It sends the saved message list and recorded options; configured tools use the [multi-call executor](tools.md#execution-and-inspection). SDK automatic retries are disabled. Each explicit OpenAI retry preserves provider/model/options as well as messages; its session must match the model and allow at least the original output limit. A different model requires a new submission.
 
 Streaming deltas and refusal text use the existing Surface persistence path. A completed provider event must agree with the streamed text. Incomplete, truncated, lost or failed streams produce a failed Run and retain partial output. Cancellation aborts the local HTTP stream; it cannot guarantee that provider work or billing stops immediately. The inspector exposes request/response IDs, resolved model, provider status and reported input/output/cached/reasoning tokens. Missing usage stays unknown.
 
-Ash remains the authoritative conversation store. `store:false` disables retained Responses application state; it does not promise zero provider retention. OpenAI documents separate abuse-monitoring and prompt-cache retention. Use synthetic content until the personal-data policy in [G06/G09](../../specs/open-questions.md) is settled. [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data).
+Ash remains the authoritative thread store. `store:false` disables retained Responses application state; it does not promise zero provider retention. OpenAI documents separate abuse-monitoring and prompt-cache retention. Use synthetic content until the personal-data policy in [G06/G09](../../specs/open-questions.md) is settled. [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data).
 
 The Responses API supports image inputs and a built-in image-generation tool. Ash now supports image input; the built-in image-generation tool remains deferred. [OpenAI images and vision](https://developers.openai.com/api/docs/guides/images-vision).
 
 ## Verification
 
-Latest conversation UX verification and evidence: [UX review](conversation-ux.md#verification).
+Latest thread UX verification and evidence: [UX review](thread-ux.md#verification).
 
 The deterministic baseline passed `pnpm verify` on 2026-10-09; evidence: `~/.ash-dev/evidence/2ba6f2ea74eb63aa1c53b997/`.
 
@@ -95,8 +95,8 @@ The deterministic baseline passed `pnpm verify` on 2026-10-09; evidence: `~/.ash
 
 ### Live text smoke test
 
-Passed 2026-10-12 on `8ef4380` using `gpt-6.1-sol`, low reasoning, with the approved maximum of five calls over ten minutes and 1,024 output tokens per call. Four calls covered a synthetic checklist, a follow-up with exact captured history, cancellation after partial output, and a completed retry with the original request. Electron inspection showed provider IDs and usage. Backend restart and desktop reopen preserved the conversation and call counter without another dispatch.
+Passed 2026-10-12 on `8ef4380` using `gpt-6.1-sol`, low reasoning, with the approved maximum of five calls over ten minutes and 1,024 output tokens per call. Four calls covered a synthetic checklist, a follow-up with exact captured history, cancellation after partial output, and a completed retry with the original request. Electron inspection showed provider IDs and usage. Backend restart and desktop reopen preserved the thread and call counter without another dispatch.
 
 Three completed calls reported 391 input and 370 output tokens (761 total). The cancelled call reported no usage; these totals exclude its unknown billable work. Provider dashboard/billing reconciliation was not performed. The disposable instance was removed and the persistent preview remained in deterministic mode.
 
-Evidence: `~/.ash-dev/evidence/live-f484cd4b6d74c96c340f9c56/` contains the source fingerprint, session ID/counter, individual Run outcomes, captured conversation/inspection, smoke driver and desktop screenshots. This establishes live text connectivity and the tested flows; image verification is recorded in the [image implementation](images.md); broader quality evaluation remains deferred. [Repeat procedure](../plans/persisted-chat-tests.md#live-smoke-test).
+Evidence: `~/.ash-dev/evidence/live-f484cd4b6d74c96c340f9c56/` contains the source fingerprint, session ID/counter, individual Run outcomes, captured thread/inspection, smoke driver and desktop screenshots. This establishes live text connectivity and the tested flows; image verification is recorded in the [image implementation](images.md); broader quality evaluation remains deferred. [Repeat procedure](../plans/persisted-chat-tests.md#live-smoke-test).

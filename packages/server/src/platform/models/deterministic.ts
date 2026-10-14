@@ -23,6 +23,22 @@ export const deterministicModel: ModelAdapter = {
     const inputs = request.messages.filter(message => message.role === 'user');
     const previous = request.messages.filter(message => message.role === 'assistant').length;
     const userText=modelContentText(inputs.at(-1)!.content);
+    if(request.tools?.resources.some(resource=>resource.kind==='topic') && ['topic.search','topic.read'].every(name=>request.tools!.definitions.some(tool=>tool.name===name)) && /topic|prior threads/i.test(userText)) {
+      await delay(mode==='slow'?1000:80,undefined,{signal});
+      const round=request.tools.previousOutputIds.length;
+      if(round===0) {
+        yield 'I’ll search the linked Topic threads for the requested text.';
+        yield {kind:'output',calls:[{callId:'topic_search',name:'topic.search',arguments:JSON.stringify({query:userText.match(/["“]([^"”]+)["”]/)?.[1]??userText})}]};return;
+      }
+      const references=request.tools.results.filter(result=>result.outputId===request.tools!.previousOutputIds.at(-1)).flatMap(result=>result.result.references);
+      const artifactId=references[0]?.location.artifactId;
+      if(round===1&&typeof artifactId==='string') {
+        yield 'I found a matching thread. I’ll read its saved excerpt.';
+        yield {kind:'output',calls:[{callId:'topic_read',name:'topic.read',arguments:JSON.stringify({artifactId,offset:0})}]};return;
+      }
+      yield references.length ? `The captured evidence is in ${references.map(ref=>`[${ref.label}](ash-source:${ref.citationId??encodeURIComponent(ref.id)})`).join(' and ')}. This is a deterministic retrieval demonstration; no external model was called.` : 'No readable match was returned. Inspect the saved results for errors or omissions.';
+      yield {kind:'output',calls:[]};return;
+    }
     if (request.tools?.definitions.some(tool=>tool.name==='filesystem.read') && /where|implement|source|file|search|code/i.test(modelContentText(inputs.at(-1)!.content))) {
       await delay(mode==='slow'?1000:80,undefined,{signal});
       const root=request.tools.resources.find(resource=>resource.kind==='filesystem')?.id;

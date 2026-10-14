@@ -5,9 +5,9 @@ import { ToolRequest, ToolWorkflow, type ToolArtifact } from './tools.ts';
 export const Uuid = z.string().uuid();
 export const ModelMode = z.enum(['normal', 'slow', 'fail', 'fail-before', 'empty']);
 export type ModelMode = z.infer<typeof ModelMode>;
-export const CreateThread = z.object({ id: Uuid, title: z.string().trim().min(1).max(160) }).strict();
+export const CreateThread = z.object({ id: Uuid, title: z.string().trim().min(1).max(160), topicId:Uuid.optional() }).strict();
 export const UpdateThread = z.object({title:z.string().trim().min(1).max(160).optional(),isArchived:z.boolean().optional()}).strict()
-  .refine(value=>Object.keys(value).length>0,'Choose a conversation change.');
+  .refine(value=>Object.keys(value).length>0,'Choose a thread change.');
 export const SendMessage = z.object({ requestKey: Uuid, text: z.string().trim().max(4000), mode: ModelMode.default('normal'), attachmentIds:z.array(Uuid).default([]) }).strict()
   .refine(value=>value.text.length>0 || value.attachmentIds.length>0,'A message needs text or an image.')
   .refine(value=>new Set(value.attachmentIds).size===value.attachmentIds.length,'Duplicate image references.');
@@ -44,7 +44,10 @@ const requestContent = {
   purpose:z.literal('image_summary').optional(),
   messages: z.array(z.object({ role: z.enum(['system', 'user', 'assistant']), content: ModelContent }).strict()),
   selection: z.object({
-    instructions: z.array(z.object({ id: Uuid, key: z.string(), messageIndex: z.number().int() }).strict()),
+    instructions: z.array(z.object({ id: Uuid, key: z.string().optional(), scope:z.enum(['global','topic','thread']).optional(), ownerId:z.string().optional(), name:z.string().optional(), messageIndex: z.number().int() }).strict()),
+    topics:z.array(z.object({id:Uuid,name:z.string(),linkedAt:z.string().datetime()}).strict()).optional(),
+    composition:z.object({version:z.literal('response-v1'),messageIndex:z.number().int().nonnegative()}).strict().optional(),
+    omissions:z.object({history:z.number().int().nonnegative(),notCompleted:z.number().int().nonnegative(),superseded:z.number().int().nonnegative()}).strict().optional(),
     artifacts: z.array(z.object({ id: Uuid, messageIndex: z.number().int() }).strict()),
     omitted: z.array(z.object({ id: Uuid, reason: z.enum(['not-completed', 'superseded', 'context-limit']) }).strict()),
     maxCharacters: z.number().int().positive(),
@@ -71,7 +74,7 @@ export interface RunView {
   status: RunStatus; state: z.infer<typeof RunState>; error: z.infer<typeof RunError> | null;
   createdAt: string; startedAt: string | null; endedAt: string | null;
 }
-export interface ConversationView { thread: ThreadView; artifacts: ArtifactView[]; runs: RunView[]; attachments?:AttachmentView[] }
+export interface ThreadDetail { thread: ThreadView; artifacts: ArtifactView[]; runs: RunView[]; attachments?:AttachmentView[]; membership?:import('./organization.ts').MembershipView }
 export interface InspectionView { selectedId: string; input: ArtifactView; artifacts: ArtifactView[]; runs: RunView[]; attachments?:AttachmentView[] }
 export interface ModelInfo {
   provider: 'deterministic' | 'openai'; model: string;

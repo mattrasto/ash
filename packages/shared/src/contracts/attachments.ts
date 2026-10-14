@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { RunView } from './conversations.ts';
+import type { RunView } from './threads.ts';
 
 export const IMAGE_LIMITS = { perFile:10*1024*1024, perMessage:20*1024*1024, pixels:20_000_000,
   modelBytes:2*1024*1024, contextBytes:16*1024*1024, contextCount:8, historyTurns:6, draftLifetimeMs:24*60*60*1000 } as const;

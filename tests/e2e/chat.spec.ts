@@ -38,7 +38,7 @@ test('chat-persistence: Keyboard messages and drafts survive desktop reopening',
   }
 });
 
-test('chat-layout: Conversation layout at normal and minimum window sizes', async ({ ash }) => {
+test('chat-layout: Thread layout at normal and minimum window sizes', async ({ ash }) => {
   const { page, app } = ash;
   // Static baselines exclude entry/stream animation timing; integration tests cover motion.
   await page.emulateMedia({ reducedMotion: 'reduce' });

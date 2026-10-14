@@ -14,7 +14,7 @@ Assistant replies render Markdown with copyable code. Scrolling up suspends foll
 
 ## Asha adaptations
 
-The reference implementation is the adjacent Asha checkout, particularly `docs/protocols/attachments.md`, server `captions/haiku.ts`, `attachments/blocks.ts`, `attachments/thumbnails.ts`, `conversation/turn.ts`, and client `AttachmentBubble.svelte`, `Lightbox.svelte`, `Chat.svelte`, `lib/uploads.ts` and `lib/attachment-actions.ts`.
+The reference implementation is the adjacent Asha checkout, particularly `docs/protocols/attachments.md`, server `captions/haiku.ts`, `attachments/blocks.ts`, `attachments/thumbnails.ts`, `thread/turn.ts`, and client `AttachmentBubble.svelte`, `Lightbox.svelte`, `Chat.svelte`, `lib/uploads.ts` and `lib/attachment-actions.ts`.
 
 | Asha pattern | Ash implementation |
 | --- | --- |
@@ -50,7 +50,7 @@ Ordinary `pnpm verify` uses synthetic images and deterministic/mocked providers;
 | Acceptance | Automated checks |
 | --- | --- |
 | IM01, IM02 | Pick/paste/drop, image-only and text-plus-image messages, upload failure/retry, remove during upload, switch threads during upload, saved drafts, follow-up and reopen. |
-| IM03, IM05 | Independent description provenance, explicit/deduplicated retry, restart interruption, late description and byte-identical frozen conversation retry. |
+| IM03, IM05 | Independent description provenance, explicit/deduplicated retry, restart interruption, late description and byte-identical frozen thread retry. |
 | IM04 | Six-turn window, history count budget, twelve-image current input, text-only fallback, frozen summary markers, captured image order/detail and provider wire bytes. |
 | IM06 | Decode/size/pixel/animation limits, spoofed formats, foreign instance IDs, traversal, symlinks, missing/corrupt bytes and no paid-call reservation on a storage error. |
 | IM07 | Viewer arrows/Escape, filmstrip, clipboard orientation, saved original bytes, composer focus after upload, gallery geometry across hover/focus, nine-image send/inspect/reload, code copying, streaming scroll preservation and return to latest. |

@@ -99,7 +99,7 @@ async function main() {
       environment: { platform: process.platform, arch: process.arch, osRelease: release(), node: process.version, electron: pkg.devDependencies.electron, playwright: pkg.devDependencies['@playwright/test'] },
       profile: values.profile, requested: values.scenario, suites: [...suites],
       scope: values.profile === 'full' && !values.scenario ? 'full' : 'partial',
-      fixtureVersion: FIXTURE_VERSION, schemaVersion: SCHEMA_VERSION, productMigration: '202610120001_images',
+      fixtureVersion: FIXTURE_VERSION, schemaVersion: SCHEMA_VERSION, productMigration: '202610120002_topics_context',
       model: 'deterministic/ash-test-v1 + mocked OpenAI Responses', liveProviderCalls: 0, commands, scenarios: results,
       agentReview: { status: 'not-recorded' }, manual: manual.map(check => ({ id: check.id, status: 'pending' })),
       passed, interrupted, executionError, completedAt: new Date().toISOString(),

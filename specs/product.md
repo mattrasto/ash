@@ -34,8 +34,8 @@ Ash is a private personal agent: part companion, helper and second brain. It sho
 | Permission | A rule controlling access or action; [permission rules](features/permissions.md#rules) define effects, matchers and authorization. A Decision can request permission; the two are not interchangeable. |
 | Notification | An Ash-created item drawing attention to information or work; distinct from its eventual delivery on a device. |
 | Live Thread | A special thread recording a Live Mode interaction; cannot be typed into or converted into a normal thread. Can be resumed and referenced from other threads. |
-| Context | Information supplied to Ash for a particular action, from instructions, conversation and relevant other sources. |
-| Memory | Durable semantic information about facts/preferences; distinguished from conversation history and explicit instructions. Details remain open. |
+| Context | Information supplied to Ash for a particular action, from instructions, thread and relevant other sources. |
+| Memory | Durable semantic information about facts/preferences; distinguished from thread history and explicit instructions. Details remain open. |
 | Archive | Hide a thread from the ordinary view while retaining it for archive access and context. Not deletion or erasure. |
 | App | A built-in or custom interactive surface with versioned content. Custom apps have separate data and version-control boundaries. |
 | Ash / Asha | Ash is this product and a separate codebase. Asha is the adjacent reference project. The user confirmed separation on 2026-10-09; see [Decision 0001](../docs/decisions/0001-separate-codebase.md). |

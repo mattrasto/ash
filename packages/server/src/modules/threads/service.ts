@@ -1,7 +1,8 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { Prisma, type Artifact, type PrismaClient, type Run } from '@prisma/client';
 import { InputPayload, MessagePayload, RequestPayload, RunState, ModelExecution, isActive, type ModelMode, type ToolLimits } from '@ash/shared';
-import { selectContext } from '../context/select.ts';
+import { selectContext, ContextLimitError, type ScopedInstruction } from '../context/select.ts';
+import { memberships } from '../organization/service.ts';
 import { deterministicModel } from '../../platform/models/deterministic.ts';
 import { ModelFailure, type ModelAdapter } from '../../platform/models/adapter.ts';
 import { artifactView, runView } from './views.ts';
@@ -12,12 +13,12 @@ import type { ToolRuntime } from '../tools/contract.ts';
 export { artifactView, runView } from './views.ts';
 
 type Tx = Prisma.TransactionClient;
-export class ConversationError extends Error {
+export class ThreadError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 const order = [{createdAt:'asc' as const}, {id:'asc' as const}];
 const asJson = (value: unknown) => value as Prisma.InputJsonValue;
-export class Conversations {
+export class Threads {
   private jobs = new Map<string, {controller: AbortController; promise: Promise<void>}>();
   private stopping = false;
   constructor(readonly db: PrismaClient, private model: ModelAdapter = deterministicModel, private autoDispatch = true, private images?:ImageStorage, private tools?:ToolRuntime, private toolLimits?:ToolLimits) {}
@@ -31,16 +32,24 @@ export class Conversations {
       await tx.run.update({where:{id:run.id},data:{status:'interrupted',state:asJson(interruptTools(RunState.parse(current.state),false)),endedAt:new Date(),error:{code:'server_interrupted', message:'The backend stopped before this response finished. Retry explicitly to continue.'}}});
     });
   }
-  async createThread(id: string, title: string) {
+  async createThread(id: string, title: string, topicId?:string) {
     const existing = await this.db.thread.findUnique({where:{id}});
-    if (existing) { if (existing.title !== title) throw new ConversationError(409, 'This thread ID already belongs to a different title.'); return existing; }
+    if (existing) { if (existing.title !== title) throw new ThreadError(409, 'This thread ID already belongs to a different title.'); return existing; }
     const now = new Date();
-    try { return await this.db.thread.create({data:{id,title,createdAt:now,updatedAt:now}}); }
+    try { return await this.db.$transaction(async tx=>{
+      if(topicId){
+        await tx.$queryRaw`SELECT id FROM topics WHERE id=${topicId}::uuid FOR UPDATE`;
+        if(!await tx.topic.findFirst({where:{id:topicId,deletedAt:null}}))throw new ThreadError(409,'This Topic is no longer available. Choose another Topic.');
+      }
+      const thread=await tx.thread.create({data:{id,title,createdAt:now,updatedAt:now,topicsVersion:topicId?1:0}});
+      if(topicId)await tx.threadTopic.create({data:{threadId:id,topicId,linkedAt:now}});
+      return thread;
+    }); }
     catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const saved = await this.db.thread.findUniqueOrThrow({where:{id}});
         if (saved.title === title) return saved;
-        throw new ConversationError(409, 'This thread ID already belongs to a different title.');
+        throw new ThreadError(409, 'This thread ID already belongs to a different title.');
       }
       throw error;
     }
@@ -50,23 +59,23 @@ export class Conversations {
     return rows.map(({runs,...thread})=>({...thread,latestRun:runs[0]??null}));
   }
   async updateThread(id:string,change:{title?:string;isArchived?:boolean}) {
-    // Metadata changes preserve the conversation's activity order and never stop a Run.
-    if (!(await this.db.thread.updateMany({where:{id},data:change})).count) throw new ConversationError(404,'Thread not found.');
+    // Metadata changes preserve the thread's activity order and never stop a Run.
+    if (!(await this.db.thread.updateMany({where:{id},data:change})).count) throw new ThreadError(404,'Thread not found.');
     return this.db.thread.findUniqueOrThrow({where:{id}});
   }
   async readThread(threadId: string) {
     return this.db.$transaction(async tx => {
       const thread = await tx.thread.findUnique({where:{id:threadId}});
-      if (!thread) throw new ConversationError(404, 'Thread not found.');
+      if (!thread) throw new ThreadError(404, 'Thread not found.');
       const artifacts = await tx.artifact.findMany({where:{threadId,layer:'surface'},orderBy:order});
       const runs = await tx.run.findMany({where:{threadId},orderBy:order});
-      return {thread, artifacts:artifacts.map(artifactView), runs:runs.map(runView),attachments:await attachmentViews(tx,artifacts.map(a=>a.id))};
+      return {thread, artifacts:artifacts.map(artifactView), runs:runs.map(runView),attachments:await attachmentViews(tx,artifacts.map(a=>a.id)),membership:await memberships(tx,threadId)};
     }, {isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead});
   }
   async inspect(id: string) {
     return this.db.$transaction(async tx => {
       let input = await tx.artifact.findUnique({where:{id}});
-      if (!input) throw new ConversationError(404, 'Artifact not found.');
+      if (!input) throw new ThreadError(404, 'Artifact not found.');
       const seen = new Set<string>();
       while (input.sourceId) {
         if (seen.has(input.id)) throw new Error('Cyclic Artifact source');
@@ -81,7 +90,7 @@ export class Conversations {
     }, {isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead});
   }
   private existing(row: Run, hash: string) {
-    if (row.requestHash !== hash) throw new ConversationError(409, 'This submission key was already used for different content.');
+    if (row.requestHash !== hash) throw new ThreadError(409, 'This submission key was already used for different content.');
     return row;
   }
   async submit(threadId: string, requestKey: string, text: string, mode: ModelMode, attachmentIds:string[]=[]) {
@@ -89,11 +98,11 @@ export class Conversations {
   }
   async retry(id: string, requestKey: string, mode: ModelMode) {
     const previous = await this.db.run.findUnique({where:{id}});
-    if (!previous?.threadId) throw new ConversationError(404, 'Conversation Run not found.');
+    if (!previous?.threadId) throw new ThreadError(404, 'Thread Run not found.');
     return this.accept(previous.threadId, requestKey, {kind:'retry',previousId:id,mode});
   }
   private async accept(threadId: string, requestKey: string, command: {kind:'send';text:string;mode:ModelMode;attachmentIds?:string[]} | {kind:'retry';previousId:string;mode:ModelMode}) {
-    if (this.stopping) throw new ConversationError(503, 'The backend is stopping.');
+    if (this.stopping) throw new ThreadError(503, 'The backend is stopping.');
     const hash = createHash('sha256').update(JSON.stringify({threadId,...command})).digest('hex');
     const existing = await this.db.run.findUnique({where:{requestKey}});
     if (existing) return runView(this.existing(existing, hash));
@@ -103,16 +112,16 @@ export class Conversations {
         saved = await this.db.$transaction(async tx => {
           await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId}::uuid FOR UPDATE`;
           const thread = await tx.thread.findUnique({where:{id:threadId}});
-          if (!thread) throw new ConversationError(404, 'Thread not found.');
+          if (!thread) throw new ThreadError(404, 'Thread not found.');
           const duplicate = await tx.run.findUnique({where:{requestKey}});
           if (duplicate) return this.existing(duplicate,hash);
-          if (await tx.run.findFirst({where:{threadId,status:{in:['queued','running']}}})) throw new ConversationError(409, 'A response is already active in this thread.');
+          if (await tx.run.findFirst({where:{threadId,status:{in:['queued','running']}}})) throw new ThreadError(409, 'A response is already active in this thread.');
           const now = new Date();
           let inputId: string;
           let request: RequestPayload;
           if (command.kind === 'send') {
-            if (thread.title==='New conversation' && !await tx.artifact.findFirst({where:{threadId,layer:'input'}})) {
-              const title=command.text.replace(/\s+/g,' ').trim() || 'Image conversation';
+            if (thread.title==='New Thread' && !await tx.artifact.findFirst({where:{threadId,layer:'input'}})) {
+              const title=command.text.replace(/\s+/g,' ').trim() || 'Image Thread';
               await tx.thread.update({where:{id:threadId},data:{title:Array.from(title).length>80?Array.from(title).slice(0,79).join('')+'…':title}});
             }
             const attachmentIds=command.attachmentIds??[];
@@ -123,12 +132,16 @@ export class Conversations {
             await tx.artifact.create({data:{id:surfaceId,layer:'surface',sourceId:inputId,threadId,runId:null,actor:'user',payload:MessagePayload.parse({type:'message',initial_thread_id:threadId,speaker:'user',content:[...(command.text?[{type:'text',text:command.text}]:[]),...attachmentIds.map(attachmentId=>({type:'image',attachmentId}))]}),createdAt:now,updatedAt:now}});
             await referenceImages(tx,inputId,attachmentIds);await referenceImages(tx,surfaceId,attachmentIds);
             const instruction = await tx.instruction.findUniqueOrThrow({where:{key:'response'}});
+            const instructions:ScopedInstruction[] = [{document:instruction,scope:'global',ownerId:'response'}];
+            if (thread.instructionId) instructions.push({document:await tx.instruction.findUniqueOrThrow({where:{id:thread.instructionId}}),scope:'thread',ownerId:threadId});
+            const topics = (await memberships(tx,threadId)).topics;
             const artifacts = await tx.artifact.findMany({where:{threadId,layer:'surface'},orderBy:order});
             const runs = await tx.run.findMany({where:{threadId}});
-            request = RequestPayload.parse({type:'model_request',...this.model.configuration(command.mode),...selectContext(artifacts,runs,instruction,undefined,await attachmentViews(tx,artifacts.map(a=>a.id)))});
+            const context = selectContext(artifacts,runs,instructions,undefined,await attachmentViews(tx,artifacts.map(a=>a.id)));
+            request = RequestPayload.parse({type:'model_request',...this.model.configuration(command.mode),...context,selection:{...context.selection,topics}});
           } else {
             const previous = await tx.run.findUniqueOrThrow({where:{id:command.previousId}});
-            if (isActive(previous.status)) throw new ConversationError(409, 'Wait for the previous Run to stop before retrying.');
+            if (isActive(previous.status)) throw new ThreadError(409, 'Wait for the previous Run to stop before retrying.');
             inputId = previous.inputArtifactId;
             const priorRequest = await tx.artifact.findUniqueOrThrow({where:{id:RunState.parse(previous.state).request_artifact_id}});
             const prior = RequestPayload.parse(priorRequest.payload);
@@ -148,12 +161,13 @@ export class Conversations {
         }, {isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
         break;
       } catch (error) {
-        if (error instanceof ModelFailure) throw new ConversationError(409,error.message);
+        if (error instanceof ContextLimitError) throw new ThreadError(413,error.message);
+        if (error instanceof ModelFailure) throw new ThreadError(409,error.message);
         const retryable = error instanceof Prisma.PrismaClientKnownRequestError && (['P2034','P2002'].includes(error.code) || (error.code === 'P2010' && ['40001','40P01'].includes(String(error.meta?.code))));
         if (!retryable) throw error;
         const duplicate = await this.db.run.findUnique({where:{requestKey}});
         if (duplicate) { saved = this.existing(duplicate,hash); break; }
-        if (attempt === 4) throw new ConversationError(409, 'Another submission changed this thread. Try again.');
+        if (attempt === 4) throw new ThreadError(409, 'Another submission changed this thread. Try again.');
       }
     }
     if (!saved) throw new Error('Submission was not saved');
@@ -236,7 +250,7 @@ export class Conversations {
     const saved = await this.db.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM runs WHERE id = ${id}::uuid FOR UPDATE`;
       const run = await tx.run.findUnique({where:{id}});
-      if (!run?.threadId) throw new ConversationError(404,'Conversation Run not found.');
+      if (!run?.threadId) throw new ThreadError(404,'Thread Run not found.');
       if (!isActive(run.status)) return run;
       return tx.run.update({where:{id},data:{status:'cancelled',state:asJson(interruptTools(RunState.parse(run.state),true)),endedAt:new Date()}});
     });

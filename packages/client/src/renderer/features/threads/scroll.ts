@@ -1,7 +1,7 @@
 export interface ScrollPosition {top:number;following:boolean}
 // The spacer lets a submitted user message sit near the top without forcing
 // the reader to follow every streamed word. Only user scrolling changes follow mode.
-export class ConversationScroll {
+export class ThreadScroll {
   private following=true;
   private programmatic=false;
   private frame=0;

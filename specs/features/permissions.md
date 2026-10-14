@@ -12,7 +12,7 @@ Let the user establish Ash's authority through ordinary work and plain-language 
 
 Includes deterministic resource restrictions, semantic conditions, rule authoring and formalization, user authorization, sensitive-action discovery, and the permission-request boundary with Decisions. Initial UI categories are Filesystem, Computer use, Interaction and Self-modification.
 
-The [engineering design](../../docs/features/permissions.md#selected-evaluator) records the selected evaluator, context contract, implementation references and brief future checks. Deferred: the complete Decisions feature, durable waiting/resumption, production enforcement integrations and physical database design. This spec does not expand the [first conversation journey](conversations.md#scope).
+The [engineering design](../../docs/features/permissions.md#selected-evaluator) records the selected evaluator, context contract, implementation references and brief future checks. Deferred: the complete Decisions feature, durable waiting/resumption, production enforcement integrations and physical database design. This spec does not expand the [first thread journey](threads.md#scope).
 
 The accepted [tool slice](tools.md#initial-filesystem-tools) stages configured filesystem access through a common authorization boundary. Its limited scope enforcement precedes the full evaluator and permission UI; it does not claim completion of the rules below.
 

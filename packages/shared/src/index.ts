@@ -28,11 +28,12 @@ export const ScratchChange = z.object({
 export interface PreviewInfo {
   label: string; workspaceId: string; instanceId: string; profile: string;
   fixture: string; generation: string; schemaVersion: number;
-  model?: import('./contracts/conversations.ts').ModelInfo;
+  model?: import('./contracts/threads.ts').ModelInfo;
 }
 
-export * from './contracts/conversations.ts';
+export * from './contracts/threads.ts';
 export * from './contracts/attachments.ts';
+export * from './contracts/organization.ts';
 export * from './contracts/tools.ts';
 
 export { ZodError } from 'zod';
