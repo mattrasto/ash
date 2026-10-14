@@ -68,6 +68,7 @@ model Artifact {
   inputs Run[] @relation("input")
   attachmentInput Attachment?
   attachmentReferences ArtifactAttachment[]
+  continuation ProviderContinuation?
   @@index([sourceId])
   @@index([runId])
   @@index([threadId, createdAt, id])
@@ -92,10 +93,23 @@ model Run {
   retries Run[] @relation("retry")
   artifacts Artifact[] @relation("produced")
   attachmentSummary Attachment?
+  continuations ProviderContinuation[]
   @@index([inputArtifactId])
   @@index([threadId])
   @@index([retryOfId])
   @@map("runs")
+}
+
+// Private provider replay data, never included in Artifact/inspection payloads.
+model ProviderContinuation {
+  outputArtifactId String @id @map("output_artifact_id") @db.Uuid
+  runId String @map("run_id") @db.Uuid
+  items Json @db.JsonB
+  createdAt DateTime @map("created_at") @db.Timestamptz(6)
+  output Artifact @relation(fields: [outputArtifactId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  run Run @relation(fields: [runId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  @@index([runId])
+  @@map("provider_continuations")
 }
 
 model Attachment {

@@ -4,6 +4,8 @@
   import Icon from './Icon.svelte';
   import Menu from './Menu.svelte';
   import Gallery from '../images/Gallery.svelte';
+  import ToolTrace from './ToolTrace.svelte';
+  import { citationResult } from './citations.ts';
   let {artifact,run,outcomes,images,blocked,onInspect,onRetry,onOpen}:{artifact:ArtifactView;run?:RunView;outcomes:RunView[];images:AttachmentView[];blocked:boolean;onInspect:(id:string)=>void;onRetry:(run:RunView)=>void;onOpen:(images:AttachmentView[],index:number)=>void}=$props();
   const payload=$derived(artifact.payload as MessagePayload),text=$derived(messageText(payload));
   const running=$derived(!!run&&isActive(run.status));
@@ -15,7 +17,8 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <article class:user={payload.speaker==='user'} class:running data-testid="message" data-artifact-id={artifact.id} aria-label={payload.speaker==='user'?'User message':'Ash response'} oncontextmenu={context}>
   {#if images.length}<Gallery {images} {onOpen}/>{/if}
-  <div class="message-content" class:formatted={payload.speaker==='ash'}>{#if payload.speaker==='ash'}<Markdown {text} streaming={running}/>{#if !text}<span class:waiting={running}>{running?'●':run?.status==='completed'?'(Empty response)':''}</span>{/if}{:else}{text}{/if}</div>
+  {#if run?.state.tools}<ToolTrace {run} {onInspect}/>{/if}
+  <div class="message-content" class:formatted={payload.speaker==='ash'}>{#if payload.speaker==='ash'}<Markdown {text} streaming={running} onSource={reference=>{const result=citationResult(run?.state.tools?.calls ?? [],reference);if(result){onInspect(result);return true;}return false;}}/>{#if !text}<span class:waiting={running}>{running?'●':run?.status==='completed'?'(Empty response)':''}</span>{/if}{:else}{text}{/if}</div>
   <div class="message-footer">
     {#if run}<span class="status" class:quiet={run.status==='completed'} data-testid="run-status">{run.status==='running'?'running':run.status}</span>{/if}
     {#if run&&!running}<button class="metadata" aria-expanded={details} aria-label="Response details" onclick={()=>details=!details}>{run.state.model?.model??'Response'}{#if duration} · {duration}{/if}{#if run.state.model?.usage} · {run.state.model.usage.inputTokens} → {run.state.model.usage.outputTokens} tok{/if}</button>{/if}
@@ -23,7 +26,7 @@
   </div>
   {#if details&&run}<div class="details"><span>{new Date(artifact.createdAt).toLocaleString()}</span><span>Outcome: {run.status}</span>{#if run.state.model?.usage}<span>{run.state.model.usage.cachedInputTokens} cached input · {run.state.model.usage.reasoningTokens} reasoning tokens</span>{/if}<button onclick={()=>onInspect(artifact.id)}>View captured context and Artifact chain</button></div>{/if}
   {#if run?.error}<p class="failure">{run.error.message}</p>{/if}
-  {#each outcomes as outcome (outcome.id)}<div class="outcome"><span class:waiting={isActive(outcome.status)} data-testid="run-status">{outcome.status}</span>{#if outcome.error}<span>{outcome.error.message}</span>{/if}{#if !isActive(outcome.status)}<button disabled={blocked} onclick={()=>onRetry(outcome)}>Retry response</button>{/if}<button onclick={()=>onInspect(outcome.state.request_artifact_id)}>Inspect Run</button></div>{/each}
+  {#each outcomes as outcome (outcome.id)}{#if outcome.state.tools}<ToolTrace run={outcome} {onInspect}/>{/if}<div class="outcome"><span class:waiting={isActive(outcome.status)} data-testid="run-status">{outcome.status}</span>{#if outcome.error}<span>{outcome.error.message}</span>{/if}{#if !isActive(outcome.status)}<button disabled={blocked} onclick={()=>onRetry(outcome)}>Retry response</button>{/if}<button onclick={()=>onInspect(outcome.state.request_artifact_id)}>Inspect Run</button></div>{/each}
 </article>
 {#if menu}<Menu x={menu.x} y={menu.y} onClose={()=>menu=null} items={[{label:images.length?'Copy text':'Copy message',action:()=>void copy(),disabled:!text},{label:'Inspect Artifact',action:()=>onInspect(artifact.id)},...(run&&!running?[{label:'Retry response',action:()=>onRetry(run!),disabled:blocked}]:[])]}/>{/if}
 <style>

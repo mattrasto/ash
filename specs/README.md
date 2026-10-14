@@ -21,7 +21,7 @@ Sequencing is proposed. Source names refer to overview headings.
 | Thread visibility | Intelligent archive timing, revival, activity indicators; consider overrides, pinning and undo | Manual archive/pin and Run status first; archive automation later | Visibility; G04, G06 |
 | Live Mode | Continuous voice/video; separate Live Threads; focus on other threads; pause, resume and device handoff | Later | Live Mode; G02, G09 |
 | [Images](features/images.md) and other input | Images and descriptions; later dictation, files, video and continuous streams | Images implemented; other formats later | Artifact Engine; Agent / Basics; Data Primitives; G06, G09 |
-| Connectors and tools | API/MCP/filesystem access, external inputs, configurable listeners | Later; first integration to be chosen | Agent / Basics; Artifact Engine; G08, G09 |
+| [Tool execution and inspection](features/tools.md) | Common tool lifecycle, concurrency, progress and inspection; read-only filesystem tools | Implemented | Agent / Basics; Artifact Engine; G08, G09 |
 | Tasks | User/Ash ownership, unassigned work, snooze/complete/archive/delete; independent of threads with links | Later | Built-In Features / Tasks; G06, G07 |
 | Decisions | Collect required user input; snooze/respond; optional comments and urgent notification | Later, before gated agent actions | Built-In Features / Decisions; G08 |
 | [Permissions](features/permissions.md) | Deterministic and semantic rules, formalization, resource boundaries and user authorization; UI-only categories | Starting implementation accepted; isolated experiments complete; app integration pending | Permissions system; G08 |
@@ -41,4 +41,4 @@ Sequencing is proposed. Source names refer to overview headings.
 
 Current delivery: [persisted chat and Artifact inspection](features/conversations.md#scope), extended with [images and descriptions](features/images.md). Topic management and instruction editing follow separately. [Implementation](../docs/features/conversations.md) · [Test plan](../docs/plans/persisted-chat-tests.md).
 
-Next direction, accepted 2026-10-12: usable self-modification through images, tools and Topics/context. The [delivery plan](../docs/plans/self-modification.md) proposes the sequence and acceptance targets, superseding the broad placement above for that path.
+Next direction, accepted 2026-10-12: usable self-modification through images, tools and Topics/context. [Inspectable tools and read-only filesystem access](features/tools.md) are implemented under the approved [test plan](../docs/plans/inspectable-tools-tests.md). The [delivery plan](../docs/plans/self-modification.md) records the sequence and acceptance targets, superseding the broad placement above for that path.

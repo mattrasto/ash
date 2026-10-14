@@ -53,6 +53,9 @@ ash/
 │   │   │   │   ├── organization/     # Topics and membership
 │   │   │   │   ├── artifacts/        # Engine records, lineage and Surface content
 │   │   │   │   ├── runs/             # Execution and linked retries
+│   │   │   │   ├── tools/            # Handler contract and common dispatch
+│   │   │   │   ├── filesystem/       # Scoped filesystem operations
+│   │   │   │   ├── permissions/      # Planned: action authorization
 │   │   │   │   ├── context/          # Selection and inspection
 │   │   │   │   └── instructions/     # Editable documents owned by scopes
 │   │   │   └── platform/

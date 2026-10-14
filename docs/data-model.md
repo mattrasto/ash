@@ -32,7 +32,7 @@ A Run tracks an Act workflow and its outputs, including Surface Artifacts. Routi
 
 A workflow may contain several model calls using different providers or models. Each call has its own Artifact payload. Find produced Artifacts through `artifacts.run_id`; the checkpoint references those currently needed by the workflow.
 
-Conversation Runs produce one response. User Input and its directly mirrored Surface precede that Run and have no producing `run_id`. Image-description Runs consume an upload Input, have null `thread_id`, and produce an internal result Act without a Surface. Multiple-call execution, durable waits/resumption and other threadless workflows still need execution contracts.
+Conversation Runs produce one answer through one or more model/tool calls. User Input and its directly mirrored Surface precede that Run and have no producing `run_id`. Image-description Runs consume an upload Input, have null `thread_id`, and produce an internal result Act without a Surface. [Tool execution](features/tools.md#execution-and-inspection) defines multi-call checkpoints; durable waits/resumption and other threadless workflows still need contracts.
 
 ## Artifacts and placement
 
@@ -148,7 +148,13 @@ Validate each reference's existence, layer, type and producing Run on write; JSO
 }
 ```
 
-For the initial one-call Run, optional `state.model` holds allowlisted provider diagnostics: `requestId`, `responseId`, resolved `model`, provider `status`, and optional `usage` (input/output/total/cached-input/reasoning token counts). Missing usage is unknown. These fields may grow while running and freeze with the terminal checkpoint; no schema migration is needed. Multi-call workflows will need per-call records. Omit credentials and raw provider dumps. Add JSON indexes only for actual queries.
+Optional `state.model` holds the latest call's allowlisted provider diagnostics: `requestId`, `responseId`, resolved `model`, provider `status`, and optional `usage` (input/output/total/cached-input/reasoning token counts). Missing usage is unknown. Tool workflows retain metadata separately for each round; the latest call is not a total across the Run. Fields freeze with the terminal checkpoint. Add JSON indexes only for actual queries.
+
+Optional `state.tools` has version 1, a checkpoint counter, ordered model rounds and calls, and result/error accounting. Call records reference immutable `tool_call` and `tool_result` Acts and contain lifecycle/authorization evidence. Completed model rounds produce `model_output` Acts. `model_request.tools` captures definitions, resource descriptions, instructions, limits and ordered continuation references/results. Optional `availabilityIssues` in requests and checkpoints retain safe public capability diagnostics. Existing payloads without these fields remain valid.
+
+Each captured source excerpt gains a dispatcher-owned `citationId`; the handler's reference `id` stays unchanged. Call checkpoints retain both `referenceIds` and optional `citationIds`. [Citation lookup and historical compatibility](features/tools.md#execution-and-inspection).
+
+`provider_continuations` links one private JSON output-item array to its output Artifact and Run. Runtime roles can select/insert, not update/delete; inspection never joins this table. Public output payloads retain its hash/byte count, checked before replay. A database trigger prevents updating captured request/output/call/result payloads or deleting conversation captures; expired threadless image summaries retain their existing cleanup path.
 
 Persisting state does not implement safe continuation. The initial restart behavior remains interruption and explicit retry under [execution and transactions](#execution-and-transactions).
 

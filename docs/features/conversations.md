@@ -8,7 +8,7 @@ Scope and behavior: [conversation spec](../../specs/features/conversations.md). 
 
 Run `pnpm dev:setup`, then `pnpm dev`. Create a named thread, send a message and follow up. **Inspect** opens the Artifact chain; select its request Act or Ash Surface to see captured model messages, instruction identity, selection/omissions, generation options and Run checkpoint. The inspector refreshes while the selected chain has active work.
 
-The **Test response settings** selector controls the deterministic adapter: normal, slow streaming, failure before output, failure after partial output, or an empty response. It is development behavior, saved in each model request. Explicit deterministic retries reuse the frozen message/context selection and use the current test setting. The default launch makes no external calls. [OpenAI mode](#openai-mode) requires explicit configuration.
+The normal preview uses [OpenAI mode](#openai-mode). For an offline demo, explicitly run `pnpm dev --deterministic`. Its **Test response settings** selector controls normal, slow streaming, failure before output, failure after partial output, or an empty response. These settings are saved in each model request. Deterministic retries reuse the frozen message/context selection and use the current test setting.
 
 Chat drafts and pending delivery keys live in the isolated desktop's browser storage. Accepted messages and execution state live in PostgreSQL.
 
@@ -56,7 +56,7 @@ Topic management, instruction editing, pin controls, Artifact moves, image gener
 
 ## OpenAI mode
 
-Use a development API key with access to the chosen model. In the checkout root, copy `.env.example` to `.env.local`, run `chmod 600 .env.local`, and fill in `OPENAI_API_KEY`. The file is gitignored plaintext, readable only by its owner. The backend reads that entry only when explicitly launched in live mode; other entries are not loaded into the process environment. Normal `pnpm dev` and `pnpm verify` ignore this file and inherited provider keys.
+Use a development API key with access to the chosen model. In the checkout root, copy `.env.example` to `.env.local`, run `chmod 600 .env.local`, and fill in `OPENAI_API_KEY`. The file is gitignored plaintext, readable only by its owner. Live startup validates that entry, then the backend uses it for provider calls; other entries are not loaded into the process environment. Explicit deterministic demos and `pnpm verify` ignore this file. Inherited provider keys are never used.
 
 The key stays in `.env.local`; it is not copied into session storage or passed to supervisor/renderer environments. Stop and restart the backend to reload a changed key. Reset and disposal preserve this developer file. Remove its key while stopped to prevent local reuse.
 
@@ -67,15 +67,17 @@ pnpm dev:stop
 pnpm dev --openai-model MODEL_ID --max-output-tokens 1024 --reasoning-effort low
 ```
 
-Replace `MODEL_ID` with an available Responses model. No live model is selected by default. Reasoning effort is optional and must be supported by that model. For an explicitly bounded session, add both `--live-calls` and `--live-minutes`. Disposable live exploration with `pnpm dev:verify --fixture empty` requires those limits; ordinary `pnpm verify` uses no live calls.
+With no flags, `pnpm dev` starts `gpt-6.1-sol` with low reasoning. The command above overrides that default; replace `MODEL_ID` with an available Responses model and a supported reasoning effort. Missing or unsafe credentials stop startup with setup guidance. `--deterministic` explicitly selects the offline demo and cannot be combined with live options. Automated test instances use the offline adapter without reading credentials.
 
-The launcher prints a session ID. After Stop/Run, use `pnpm dev --live-session SESSION_ID` (plus `--instance INSTANCE_ID` for disposable instances) to retain its model, settings, call counter and any limits. Hot reload retains that session. Starting without live flags returns to the deterministic adapter. Each new `--openai-model` launch creates a new session; it does not renew a prior bounded allowance.
+The launcher prints a session ID. Running `pnpm dev` again reopens the active live preview; Stop/Run and hot reload retain its model, settings, call counter and limits. `--live-session SESSION_ID` explicitly resumes an older session owned by that instance. New model or tuning flags create a new session and require stopping the current preview first. Offline demos require `--deterministic` on every launch; that choice does not become the normal preview default.
+
+For bounded exploration, use `pnpm dev:verify --fixture empty --live-calls 20 --live-minutes 10`. Both limits are required for disposable live instances. Use `pnpm dev:verify --deterministic` for an offline disposable demo. Ordinary `pnpm verify` makes no live calls.
 
 Output defaults to 1,024 tokens and each call has a 60-second deadline, shortened by expiry when the session is bounded. Input retains the [context bound](#execution-details). These per-request limits still apply to interactive chat. Reasoning tokens count toward the output bound; no dollar-denominated spending cap is enforced.
 
 A call is counted on disk before HTTP dispatch, including failed or ambiguous attempts. Concurrent threads share the counter and any bounded allowance. Session records contain only settings and usage at `~/.ash-dev/workspaces/WORKSPACE_ID/model-sessions/SESSION_ID/`, outside resettable instance data. Restart, reset and disposal cannot replenish a bounded allowance. Interactive records explicitly store null call/expiry limits and are accepted only for the persistent preview.
 
-The backend uses the pinned OpenAI SDK and Responses API with `store:false`, no provider conversation ID and no enabled tools. It sends the saved message list and recorded options. SDK automatic retries are disabled. Each explicit OpenAI retry preserves provider/model/options as well as messages; its session must match the model and allow at least the original output limit. A different model requires a new submission.
+The backend uses the pinned OpenAI SDK and Responses API with `store:false` and no provider conversation ID. It sends the saved message list and recorded options; configured tools use the [multi-call executor](tools.md#execution-and-inspection). SDK automatic retries are disabled. Each explicit OpenAI retry preserves provider/model/options as well as messages; its session must match the model and allow at least the original output limit. A different model requires a new submission.
 
 Streaming deltas and refusal text use the existing Surface persistence path. A completed provider event must agree with the streamed text. Incomplete, truncated, lost or failed streams produce a failed Run and retain partial output. Cancellation aborts the local HTTP stream; it cannot guarantee that provider work or billing stops immediately. The inspector exposes request/response IDs, resolved model, provider status and reported input/output/cached/reasoning tokens. Missing usage stays unknown.
 

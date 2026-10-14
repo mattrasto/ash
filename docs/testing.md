@@ -31,7 +31,7 @@ Run from the checkout root. Docker and a graphical macOS session are required fo
 | `pnpm verify --scenario DEV-07` | Build and all suites containing checks linked to DEV-07. |
 | `pnpm verify --list` | JSON scenario inventory; combine with profile/scenario selection. No resources are provisioned. |
 | `pnpm test:boundary`, `pnpm test:workflow`, `pnpm test:desktop` | Direct suite commands for debugging; `pnpm test` aliases the boundary suite. Use `verify` for an aggregate report. |
-| `pnpm dev:verify --fixture scratchpad` | Fresh disposable app for exploration/manual checks; Ctrl+C stops and disposes it. |
+| `pnpm dev:verify --fixture scratchpad --deterministic` | Fresh offline disposable app for exploration/manual checks; Ctrl+C stops and disposes it. For live exploration, use the [bounded model options](features/conversations.md#openai-mode). |
 
 Selection expands to whole suites because the lifecycle checks share ordered setup. The selected scope is explicit in output and reports. Unknown IDs, including unimplemented product scenarios, fail instead of running zero tests. Full verification is never inferred from a selected run. Shared runtime, schema, dependency or verification changes require full verification; automatic diff-based selection is deferred.
 
@@ -58,7 +58,7 @@ Desktop scenarios assert that hidden windows remain invisible and non-focusable 
 
 Playwright Test compares screenshots with `updateSnapshots: 'none'`; a missing baseline fails. Baselines are partitioned by OS and architecture, with Electron/Playwright pinned in the lockfile. Match OS version, display scale and fonts when comparing; a new environment needs its own reviewed expectations. Initial baselines cover macOS arm64 only.
 
-Static layout scenarios use reduced-motion mode to avoid entry/stream animation timing; integration scenarios cover motion and scrolling. The randomly derived accent is normalized and variable response timing/thread age are hidden by `tests/support/visual.css`. The remaining conversation layout and content are real. These screenshots do not cover the hidden metadata or random accent selection; interaction tests cover their behavior. Reviewed images record the current implementation, not human approval of its design.
+Static layout scenarios use reduced-motion mode to avoid entry/stream animation timing; integration scenarios cover motion and scrolling. The desktop test helper sets macOS `AppleShowScrollBars=Always` through the [process argument domain](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/UserDefaults/AboutPreferenceDomains/AboutPreferenceDomains.html#//apple_ref/doc/uid/10000059i-CH2-SW4), preserving baseline geometry without changing user preferences. The randomly derived accent is normalized and variable response timing/thread age are hidden by `tests/support/visual.css`. The remaining conversation layout and content are real. These screenshots do not cover the hidden metadata or random accent selection; interaction tests cover their behavior. Reviewed images record the current implementation, not human approval of its design.
 
 For an intentional visual change:
 
@@ -83,6 +83,8 @@ Before handoff, the coding agent reviews the diff in a separate pass and explore
 ## Product and self-modification extensions
 
 The deterministic adapter covers streaming, controlled delay, failure and cancellation while internal persistence/context processing remains real. Product coverage and remaining acceptance gaps live in the [chat test plan](plans/persisted-chat-tests.md) and [image test plan](features/images.md). Mocked Responses checks run offline; live-model usefulness is evaluated separately. [OpenAI mode](features/conversations.md#openai-mode) keeps ordinary interactive sessions uncapped and optional live tests bounded. Exhausting a live budget does not stop offline verification.
+
+The approved [inspectable tools test plan](plans/inspectable-tools-tests.md#automated-scenarios) covers shared dispatch and feature-specific handlers. The scenario inventory lists the checks available in this checkout; generic execution/provider tests do not require filesystem or Topic implementations.
 
 Recovery verification follows [backup and recovery](data-model.md#backup-and-recovery): restore a physical backup plus archived WAL into a separate PostgreSQL instance, verify state at the chosen time with zero external calls, and check startup interruption handling separately.
 

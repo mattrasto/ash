@@ -33,5 +33,6 @@ export interface PreviewInfo {
 
 export * from './contracts/conversations.ts';
 export * from './contracts/attachments.ts';
+export * from './contracts/tools.ts';
 
 export { ZodError } from 'zod';

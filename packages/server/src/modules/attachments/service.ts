@@ -133,7 +133,7 @@ export class Attachments {
       let text='',metadata:ModelExecution|undefined;
       for await(const event of this.model.stream(request,signal,image=>this.storage.dataUrl(image))) {
         if(typeof event==='string') {text+=event;if(text.length>3000)throw new ModelFailure('description_too_long','The image description exceeded its size limit.');}
-        else {metadata={...metadata,...event};await this.db.run.updateMany({where:{id,status:'running'},data:{state:{...state,model:metadata}}});}
+        else if (!('kind' in event)) {metadata={...metadata,...event};await this.db.run.updateMany({where:{id,status:'running'},data:{state:{...state,model:metadata}}});}
       }
       if(!text.trim())throw new ModelFailure('description_empty','No image description was returned.');
       await this.db.$transaction(async tx=>{

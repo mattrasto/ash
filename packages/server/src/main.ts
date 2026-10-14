@@ -9,6 +9,8 @@ import { readOpenAIKey } from './platform/models/credentials.ts';
 import { Attachments } from './modules/attachments/service.ts';
 import { ImageStorage, AttachmentError } from './modules/attachments/storage.ts';
 import { attachmentRoutes } from './modules/attachments/routes.ts';
+import { filesystemRuntime, loadFilesystemConfig } from './modules/filesystem/runtime.ts';
+import { composeToolRuntimes } from './modules/tools/contract.ts';
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -35,7 +37,7 @@ const model = modelSessionId ? openAIModel({...await openSession(instance,modelS
 const imageStorage=new ImageStorage(instance.root);
 await imageStorage.prepare();
 const attachments=new Attachments(product,imageStorage,model);
-const conversations = new Conversations(product,model,true,imageStorage);
+const conversations = new Conversations(product,model,true,imageStorage,composeToolRuntimes(filesystemRuntime(()=>loadFilesystemConfig(instance.profile === 'preview' ? instance.checkout : instance.root))));
 await conversations.recover();
 await attachments.recover();await attachments.cleanup();
 const cleanupTimer=setInterval(()=>{void attachments.cleanup().catch(()=>console.error('Image cleanup failed'));},60*60*1000);cleanupTimer.unref();

@@ -22,7 +22,9 @@ export async function desktop(instance: Instance) {
   const configPath = join(instance.root, 'test-client.json');
   await atomic(configPath, { root: instance.root, label: instance.label, instanceId: instance.id, url: running!.webUrl, windowed: true, background: true });
   const require = createRequire(join(instance.checkout, 'package.json'));
-  const app = await _electron.launch({ executablePath: require('electron'), args: [entry], cwd: instance.checkout,
+  // A per-process Cocoa preference keeps native scrollbar geometry stable without changing user defaults.
+  const args = [entry, ...(process.platform === 'darwin' ? ['-AppleShowScrollBars','Always'] : [])];
+  const app = await _electron.launch({ executablePath: require('electron'), args, cwd: instance.checkout,
     env: { ...childEnvironment(join(instance.root, 'tmp')), ASH_CLIENT_CONFIG: configPath } as Record<string, string>, timeout: 30_000 });
   try {
     const page = await app.firstWindow();

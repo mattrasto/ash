@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, readdir, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Instance } from '@ash/shared';
@@ -9,7 +9,8 @@ import { configureLiveModel } from '../../../../../scripts/dev/live-model.ts';
 
 async function fixture() {
   const root=await mkdtemp(join(tmpdir(),'ash-model-session-'));
-  const instance = {id:'a'.repeat(24),workspaceId:'b'.repeat(24),devRoot:root,profile:'preview'} as Instance;
+  await writeFile(join(root,'.env.local'),'OPENAI_API_KEY=synthetic-key\n',{mode:0o600});
+  const instance = {id:'a'.repeat(24),workspaceId:'b'.repeat(24),devRoot:root,checkout:root,profile:'preview'} as Instance;
   const session:Session={version:1,id:'c'.repeat(24),instanceId:instance.id,workspaceId:instance.workspaceId,
     model:'test-openai-model',options:{api:'responses',store:false,maxOutputTokens:1024,timeoutMs:60000},
     maxCalls:2,callsUsed:0,expiresAt:new Date(Date.now()+60000).toISOString()};
@@ -32,13 +33,14 @@ test('live call reservations serialize and persist across backend reopen and ins
     await assert.rejects(createSession(instance,session),/exist/);
   } finally {await rm(root,{recursive:true,force:true});}
 });
-test('expired sessions cannot dispatch and default launches ignore inherited credentials',async()=>{
+test('expired sessions cannot dispatch and explicit demos need no live session',async()=>{
   const {root,instance,session}=await fixture();
   try {
     await createSession(instance,{...session,expiresAt:new Date(Date.now()-1000).toISOString()});
     await assert.rejects((await openSession(instance,session.id)).reserve(),/expired/);
     assert.equal((await readSession(instance,session.id)).callsUsed,0);
-    assert.equal(await configureLiveModel(instance,{}),undefined);
+    assert.equal(await configureLiveModel(instance,{deterministic:true}),undefined);
+    assert.equal(await configureLiveModel({...instance,profile:'test'},{}),undefined);
     await assert.rejects(configureLiveModel(instance,{'openai-model':'test-model','live-minutes':'10'}),/live-calls/);
     await assert.rejects(configureLiveModel(instance,{'openai-model':'test-model','live-calls':'5'}),/live-minutes/);
     await assert.rejects(configureLiveModel(instance,{'live-session':session.id,'live-calls':'10'}),/without changing/);

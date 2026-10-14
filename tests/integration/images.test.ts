@@ -215,7 +215,8 @@ test('persisted images, description Runs and desktop workflow (no external calls
       try {
         const run=await streaming.submit(current.id,randomUUID(),'Continue while I read above','normal');
         await page.getByRole('heading',{name:'Reading position',exact:true}).waitFor();
-        await page.locator('.transcript').evaluate(el=>{el.scrollTop=0;el.dispatchEvent(new Event('scroll'));});
+        // Express user intent before positioning; a queued automatic layout may still own this frame.
+        await page.locator('.transcript').evaluate(el=>{el.dispatchEvent(new WheelEvent('wheel',{deltaY:-1,bubbles:true}));el.scrollTop=0;el.dispatchEvent(new Event('scroll'));});
         await page.getByRole('button',{name:'↓ Latest messages',exact:true}).waitFor();continueStream();await settle(current.id,run.id);
         await page.getByText('More text arrived while you were reading.',{exact:true}).waitFor({state:'attached'});
         assert.ok(await page.locator('.transcript').evaluate(el=>el.scrollTop<3));

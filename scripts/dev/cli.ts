@@ -26,13 +26,14 @@ try {
     fixture: { type: 'string' }, json: { type: 'boolean' }, headless: { type: 'boolean' }, windowed: { type: 'boolean' }, background: { type: 'boolean' }, detach: { type: 'boolean' },
     'openai-model': {type:'string'}, 'live-session': {type:'string'}, 'live-calls': {type:'string'},
     'live-minutes': {type:'string'}, 'max-output-tokens': {type:'string'}, 'reasoning-effort': {type:'string'},
+    deterministic: {type:'boolean'},
   } });
   jsonOutput = values.json ?? false;
   assertEnvironment();
   const root = await devRoot(values['dev-root']);
   const ws = await workspace(resolve(values.workspace ?? process.cwd()), root);
   const command = positionals[0];
-  if (!['start','explore'].includes(command) && ['openai-model','live-session','live-calls','live-minutes','max-output-tokens','reasoning-effort'].some(key=>values[key as keyof typeof values] !== undefined)) throw new Error('Live model options require start or explore');
+  if (!['start','explore'].includes(command) && ['deterministic','openai-model','live-session','live-calls','live-minutes','max-output-tokens','reasoning-effort'].some(key=>values[key as keyof typeof values] !== undefined)) throw new Error('Model options require start or explore');
   const instanceId = values.instance ?? ws.previewId;
   const selected = values.instance ? await readInstance(ws, instanceId) : undefined;
   if (values.instance && ['setup', 'explore'].includes(command)) throw new Error(`${command} does not accept --instance`);
@@ -48,8 +49,13 @@ try {
         ? await readInstance(ws) : await createInstance(ws, 'preview', fixture));
     logDirectory = join(instance.root, 'logs');
     const prior = await runtime(instance);
-    if (prior && await alive(prior.supervisor) && (values['openai-model'] || prior.modelSessionId !== values['live-session'])) throw new Error('Stop the running instance before changing its model session');
-    const modelSessionId = await configureLiveModel(instance,values).catch(async error => {
+    if (prior && await alive(prior.supervisor)) {
+      const changing = ['openai-model','live-calls','live-minutes','max-output-tokens','reasoning-effort'].some(key=>values[key as keyof typeof values] !== undefined)
+        || (values['live-session'] !== undefined && values['live-session'] !== prior.modelSessionId)
+        || (values.deterministic ? !!prior.modelSessionId : !prior.modelSessionId && instance.profile !== 'test');
+      if (changing) throw new Error('Stop the running instance before changing its model session');
+    }
+    const modelSessionId = await configureLiveModel(instance,values,prior?.modelSessionId).catch(async error => {
       if (command === 'explore') await disposeInstance(ws,instance.id);
       throw error;
     });
@@ -81,7 +87,7 @@ try {
         ? instance.profile === 'preview' ? 'Stop: pnpm dev:stop' : `Dispose: pnpm dev:dispose${target}`
         : command === 'explore' ? 'Ctrl+C to stop and discard this instance' : 'Ctrl+C to stop · data is kept',
       `Details: pnpm dev:status${target}`,
-      ...(modelSessionId ? [`OpenAI session: ${modelSessionId}`, `Resume this session: pnpm dev${target} --live-session ${modelSessionId}`] : []),
+      ...(modelSessionId ? [`OpenAI session: ${modelSessionId} · retained on restart`] : ['Deterministic demo · no model service is called']),
     ]);
     if (!values.detach) {
       for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, cleanup);

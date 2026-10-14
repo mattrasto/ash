@@ -1,10 +1,13 @@
 import { Marked } from 'marked';
+import { parseSourceCitation } from './citations.ts';
 const escape=(value:string)=>value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 const markdown=new Marked({gfm:true,breaks:true,renderer:{
   html({text}){return escape(text);},
   image({text}){return `<span class="image-reference">[Image: ${escape(text)}]</span>`;},
   link({href,tokens}) {
     const label=this.parser.parseInline(tokens);
+    const citation = parseSourceCitation(href);
+    if (citation !== undefined) return `<a href="ash-source:${escape(encodeURIComponent(citation))}" data-source-reference="${escape(citation)}">${label}</a>`;
     try {const url=new URL(href);if(['https:','http:'].includes(url.protocol) && !url.username && !url.password)return `<a href="${escape(url.href)}" rel="noreferrer">${label}</a>`;}catch{}
     return label;
   },

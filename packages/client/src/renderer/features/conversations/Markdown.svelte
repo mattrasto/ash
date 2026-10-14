@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { StreamingMarkdown } from './streaming.ts';
-  let {text,streaming=false}:{text:string;streaming?:boolean}=$props();
+  let {text,streaming=false,onSource}:{text:string;streaming?:boolean;onSource?:(reference:string)=>boolean}=$props();
   let host:HTMLDivElement,renderer=$state<StreamingMarkdown>();
   onMount(()=>{renderer=new StreamingMarkdown(host);renderer.prime(text);return()=>renderer?.dispose();});
   let wasStreaming=false;
@@ -15,7 +15,7 @@
       try{await window.ashMedia.copyText(code);feedback='Code copied';}catch{feedback='Copy failed';}
     }
     const link=target.closest<HTMLAnchorElement>('a');
-    if(link){event.preventDefault();try{await window.ashMedia.openLink(link.href);}catch{feedback='Could not open link';}}
+    if(link){event.preventDefault();if(link.dataset.sourceReference){if(!onSource?.(link.dataset.sourceReference))feedback='Source citation unavailable';return;}try{await window.ashMedia.openLink(link.href);}catch{feedback='Could not open link';}}
   }
 </script>
 <!-- Delegated events only handle generated buttons/anchors; raw HTML is escaped by renderMarkdown. -->

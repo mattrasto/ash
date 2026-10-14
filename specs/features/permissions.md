@@ -14,6 +14,8 @@ Includes deterministic resource restrictions, semantic conditions, rule authorin
 
 The [engineering design](../../docs/features/permissions.md#selected-evaluator) records the selected evaluator, context contract, implementation references and brief future checks. Deferred: the complete Decisions feature, durable waiting/resumption, production enforcement integrations and physical database design. This spec does not expand the [first conversation journey](conversations.md#scope).
 
+The accepted [tool slice](tools.md#initial-filesystem-tools) stages configured filesystem access through a common authorization boundary. Its limited scope enforcement precedes the full evaluator and permission UI; it does not claim completion of the rules below.
+
 ## Flow
 
 1. The user says, “Don't read from `/secret_cool_folder`.” Ash presents the interpreted path, operations and effect, retaining the original wording. Saving establishes the rule.

@@ -8,7 +8,7 @@ Starting implementation accepted, 2026-10-12 · Isolated classifier experiments 
 
 Implement permission checking at the backend's action-dispatch boundary. Exact resource checks, semantic evaluation, sensitivity discovery and the final effect resolver are separate responsibilities. Provider adapters return evidence about applicability or sensitive consequences; they cannot grant resource access, mutate rules or execute an action.
 
-The initial conversation schema remains unchanged. General tool execution, Decisions and durable waiting are future integrations. An application-wide boundary must account for filesystem tools, shells, browser control and delegated execution; a check attached to one named tool cannot constrain alternative access paths by itself.
+The tool slice's [dispatch design](../plans/inspectable-tools-tests.md#filesystem-and-authorization) defines the shared authorization boundary; feature runtimes supply their scoped checks. The evaluator below, Decisions and durable waiting remain later integrations. An application-wide boundary must account for filesystem tools, shells, browser control and delegated execution; a check attached to one named tool cannot constrain alternative access paths by itself.
 
 ## Selected evaluator
 
@@ -108,7 +108,7 @@ Reference repository: `/Users/mattrasto/Documents/Programming/ash_experiments`, 
 | Jev request/response contract, packing, timeout and usage accounting | [http.ts](/Users/mattrasto/Documents/Programming/ash_experiments/permissions/src/providers/http.ts), `HttpProvider("jev", key, budget, {format: "choice", threshold: 0.8})` |
 | Narrow filesystem formalization and inactive rule proposals | [formalize/index.ts](/Users/mattrasto/Documents/Programming/ash_experiments/permissions/src/formalize/index.ts) |
 
-Proposed Ash placement follows the [repository layout](../repository-structure.md): permission logic under `packages/server/src/modules/permissions/`, transport in server model infrastructure, and only cross-process Decision/rule contracts in shared. Start with one enforceable tool adapter, connect the Decision response to reevaluation, then extend tool coverage. Physical storage and authorization lifetime remain open; this documentation does not add migrations or app code.
+Proposed Ash placement follows the [repository layout](../repository-structure.md): permission logic under `packages/server/src/modules/permissions/`, transport in server model infrastructure, and only cross-process Decision/rule contracts in shared. After the configured-scope tool slice, connect evaluator evidence and Decision responses to reevaluation before extending effects. Physical rule storage and authorization lifetime remain open; this documentation does not add migrations or app code.
 
 The reference's dispatch is simulated; secret labels and action facts are authored fixtures. General secret detection, OS/browser enforcement, durable approval consumption, concern-by-concern coverage citations and model-based rule authoring still require implementation. The formalizer handles one path grammar and a bank-password proposal template, not arbitrary language.
 

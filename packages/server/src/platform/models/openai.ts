@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { Response as OpenAIResponse, ResponseInput, ResponseInputContent } from 'openai/resources/responses/responses';
-import { ModelExecution, RequestPayload, type ModelInfo } from '@ash/shared';
+import { toResponseInputItems } from 'openai/lib/responses/ResponseInputItems';
+import { ModelExecution, RequestPayload, ToolCall, type ModelInfo } from '@ash/shared';
 import { ModelFailure, type ModelAdapter } from './adapter.ts';
 
 export type OpenAIRequest = Extract<RequestPayload, {provider:'openai'}>;
@@ -53,7 +54,7 @@ export function openAIModel(settings: OpenAIModelSettings, testFetch?: typeof fe
       return previous ? {provider:previous.provider as 'openai',model:previous.model,options:(previous as OpenAIRequest).options} : configuration;
     },
     info:settings.info,
-    async *stream(request, signal, imageUrl) {
+    async *stream(request, signal, imageUrl, replay) {
       if (request.provider !== 'openai') throw new ModelFailure('provider_unavailable', 'This request requires the deterministic model.');
       if(request.purpose==='image_summary')this.summaryConfiguration(request);else this.configuration('normal',request);
       signal.throwIfAborted();
@@ -70,6 +71,18 @@ export function openAIModel(settings: OpenAIModelSettings, testFetch?: typeof fe
         }
         return {role:message.role,content};
       }));
+      const definitions = request.tools?.definitions ?? [];
+      if (request.tools) {
+        input.push({role:'system',content:request.tools.instructions});
+        for (const id of request.tools.previousOutputIds) {
+          const saved = replay?.outputs.find(output => output.id === id);
+          if (!saved || saved.items.some(item => !item || typeof item !== 'object' || !['message','reasoning','function_call'].includes(String((item as {type?:string}).type))))
+            throw new ModelFailure('provider_continuation', 'Required provider continuation is unavailable or unsupported.');
+          input.push(...toResponseInputItems(saved.items as OpenAIResponse['output']));
+          for (const item of request.tools.results.filter(result => result.outputId === id))
+            input.push({type:'function_call_output',call_id:item.callId,output:JSON.stringify(item.result)});
+        }
+      }
       signal.throwIfAborted();
       const remainingMs = await settings.reserve();
       signal.throwIfAborted();
@@ -80,16 +93,22 @@ export function openAIModel(settings: OpenAIModelSettings, testFetch?: typeof fe
         const result = await client.responses.create({
           model:request.model,input,stream:true,store:request.options.store,
           max_output_tokens:request.options.maxOutputTokens,
+          ...(request.tools ? {tools:definitions.map((definition,index)=>({type:'function' as const,name:`ash_${index}`,description:definition.description,parameters:definition.inputSchema,strict:true})),parallel_tool_calls:true,include:['reasoning.encrypted_content' as const]} : {}),
           ...(request.options.reasoningEffort ? {reasoning:{effort:request.options.reasoningEffort}} : {}),
         },{signal:abort,maxRetries:0}).withResponse();
         stream = result.data;
         if (result.request_id) yield ModelExecution.parse({requestId:result.request_id});
         let text = '';
+        const argumentStreams = new Map<string,string>();
         for await (const event of result.data) {
           abort.throwIfAborted();
           if (event.type === 'response.output_text.delta' || event.type === 'response.refusal.delta') {
             text += event.delta;
             yield event.delta;
+          } else if (event.type === 'response.function_call_arguments.delta') {
+            const value = (argumentStreams.get(event.item_id) ?? '') + event.delta;
+            if (value.length > 32768) throw new ModelFailure('provider_call_limit','A proposed tool call exceeded the argument limit.');
+            argumentStreams.set(event.item_id,value);
           } else if (event.type === 'response.created') {
             yield metadata(event.response);
           } else if (event.type === 'response.completed' || event.type === 'response.failed' || event.type === 'response.incomplete') {
@@ -98,6 +117,21 @@ export function openAIModel(settings: OpenAIModelSettings, testFetch?: typeof fe
             if (event.type === 'response.failed') throw new ModelFailure('provider_failed', 'OpenAI failed to finish the response.');
             if (event.type === 'response.incomplete') throw new ModelFailure('provider_incomplete', 'OpenAI returned an incomplete response (output limit or content filtering).');
             if (event.response.status !== 'completed' || visibleText(event.response) !== text) throw new ModelFailure('provider_stream_incomplete', 'The response stream did not contain the complete saved reply.');
+            if (request.tools) {
+              if (event.response.output.some(item=>!['message','reasoning','function_call'].includes(item.type)))
+                throw new ModelFailure('provider_continuation','The provider returned an unsupported continuation item.');
+              const calls = event.response.output.filter(item=>item.type==='function_call').map(item=>{
+                if ((item.status && item.status!=='completed') || (argumentStreams.has(item.id!) && argumentStreams.get(item.id!)!==item.arguments))
+                  throw new ModelFailure('provider_stream_incomplete','Tool arguments did not match the completed response.');
+                const index = /^ash_(\d+)$/.exec(item.name)?.[1];
+                return ToolCall.parse({callId:item.call_id,name:index!==undefined?definitions[Number(index)]?.name??item.name:item.name,arguments:item.arguments});
+              });
+              if (new Set(calls.map(call=>call.callId)).size!==calls.length) throw new ModelFailure('provider_protocol','The provider repeated a call identity in one response.');
+              // Reasoning summary/content and encrypted payloads stay exclusively in private replay storage.
+              if (calls.length && event.response.output.some(item=>item.type==='reasoning'&&!item.encrypted_content))
+                throw new ModelFailure('provider_continuation','The provider omitted required encrypted continuation.');
+              yield {kind:'output',calls,continuation:event.response.output};
+            }
             return;
           } else if (event.type === 'error') {
             throw new ModelFailure('provider_failed', 'OpenAI reported a streaming error.');

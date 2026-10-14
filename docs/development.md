@@ -1,6 +1,6 @@
 # Development workflow
 
-Workflow accepted, 2026-10-09 · Persisted chat with opt-in OpenAI mode
+Workflow accepted, 2026-10-09 · Persisted chat with live OpenAI previews
 
 Give each feature a Git worktree, a persistent preview and disposable verification environments. Repository commands own the runtime; Codex supplies worktrees and launch actions. Ash can later invoke the same commands for [self-modification](../specs/HUMAN_SPEC.md#modifying-ashs-code).
 
@@ -15,11 +15,13 @@ pnpm dev:setup
 pnpm dev
 ```
 
-Use Codex's checked-in `.codex/environments/environment.toml` for automatic worktree setup and the [preview and test actions](#commands). In the current Codex layout, hide the sidebar to reveal Actions. The same commands work from a terminal. Setup uses `node scripts/dev/setup.mjs` so installation works before dependencies exist. No personal `.env` is required.
+Use Codex's checked-in `.codex/environments/environment.toml` for automatic worktree setup and the [preview and test actions](#commands). In the current Codex layout, hide the sidebar to reveal Actions. The same commands work from a terminal. Setup uses `node scripts/dev/setup.mjs` so installation works before dependencies exist. Setup and automated tests require no credentials; the normal preview requires the checkout's [OpenAI key](features/conversations.md#openai-mode). Use `pnpm dev --deterministic` only for an explicit offline demo.
 
 The launcher requires process inspection, loopback sockets and Docker access. A coding-agent sandbox may need permission to run it; denial of process inspection fails closed. Logs live in the instance's `logs/` directory, and `pnpm dev:status --json` reports safe endpoints and errors. After changing launcher code or dependencies, stop and start again; app source changes reload automatically. Startup reuses the verified healthy database container unless its identity or Compose configuration changes. After restarting Docker, Run Preview restores the development service and reconnects the preview without reseeding, including when Docker assigns a different database port.
 
 ## Everyday flow
+
+Read-only tools require an explicit [filesystem configuration](features/filesystem.md#configure-filesystem-access). Configure only this workspace's selected source or synthetic fixtures; returned content is saved and may reach the configured model.
 
 1. Start a Codex chat in a new worktree for a feature. Automatic setup installs pinned dependencies, registers the workspace and prepares its preview data.
 2. Choose **Run Preview**. Open that feature's chat preview with hot reload. Other feature previews keep running.
@@ -116,7 +118,7 @@ Run from the target checkout; cleanup commands accept registered instance identi
 | Quick Checks | `pnpm verify --profile quick` | Types and fast boundary checks; partial verification. |
 | — | `pnpm test:workflow` | Run isolated PostgreSQL, real-worktree and Electron integration checks. |
 | Run Tests | `pnpm verify` | Full automated verification. Selection, suite commands and evidence: [testing](testing.md#commands). |
-| Run Ephemeral Preview | `pnpm dev:verify --fixture scratchpad` | Start a fresh windowed instance for exploration; return its ID and endpoints. Ctrl-C stops and disposes it. A detached session requires explicit disposal. |
+| Run Ephemeral Preview | `pnpm dev:verify --fixture scratchpad --live-calls 20 --live-minutes 10` | Start a fresh live instance for exploration; return its ID and endpoints. Ctrl-C stops and disposes it. A detached session requires explicit disposal. |
 | — | `pnpm dev:dispose` | Stop and delete this workspace's preview, verification/test resources and generated runtime credentials; retain source, developer configuration and exported evidence. |
 
 `--instance <id>` targets a registered instance for start/status/stop/reset/disposal; it cannot target a sibling workspace. `--headless` starts backend/frontend without Electron. `pnpm build` writes a local build to `dist/`; verification uses separate build output under its evidence directory.

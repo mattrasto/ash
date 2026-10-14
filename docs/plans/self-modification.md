@@ -1,6 +1,6 @@
 # Path to the first self-modification
 
-Direction accepted, 2026-10-12 · Slice 1 implemented and verified · Later designs proposed
+Direction accepted, 2026-10-12 · Images and inspectable tools implemented · Later designs proposed
 
 Build toward a small code change completed through Ash: screenshot → discussion → isolated Codex workspace → tests and preview → reviewed application → revert. Start with image understanding and usable chat; add tools and explicit context before delegating code changes.
 
@@ -14,16 +14,16 @@ Use a UI-only change for this demonstration. Database migrations, dependency upg
 
 ## Delivery sequence
 
-Each slice follows the [delivery agreement](../../specs/product.md#confirmed-engineering-agreement), including app interaction and a separate review pass. These are proposed acceptance targets, not verification results.
+Each slice follows the [delivery agreement](../../specs/product.md#confirmed-engineering-agreement), including app interaction and a separate review pass. Exit demonstrations are acceptance targets; implementation and verification status are recorded per slice.
 
 | Slice | Deliverable | Exit demonstration |
 | --- | --- | --- |
 | 1. Images and usable chat | Persisted image input, multimodal request capture, thumbnails/full-size view, readable Markdown and code, clear pending/error states. | Paste a screenshot, discuss it over two turns, restart, inspect the exact images sent, and retry from the original snapshot. |
-| 2. Inspectable tools | Multiple model calls within a Run; typed tool calls/results; narrow repository read/search tools; progress and cancellation. | Ask where a behavior is implemented. Ash reads the configured repository snapshot and answers with source references; inspection explains each call. |
+| 2. Inspectable tools | Common execution/inspection for multi-call Runs; general read-only filesystem tools; progress and cancellation. | Ask where a behavior is implemented. Ash reads permitted source and answers with references; inspection explains each call. |
 | 3. Topics and working context | Manual Topic membership, global/Topic/Thread instruction editors, explicit references and retrieval within linked Topics. | Continue development in a new thread using selected prior findings and Topic guidance; inspect what entered context and what was omitted. |
 | 4. Delegated changes | Contained Codex runner, durable workspace records, Decisions, diff/test/preview UI, and controlled apply/revert. | Complete the first demonstration above, including a denied action, restart during work, stale approval rejection and a successful revert. |
 
-Do a small Codex integration feasibility check before expanding slice 2, so tool/Run contracts can represent its events and permission requests. This check does not enable self-modification or change the user's running instance.
+The user deferred the Codex integration feasibility check on 2026-10-12. It is not a prerequisite for slice 2 and does not enable delegation or self-modification in that slice.
 
 ## 1. Images and usable chat
 
@@ -31,15 +31,13 @@ Accepted and implemented under the [image spec](../../specs/features/images.md).
 
 ## 2. Inspectable tool execution
 
-The current `ModelAdapter.stream()` yields text and terminal metadata, while Run state references one request/response pair. Extend these contracts before adding a tool button or exposing execution.
+Behavior is accepted in the [product spec](../../specs/features/tools.md); the approved [engineering/test plan](inspectable-tools-tests.md) tracks verification. [Implementation and configuration](../features/tools.md) · [Asha source review](../features/tool-use-reference.md).
 
-- Introduce typed model events for text, complete tool calls and outcomes. Capture each model request, returned call ID/validated arguments, tool result and subsequent model request. Preserve the [single-source Artifact rule](../../specs/features/artifacts.md#rules); context references do not become causal parents. Show a compact tool timeline and one final answer.
-- Add an explicit per-step Run checkpoint with durable dispatch/result identity. Serialize tools initially. Validate tool names and arguments outside the model; never execute a partial streamed call. Bound result size, execution time and per-Run steps, and detect repeated failures. Stopping a loop reports the reason and preserves progress; it does not expire ordinary interactive chat.
-- Keep `store:false`. A Responses tool continuation needs the returned call items and any required reasoning items, not just flattened text. Verify the pinned SDK's stateless continuation shape; keep required encrypted continuation material opaque, restricted and separate from public inspection. Do not claim access to private reasoning. [Function calling](https://developers.openai.com/api/docs/guides/function-calling) · [Encrypted continuation](https://developers.openai.com/cookbook/examples/responses_api/reasoning_items).
-- Start with `repository.list`, `repository.read` and `repository.search` over an explicitly configured source snapshot. Record its revision/content hashes and cite file/line ranges. Restrict readable paths; exclude credentials, local data, Git internals and symlinks outside the root. Tool results are source material, never permission to broaden access.
-- Preserve one active workflow per thread. A crash or ambiguous dispatch marks work interrupted; reconnect reads saved state. Read-only retries may use the frozen source snapshot. Do not extend text retry into automatic replay of future writes.
+The shared handler contract supports both filesystem tools and retrieval. `ModelAdapter.stream()` yields complete tool proposals and private continuation alongside public text and metadata. The executor persists model rounds, bounded parallel calls and their results; the desktop exposes progress, Stop and inspection. Historical requests retain their readers.
 
-Verify a two-tool answer, invalid/unknown calls, oversized/error results, path escape attempts, cancellation between steps, duplicate delivery, step-limit exhaustion and restart before/after result persistence. Mock Responses continuation at the HTTP boundary, including non-text output items. The source tools should not require a shell or a general MCP/plugin framework.
+Model adapters, Run/tool schemas, filesystem handlers and inspection belong to this slice. Verification follows the [boundary and real-app scenarios](inspectable-tools-tests.md#automated-scenarios).
+
+The plan owns implementation details, limits and test cases; the product spec owns capability, authorization, freshness and retry behavior.
 
 ## 3. Topics, instructions and working context
 

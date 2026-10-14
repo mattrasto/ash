@@ -12,7 +12,7 @@ command = "pnpm --silent dev"
 [[actions]]
 name = "Run Ephemeral Preview"
 icon = "run"
-command = "pnpm --silent dev:verify"
+command = "pnpm --silent dev:verify --live-calls 20 --live-minutes 10"
 
 [[actions]]
 name = "Stop Preview"

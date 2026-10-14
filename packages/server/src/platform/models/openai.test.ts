@@ -12,7 +12,10 @@ const settings:OpenAIModelSettings = {apiKey:'synthetic-credential',model:reques
   reserve:async()=>60000,info:async()=>({provider:'openai',model:request.model})};
 async function collect(fetcher:typeof fetch, config=settings, signal=new AbortController().signal) {
   const events:Array<string|ModelExecution> = [];
-  for await (const event of openAIModel(config,fetcher).stream(request,signal)) events.push(event);
+  for await (const event of openAIModel(config,fetcher).stream(request,signal)) {
+    if (typeof event !== 'string' && 'kind' in event) throw new Error('Unexpected tool output in a historical text request');
+    events.push(event);
+  }
   return events;
 }
 test('Responses adapter sends the frozen request, exposes text and allowlisted metadata only',async()=>{

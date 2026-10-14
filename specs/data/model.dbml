@@ -142,3 +142,12 @@ Ref: attachments.input_artifact_id > artifacts.id [delete: restrict]
 Ref: attachments.summary_run_id > runs.id [delete: restrict]
 Ref: artifact_attachments.artifact_id > artifacts.id [delete: restrict]
 Ref: artifact_attachments.attachment_id > attachments.id [delete: restrict]
+Table provider_continuations {
+  output_artifact_id uuid [pk, not null]
+  run_id uuid [not null]
+  items jsonb [not null, note: 'Private provider replay items; excluded from inspection APIs']
+  created_at timestamptz(6) [not null]
+  indexes { run_id }
+}
+Ref: provider_continuations.output_artifact_id > artifacts.id [delete: restrict]
+Ref: provider_continuations.run_id > runs.id [delete: restrict]

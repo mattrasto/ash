@@ -18,13 +18,13 @@ import { openAIModel } from '../../packages/server/src/platform/models/openai.ts
 import { createSession, readSession, sessionDirectory, openSession, type Session } from '../../packages/server/src/platform/models/session.ts';
 import { sse, successEvents, providerResponse } from '../helpers/openai.ts';
 import { makeWorktree } from '../helpers/worktree.ts';
-import { configureLiveModel } from '../../scripts/dev/live-model.ts';
+import { configureLiveModel, DEFAULT_OPENAI_MODEL } from '../../scripts/dev/live-model.ts';
 
 async function until<T>(read:()=>Promise<T>,accept:(value:T)=>boolean):Promise<T> {
   for (let index=0;index<250;index++) {const value=await read();if(accept(value))return value;await sleep(40);}
   throw new Error('Timed out waiting for OpenAI test state');
 }
-test('OpenAI protocol through persisted Runs and desktop inspection (no external calls)',{timeout:120000},async t=>{
+test('OpenAI protocol through persisted Runs and desktop inspection (no external calls)',{timeout:180000},async t=>{
   const source=process.cwd();
   const base=await mkdtemp(join(tmpdir(),'ash-openai-'));
   const checkout=join(base,'checkout');
@@ -156,9 +156,36 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
     await scenarioStep(t, 'openai-interactive',async()=>{
       const preview=await createInstance(ws,'preview','empty');
       let interactive:string|undefined;
+      const launch = async (...args:string[]) => JSON.parse((await exec(process.execPath,
+        ['--import','tsx','scripts/dev/cli.ts','start','--headless','--detach','--json',...args],{cwd:checkout,timeout:60000})).stdout) as {modelSessionId?:string;supervisor:{pid:number}};
       try {
-        interactive=await configureLiveModel(preview,{'openai-model':'test-openai-model'});
-        const running=await startInstance(ws,preview.id,{headless:true,modelSessionId:interactive});
+        await chmod(envPath,0o644);
+        await assert.rejects(launch(),/chmod 600/);
+        assert.equal(await runtime(preview),null,'Missing credentials never launch a fake preview');
+        await chmod(envPath,0o600);
+        const first=await launch();interactive=first.modelSessionId;assert.ok(interactive);
+        assert.equal((await readSession(preview,interactive)).model,DEFAULT_OPENAI_MODEL);
+        assert.deepEqual(await launch(),first,'Run Preview reuses the running session');
+        await assert.rejects(launch('--deterministic'),/Stop the running instance/);
+        const allowance=await openSession(preview,interactive);
+        await allowance.reserve();
+        await stopInstance(ws,preview.id);
+        assert.equal((await launch()).modelSessionId,interactive);
+        assert.equal((await readSession(preview,interactive)).callsUsed,1,'Stop/Run retains usage');
+        await assert.rejects(configureLiveModel(preview,{deterministic:true,'live-calls':'1'}),/cannot be combined/);
+        const disposable=await createInstance(ws,'verify','empty');
+        let bounded:string|undefined;
+        try {
+          await assert.rejects(configureLiveModel(disposable,{}),/require --live-calls and --live-minutes/);
+          bounded=await configureLiveModel(disposable,{'live-calls':'1','live-minutes':'1'});
+          await (await openSession(disposable,bounded!)).reserve();
+          assert.equal(await configureLiveModel(disposable,{},bounded),bounded);
+          await assert.rejects((await openSession(disposable,bounded!)).reserve(),/call allowance/);
+        } finally {
+          await disposeInstance(ws,disposable.id);
+          if(bounded)await rm(sessionDirectory(disposable,bounded),{recursive:true,force:true});
+        }
+        const running=(await runtime(preview))!;
         const config=ServerConfig.parse(await json(join(preview.root,'server.json')));
         const response=await fetch(`${running.serverUrl}/api/info`,{headers:{authorization:`Bearer ${config.token}`}});
         assert.equal(response.status,200);
@@ -172,9 +199,18 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
         const page=await app.firstWindow();
         await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
         const banner=await page.locator('.model-banner').innerText();
-        assert.match(banner,/OpenAI · test-openai-model/);assert.match(banner,/0 calls/);assert.doesNotMatch(banner,/expires|\//);
+        assert.ok(banner.includes(`OpenAI · ${DEFAULT_OPENAI_MODEL}`));assert.match(banner,/1 calls/);assert.doesNotMatch(banner,/expires|\//);
         await page.screenshot({path:join(evidence,'openai-interactive.png')});
-        assert.equal((await readSession(preview,interactive!)).callsUsed,0);
+        assert.equal((await readSession(preview,interactive!)).callsUsed,1);
+        await app.close();app=undefined;
+        await stopInstance(ws,preview.id);
+        await chmod(envPath,0o644);
+        const demo=await launch('--deterministic');assert.equal(demo.modelSessionId,undefined);
+        assert.equal((await launch('--deterministic')).supervisor.pid,demo.supervisor.pid);
+        await assert.rejects(launch(),/Stop the running instance/);
+        await stopInstance(ws,preview.id);
+        await assert.rejects(launch(),/chmod 600/);
+        await chmod(envPath,0o600);
       } finally {
         await app?.close();app=undefined;
         await disposeInstance(ws,preview.id);

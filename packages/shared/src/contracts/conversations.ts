@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ImageBlock, TextBlock, ModelContent, type AttachmentView } from './attachments.ts';
+import { ToolRequest, ToolWorkflow, type ToolArtifact } from './tools.ts';
 
 export const Uuid = z.string().uuid();
 export const ModelMode = z.enum(['normal', 'slow', 'fail', 'fail-before', 'empty']);
@@ -20,7 +21,7 @@ export const ModelExecution = z.object({
     totalTokens: z.number().int().nonnegative(), cachedInputTokens: z.number().int().nonnegative(), reasoningTokens: z.number().int().nonnegative() }).strict().optional(),
 }).strict();
 export type ModelExecution = z.infer<typeof ModelExecution>;
-export const RunState = z.object({ request_artifact_id: Uuid, response_artifact_id: Uuid.nullable(), model: ModelExecution.optional() }).strict();
+export const RunState = z.object({ request_artifact_id: Uuid, response_artifact_id: Uuid.nullable(), model: ModelExecution.optional(), tools: ToolWorkflow.optional() }).strict();
 export const RunError = z.object({ code: z.string(), message: z.string(), details: z.record(z.unknown()).optional() }).strict();
 export const InputPayload = z.discriminatedUnion('type',[
   z.object({ type: z.literal('text_input'), text: z.string() }).strict(),
@@ -39,6 +40,7 @@ export const OpenAIOptions = z.object({
 }).strict();
 const requestContent = {
   type: z.literal('model_request'),
+  tools: ToolRequest.optional(),
   purpose:z.literal('image_summary').optional(),
   messages: z.array(z.object({ role: z.enum(['system', 'user', 'assistant']), content: ModelContent }).strict()),
   selection: z.object({
@@ -55,7 +57,7 @@ export const RequestPayload = z.discriminatedUnion('provider', [
 ]);
 export type RequestPayload = z.infer<typeof RequestPayload>;
 export type MessagePayload = z.infer<typeof MessagePayload>;
-export type ArtifactPayload = z.infer<typeof InputPayload> | MessagePayload | RequestPayload | z.infer<typeof DescriptionPayload>;
+export type ArtifactPayload = z.infer<typeof InputPayload> | MessagePayload | RequestPayload | z.infer<typeof DescriptionPayload> | ToolArtifact;
 export interface ThreadView {
   id: string; title: string; createdAt: string; updatedAt: string; isArchived:boolean;
   latestRun?: {id:string;status:RunStatus;endedAt:string|null}|null;

@@ -16,11 +16,11 @@ The accepted [artifact rules](artifacts.md#rules) refine membership and chains, 
 
 ## Scope
 
-Current delivery: conversation with [image input and descriptions](images.md), a deterministic default and explicitly configured OpenAI adapter, one-click creation, first-message titles, manual rename/archive, persisted messages and Run outcomes, cancellation/retry, reconnect/restart handling, and context/lineage inspection. Base instructions are captured with each request.
+Current delivery: conversation with [image input and descriptions](images.md), OpenAI previews and an offline test adapter, one-click creation, first-message titles, manual rename/archive, persisted messages and Run outcomes, cancellation/retry, reconnect/restart handling, and context/lineage inspection. Base instructions are captured with each request.
 
 Deferred from the broader design below: topic management, the instructions editor, pin controls and PITR operation/restore verification. Requirement and acceptance IDs remain stable for those later deliveries. [Implementation](../../docs/features/conversations.md) · [Test plan](../../docs/plans/persisted-chat-tests.md).
 
-Deferred: voice and Live Threads, model-generated naming, automatic organization/archiving, artifact moves and references, split/merge, context from other threads, semantic memory, other file attachments, external tools and inputs, task execution, mobile and self-modification. OpenAI is the first live provider; [live verification](../../docs/features/conversations.md#verification) records the tested model and allowance. [Image rules and acceptance](images.md) extend this scope.
+Deferred: voice and Live Threads, model-generated naming, automatic organization/archiving, artifact moves and references, split/merge, context from other threads, semantic memory, other file attachments, external integrations and inputs, task execution, mobile and self-modification. OpenAI is the first live provider; [live verification](../../docs/features/conversations.md#verification) records the tested model and allowance. [Image rules and acceptance](images.md) and [tool execution and inspection](tools.md) extend this scope.
 
 ## User flow
 
@@ -49,7 +49,7 @@ Deferred: voice and Live Threads, model-generated naming, automatic organization
 - **CONV-R14 — Manual visibility:** archive hides a Thread from the ordinary view while retaining archive access, content and context eligibility. Unarchive restores ordinary visibility. Pin/unpin is independent of archive state; pinning does not unarchive a Thread. Both states persist across client restarts. Automatic archive deadlines, revival and pin ordering remain deferred.
 - **CONV-R15 — Retry context:** later follow-ups include only the latest completed response for each Input. Failed, cancelled, interrupted, partial and superseded attempts remain visible but are omitted from model context. A failed retry does not displace an earlier completed response. If no response completed, include the user message without an answer. Existing captured requests remain unchanged.
 
-- **CONV-R16 — Live provider:** OpenAI is opt-in for development with an explicit model. Interactive chat has no session call cap or expiry; disposable live tests use explicit call/time limits. Default verification makes no external calls. Record provider identifiers and reported usage when available; missing usage is unknown. Incomplete provider output is a failed Run, not a completed reply. OpenAI retries preserve the captured provider/model/options and do not execute automatically.
+- **CONV-R16 — Live provider:** Human previews use OpenAI by default and retain their selected model/session on restart. Missing credentials fail with setup guidance; they never silently select fake responses. The deterministic adapter is reserved for automated tests or an explicit offline demo. Interactive chat has no session call cap or expiry; disposable live tests use explicit call/time limits. Default verification makes no external calls. Record provider identifiers and reported usage when available; missing usage is unknown. Incomplete provider output is a failed Run, not a completed reply. OpenAI retries preserve the captured provider/model/options and do not execute automatically.
 
 ## Conversation UX
 

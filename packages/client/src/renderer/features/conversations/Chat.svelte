@@ -3,6 +3,7 @@
   import { isActive, modelContentText, IMAGE_LIMITS, type AttachmentView, type ArtifactView, type ConversationView, type InspectionView, type MessagePayload, type ModelMode, type PreviewInfo, type RequestPayload, type RunView, type ThreadView } from '@ash/shared';
   import Sidebar from './Sidebar.svelte';
   import Message from './Message.svelte';
+  import ToolInspection from './ToolInspection.svelte';
   import Icon from './Icon.svelte';
   import { ConversationScroll, type ScrollPosition } from './scroll.ts';
   import Gallery from '../images/Gallery.svelte';
@@ -48,7 +49,7 @@
   const hue = $derived(info ? parseInt(info.workspaceId.slice(0,6),16) % 360 : 145);
   const inspected = $derived(inspection?.artifacts.find(artifact => artifact.id === inspectedId));
   const inspectionRun = $derived(inspection?.runs.find(run => run.id === inspected?.runId));
-  const captured = $derived(inspection?.artifacts.find(artifact => artifact.id === inspectionRun?.state.request_artifact_id)?.payload as RequestPayload | undefined);
+  const captured = $derived((inspected?.payload.type==='model_request'?inspected.payload:inspection?.artifacts.find(artifact => artifact.id === (inspected&&'requestId' in inspected.payload?inspected.payload.requestId:inspectionRun?.state.request_artifact_id))?.payload) as RequestPayload | undefined);
   class ApiError extends Error { constructor(message:string, public status?:number) { super(message); } }
   async function api<T>(path:string, body?:object):Promise<T> {
     const response = await fetch(`/api/${path}`, {method:body ? 'POST' : 'GET', headers:{'content-type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {}), signal:AbortSignal.timeout(10000)});
@@ -273,6 +274,7 @@
   {#if inspectedId}
     <aside class="inspector" aria-label="Artifact inspector"><div class="inspector-heading"><h2>Artifact inspector</h2><button aria-label="Close inspector" onclick={closeInspector}>×</button></div>
       {#if inspection}
+        {#if inspectionRun?.state.tools}<ToolInspection run={inspectionRun} artifacts={inspection.artifacts} selectedId={inspectedId} onInspect={inspect}/>{/if}
         <span class="eyebrow">SELECTED ARTIFACT</span><code>{inspectedId}</code><p>{inspected?.layer} · {inspected?.actor}</p>
         <div class="section"><h3>Originating input</h3><p class="inspect-text">{'text' in inspection.input.payload?inspection.input.payload.text:inspection.input.payload.type==='image_upload'?inspection.input.payload.filename:''}</p><code>{inspection.input.id}</code></div>
         {#if inspection.attachments?.length}<div class="section"><h3>Images</h3>{#each inspection.attachments as image (image.id)}<Gallery images={[image]} onOpen={openImages}/><p>{image.filename}<br>{image.metadata.original.width} × {image.metadata.original.height} original · {image.metadata.model.width} × {image.metadata.model.height} model input</p><p>{image.summary??'Description not yet available.'}</p>{#if image.summaryRun}<p>Description: {image.summaryRun.status}</p><button class="text-button" onclick={()=>inspect(image.summaryRun!.state.request_artifact_id)}>Inspect description</button>{#if !isActive(image.summaryRun.status)&&image.summaryRun.status!=='completed'}<button class="text-button" onclick={()=>retryDescription(image).catch(e=>error=e.message)}>Retry description</button>{/if}{/if}<details><summary>Image identity and hashes</summary><code>{image.id}</code><pre>{JSON.stringify(image.metadata,null,2)}</pre></details>{/each}</div>{/if}

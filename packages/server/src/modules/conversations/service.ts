@@ -1,12 +1,14 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { Prisma, type Artifact, type PrismaClient, type Run } from '@prisma/client';
-import { InputPayload, MessagePayload, RequestPayload, RunState, ModelExecution, isActive, type ModelMode } from '@ash/shared';
+import { InputPayload, MessagePayload, RequestPayload, RunState, ModelExecution, isActive, type ModelMode, type ToolLimits } from '@ash/shared';
 import { selectContext } from '../context/select.ts';
 import { deterministicModel } from '../../platform/models/deterministic.ts';
 import { ModelFailure, type ModelAdapter } from '../../platform/models/adapter.ts';
 import { artifactView, runView } from './views.ts';
 import { attachmentViews, retainImages, referenceImages } from '../attachments/service.ts';
 import { AttachmentError, type ImageStorage } from '../attachments/storage.ts';
+import { ToolExecutor, captureTools, interruptTools } from '../tools/executor.ts';
+import type { ToolRuntime } from '../tools/contract.ts';
 export { artifactView, runView } from './views.ts';
 
 type Tx = Prisma.TransactionClient;
@@ -18,10 +20,16 @@ const asJson = (value: unknown) => value as Prisma.InputJsonValue;
 export class Conversations {
   private jobs = new Map<string, {controller: AbortController; promise: Promise<void>}>();
   private stopping = false;
-  constructor(readonly db: PrismaClient, private model: ModelAdapter = deterministicModel, private autoDispatch = true, private images?:ImageStorage) {}
+  constructor(readonly db: PrismaClient, private model: ModelAdapter = deterministicModel, private autoDispatch = true, private images?:ImageStorage, private tools?:ToolRuntime, private toolLimits?:ToolLimits) {}
 
   async recover() {
-    await this.db.run.updateMany({where:{threadId:{not:null},status:{in:['queued','running']}}, data:{status:'interrupted', endedAt:new Date(), error:{code:'server_interrupted', message:'The backend stopped before this response finished. Retry explicitly to continue.'}}});
+    const pending = await this.db.run.findMany({where:{threadId:{not:null},status:{in:['queued','running']}}});
+    for (const run of pending) await this.db.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM runs WHERE id=${run.id}::uuid FOR UPDATE`;
+      const current = await tx.run.findUniqueOrThrow({where:{id:run.id}});
+      if (!isActive(current.status)) return;
+      await tx.run.update({where:{id:run.id},data:{status:'interrupted',state:asJson(interruptTools(RunState.parse(current.state),false)),endedAt:new Date(),error:{code:'server_interrupted', message:'The backend stopped before this response finished. Retry explicitly to continue.'}}});
+    });
   }
   async createThread(id: string, title: string) {
     const existing = await this.db.thread.findUnique({where:{id}});
@@ -127,6 +135,10 @@ export class Conversations {
             request = RequestPayload.parse({...prior,...this.model.configuration(command.mode,prior)});
           }
           const runId = randomUUID(), requestId = randomUUID();
+          if (command.kind === 'send') {
+            const tools = await captureTools(this.tools,runId,threadId,request,this.toolLimits);
+            if (tools) request = RequestPayload.parse({...request,tools});
+          }
           const state = RunState.parse({request_artifact_id:requestId,response_artifact_id:null});
           const run = await tx.run.create({data:{id:runId,inputArtifactId:inputId,threadId,retryOfId:command.kind === 'retry' ? command.previousId : null,status:'queued',state,requestKey,requestHash:hash,createdAt:now}});
           await tx.artifact.create({data:{id:requestId,layer:'act',sourceId:inputId,threadId,runId,actor:'ash',payload:asJson(request),createdAt:now,updatedAt:now}});
@@ -168,13 +180,22 @@ export class Conversations {
         if(!this.images)throw new ModelFailure('image_unavailable','Saved image storage is unavailable.');
         await this.images.read(block.attachmentId,block.image);
       }
+      if (parsed.tools) {
+        await new ToolExecutor(this.db,this.model,this.tools,this.images).execute(id,parsed,request.id,signal);
+        return;
+      }
       for await (const event of this.model.stream(parsed,signal,this.images?image=>this.images!.dataUrl(image):undefined)) {
         if (typeof event === 'string') { if (!await this.writeResponse(id,event,false)) return; }
-        else if (!await this.writeMetadata(id,event)) return;
+        else if (!('kind' in event) && !await this.writeMetadata(id,event)) return;
       }
       await this.writeResponse(id,'',true);
     } catch (error) {
-      await this.db.run.updateMany({where:{id,status:'running'},data:{status:'failed',endedAt:new Date(),error:{code:error instanceof ModelFailure ? error.code : error instanceof AttachmentError?'image_unavailable':'response_failed',message:error instanceof ModelFailure||error instanceof AttachmentError ? error.message : 'The response could not be completed.'}}});
+      await this.db.$transaction(async tx => {
+        await tx.$queryRaw`SELECT id FROM runs WHERE id=${id}::uuid FOR UPDATE`;
+        const run = await tx.run.findUniqueOrThrow({where:{id}});
+        if (run.status !== 'running') return;
+        await tx.run.update({where:{id},data:{status:'failed',state:asJson(interruptTools(RunState.parse(run.state),false)),endedAt:new Date(),error:{code:error instanceof ModelFailure ? error.code : error instanceof AttachmentError?'image_unavailable':'response_failed',message:error instanceof ModelFailure||error instanceof AttachmentError ? error.message : 'The response could not be completed.'}}});
+      });
     }
   }
   private async writeMetadata(id: string, metadata: ModelExecution) {
@@ -217,7 +238,7 @@ export class Conversations {
       const run = await tx.run.findUnique({where:{id}});
       if (!run?.threadId) throw new ConversationError(404,'Conversation Run not found.');
       if (!isActive(run.status)) return run;
-      return tx.run.update({where:{id},data:{status:'cancelled',endedAt:new Date()}});
+      return tx.run.update({where:{id},data:{status:'cancelled',state:asJson(interruptTools(RunState.parse(run.state),true)),endedAt:new Date()}});
     });
     this.jobs.get(id)?.controller.abort();
     return runView(saved);
