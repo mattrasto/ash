@@ -1,3 +1,6 @@
+import { Incoming } from './modules/artifacts/service.ts';
+import { incomingRoutes } from './modules/artifacts/routes.ts';
+import { ensureEngineInstructions } from './modules/artifacts/instructions.ts';
 import { ZodError } from '@ash/shared';
 import { connectProduct } from './platform/db/client.ts';
 import { Threads, ThreadError } from './modules/threads/service.ts';
@@ -52,6 +55,10 @@ await ensureVideoInstructions(product);
 const attachments=new Attachments(product,imageStorage,model,true,video);
 const threads = new Threads(product,model,true,imageStorage,composeToolRuntimes(topicRuntime(new TopicRetrieval(product)),filesystemRuntime(()=>loadFilesystemConfig(instance.profile === 'preview' ? instance.checkout : instance.root)),videoRuntime(video)));
 await threads.recover();
+await ensureEngineInstructions(product);
+const incoming=new Incoming(product,threads,model);
+await incoming.recover();
+const incomingTimer=setInterval(()=>{void incoming.pump().catch(()=>console.error('Incoming processing unavailable'));},1000);incomingTimer.unref();
 await attachments.recover();await attachments.cleanup();
 const cleanupTimer=setInterval(()=>{void attachments.cleanup().catch(()=>console.error('Image cleanup failed'));},60*60*1000);cleanupTimer.unref();
 const app = Fastify({ logger: false });
@@ -59,6 +66,7 @@ app.addHook('onRequest', async (request, reply) => {
   if (request.headers.authorization !== `Bearer ${token}`) return reply.code(401).send({ error: 'Unauthorized' });
 });
 threadRoutes(app, threads);
+incomingRoutes(app,incoming);
 attachmentRoutes(app,attachments);
 organizationRoutes(app,new Organization(product));
 app.get('/health', async () => {
@@ -104,7 +112,7 @@ process.send?.({ type: 'listening', url: `http://127.0.0.1:${address.port}` });
 async function stop() {
   if (stopping) return;
   stopping = true;
-  clearInterval(cleanupTimer);await app.close(); await threads.stop();await attachments.stop(); await product.$disconnect(); ownership.release(); await ownerDb.end(); await db.end(); process.exit(0);
+  clearInterval(cleanupTimer);clearInterval(incomingTimer);await app.close();await incoming.stop(); await threads.stop();await attachments.stop(); await product.$disconnect(); ownership.release(); await ownerDb.end(); await db.end(); process.exit(0);
 }
 process.on('SIGINT', stop); process.on('SIGTERM', stop);
 process.on('disconnect', stop);

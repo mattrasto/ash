@@ -67,6 +67,7 @@ model Artifact {
   thread Thread? @relation(fields: [threadId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   run Run? @relation("produced", fields: [runId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   inputs Run[] @relation("input")
+  incomingItem IncomingItem?
   attachmentInput Attachment?
   attachmentReferences ArtifactAttachment[]
   continuation ProviderContinuation?
@@ -153,4 +154,18 @@ model DevScratch {
   count Int @default(0)
   @@ignore
   @@map("dev_scratch")
+}
+
+model IncomingItem {
+  id String @id @db.Uuid
+  sourceKey String @unique @map("source_key")
+  requestHash String @map("request_hash")
+  status String
+  state Json @db.JsonB
+  error String?
+  createdAt DateTime @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(6)
+  input Artifact @relation(fields:[id],references:[id],onDelete:Restrict,onUpdate:NoAction)
+  @@index([status,createdAt])
+  @@map("incoming_items")
 }

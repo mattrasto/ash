@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { IncomingPayload, IncomingSource, EngineOutcome, EngineStage } from './artifacts.ts';
 import { ImageBlock, VideoBlock, VideoFile, TextBlock, ModelContent, type AttachmentView } from './attachments.ts';
 import { ToolRequest, ToolWorkflow, type ToolArtifact } from './tools.ts';
 import {VideoPlan,VideoModelRequest,VideoModelResponse,VideoUnderstandingPayload} from './video-understanding.ts';
@@ -25,6 +26,7 @@ export type ModelExecution = z.infer<typeof ModelExecution>;
 export const RunState = z.object({ request_artifact_id: Uuid, response_artifact_id: Uuid.nullable(), model: ModelExecution.optional(), tools: ToolWorkflow.optional() }).strict();
 export const RunError = z.object({ code: z.string(), message: z.string(), details: z.record(z.unknown()).optional() }).strict();
 export const InputPayload = z.discriminatedUnion('type',[
+  IncomingPayload,
   z.object({ type: z.literal('text_input'), text: z.string() }).strict(),
   z.object({ type: z.literal('message_input'), text: z.string(), attachmentIds:z.array(Uuid),submissionHash:z.string().optional() }).strict(),
   z.object({ type: z.literal('image_upload'), attachmentId:Uuid, filename:z.string() }).strict(),
@@ -32,9 +34,10 @@ export const InputPayload = z.discriminatedUnion('type',[
 ]);
 export const DescriptionPayload = z.object({type:z.literal('image_description'),attachmentId:Uuid,text:z.string()}).strict();
 export const MessagePayload = z.object({
-  type: z.literal('message'), initial_thread_id: Uuid, speaker: z.enum(['user', 'ash']),
+  type: z.literal('message'), initial_thread_id: Uuid, speaker: z.enum(['user', 'ash', 'source']),
+  inputArtifactId:Uuid.optional(), source:IncomingSource.optional(),
   content: z.array(z.union([TextBlock,ImageBlock,VideoBlock])),
-}).strict();
+}).strict().refine(value=>value.speaker!=='source'||!!value.source&&!!value.inputArtifactId,'Source entries require origin metadata and their Input identity.');
 export const OpenAIOptions = z.object({
   api: z.literal('responses'), store: z.literal(false), maxOutputTokens: z.number().int().min(16).max(16384),
   timeoutMs: z.number().int().min(1000).max(180000),
@@ -43,7 +46,8 @@ export const OpenAIOptions = z.object({
 const requestContent = {
   type: z.literal('model_request'),
   tools: ToolRequest.optional(),
-  purpose:z.literal('image_summary').optional(),
+  purpose:z.enum(['image_summary','engine_filter','engine_route','engine_assess']).optional(),
+  incoming:z.object({inputArtifactId:Uuid,showResponse:z.boolean()}).strict().optional(),
   messages: z.array(z.object({ role: z.enum(['system', 'user', 'assistant']), content: ModelContent }).strict()),
   selection: z.object({
     instructions: z.array(z.object({ id: Uuid, key: z.string().optional(), scope:z.enum(['global','topic','thread']).optional(), ownerId:z.string().optional(), name:z.string().optional(), messageIndex: z.number().int() }).strict()),
@@ -64,7 +68,9 @@ export const RequestPayload = z.discriminatedUnion('provider', [
 export type RequestPayload = z.infer<typeof RequestPayload>;
 export type MessagePayload = z.infer<typeof MessagePayload>;
 export const VideoArtifact=z.union([VideoPlan,VideoModelRequest,VideoModelResponse,VideoUnderstandingPayload]);
-export type ArtifactPayload = z.infer<typeof InputPayload> | MessagePayload | RequestPayload | z.infer<typeof DescriptionPayload> | ToolArtifact | z.infer<typeof VideoArtifact>;
+export const EngineRequest=z.object({type:z.literal('engine_request'),stage:EngineStage,request:RequestPayload,scope:z.record(z.unknown())}).strict();
+export const EngineArtifact=z.union([EngineRequest,EngineOutcome,z.object({type:z.literal('engine_response'),text:z.string().max(16000),model:ModelExecution.optional()}).strict()]);
+export type ArtifactPayload =  z.infer<typeof EngineArtifact> | z.infer<typeof InputPayload> | MessagePayload | RequestPayload | z.infer<typeof DescriptionPayload> | ToolArtifact | z.infer<typeof VideoArtifact>;
 export interface ThreadView {
   id: string; title: string; createdAt: string; updatedAt: string; isArchived:boolean;
   latestRun?: {id:string;status:RunStatus;endedAt:string|null}|null;

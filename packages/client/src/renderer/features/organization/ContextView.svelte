@@ -16,7 +16,7 @@
     {#each captured.messages as message,index}
       {@const instruction=captured.selection.instructions.find(item=>item.messageIndex===index)}
       {@const source=captured.selection.artifacts.find(item=>item.messageIndex===index)}
-      <div class="item"><strong>{index+1}. {instruction?`${instruction.scope??'global'} instructions`:captured.selection.composition?.messageIndex===index?'Composition rules':message.role==='assistant'?'Ash history':message.role==='user'?'User history':message.role}</strong><p>{modelContentText(message.content)}</p>
+      <div class="item"><strong>{index+1}. {instruction?`${instruction.scope??'global'} instructions`:captured.selection.composition?.messageIndex===index?'Composition rules':message.role==='assistant'?'Ash history':message.role==='user'?(captured.purpose?.startsWith('engine_')?'Incoming evidence':modelContentText(message.content).startsWith('External source:')?'External source':'User history'):message.role}</strong><p>{modelContentText(message.content)}</p>
         {#if source}<button class="source" onclick={()=>onSource(source.id)}>Open source message</button><code>{source.id}</code>{/if}
         {#if Array.isArray(message.content)}{#each message.content as block}{#if block.type==='image'}<img class="captured-image" src={`/api/attachments/${block.attachmentId}/model`} alt={block.description}/><small>Pixels supplied · {block.image.width} × {block.image.height}</small><code>{block.image.hash}</code>{/if}{/each}{/if}
       </div>

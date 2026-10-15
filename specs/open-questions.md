@@ -18,9 +18,7 @@ Laptop-off work needs an always-on runtime; local-only applications still need a
 
 ### G04 — Organization automation
 
-Suggestion-only defaults conflict with automatic topic assignment and backfilling new topics.
-
-**Recommend:** preserve explicit thread selection; use manual topic membership initially. Require acceptance for inferred changes until the user enables scoped automation. Membership also affects context access.
+**Accepted, 2026-10-14:** autonomous initial placement under [ART-R12–13](features/artifacts.md#incoming-item-slice), preserving explicit targeting and recording assumptions. No routing clarification or Decision. Topic membership and later reorganization remain manual/suggestion-based. Optional review of ambiguous placements is a follow-on.
 
 ### G05 — Context selection
 
@@ -32,7 +30,7 @@ Suggestion-only defaults conflict with automatic topic assignment and backfillin
 
 **Accepted, 2026-10-12:** [Topics and working context](features/topics-context.md), including bounded linked-Topic retrieval, immutable captures and membership changes during work.
 
-**Accepted, 2026-10-12:** concrete limits and coverage in the [engineering test plan](../docs/plans/topics-context-tests.md). Automatic Route composition remains deferred.
+**Accepted, 2026-10-12:** response-context limits and coverage in the [engineering test plan](../docs/plans/topics-context-tests.md). Incoming Route composition follows [ART-R13](features/artifacts.md#incoming-item-slice).
 
 ### G06 — Deletion and retention
 

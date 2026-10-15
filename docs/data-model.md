@@ -6,11 +6,11 @@ Initial six-table design accepted, 2026-10-09 · Image extension accepted, 2026-
 
 ## Storage
 
-One private Ash instance uses one database and initially one backend. Current rows are authoritative; recovery follows [ART-R08](../specs/features/artifacts.md#rules). The backend assigns timestamps and record IDs; uploads accept a client-generated UUID as their idempotent identity. `updated_at` starts at `created_at` and changes with the row's editable fields. Naming follows the [engineering agreement](../specs/product.md#confirmed-engineering-agreement).
+One private Ash instance uses one database and initially one backend. Current rows are authoritative; recovery follows [ART-R08](../specs/features/artifacts.md#rules). The backend assigns timestamps and record IDs; uploads accept a client-generated UUID as their idempotent identity. `updated_at` starts at `created_at` and normally changes with editable fields; Thread metadata edits preserve activity ordering as described under [visibility](#thread-visibility). Naming follows the [engineering agreement](../specs/product.md#confirmed-engineering-agreement).
 
 ### First-phase coverage
 
-The initial [thread journey](../specs/features/threads.md) uses six tables; [image input](../specs/features/images.md) adds two attachment tables and permits threadless description Runs. [Topics and instruction editing](features/topics-context.md) add a membership version to Threads.
+The initial [thread journey](../specs/features/threads.md) uses six tables; [image input](../specs/features/images.md) adds two attachment tables and permits threadless description Runs. [Topics and instruction editing](features/topics-context.md) add a membership version to Threads. Tool execution adds [private provider continuations](#run-state-and-errors), and incoming processing adds [intake checkpoints](#incoming-item-checkpoints-and-presentation).
 
 | Capability | Stored data |
 | --- | --- |
@@ -28,7 +28,7 @@ Typed drafts and selection state belong to the desktop client. Provider credenti
 
 ## Run boundary
 
-A Run tracks an Act workflow and its outputs, including Surface Artifacts. Routine Listen/Input/Filter/Route processing does not create Run rows. Those stages may use workers or model calls; using a worker does not itself create a product Run.
+A Run tracks an Act workflow and its outputs, including Surface Artifacts. Routine Listen/Input/Filter/Route processing and intake action/presentation assessment do not create Run rows. Those stages may use workers or model calls; using a worker does not itself create a product Run.
 
 A workflow may contain several model calls using different providers or models. Each call has its own Artifact payload. Find produced Artifacts through `artifacts.run_id`; the checkpoint references those currently needed by the workflow.
 
@@ -98,6 +98,31 @@ An empty response starts with an empty `content` array. Streaming may append blo
 
 Its `created_at` would be 09:10. The two times answer when the source event happened and when Ash saved it.
 
+## Incoming-item checkpoints and presentation
+
+[Behavior](../specs/features/artifacts.md#incoming-item-slice) · [Implementation](features/artifacts.md)
+
+`incoming_items.id` is a restrictive FK to its immutable `incoming_input` root. `source_key` hashes the source namespace/event identity; `request_hash` binds the original source metadata, content and trusted explicit target. Matching deliveries return the original receipt, even if their transport IDs differ. Neither identity field is mutable.
+
+`state` holds the current stage (`filter`, `route`, `assess`, `dispatch`, `done`), `parentId`, nullable `currentRequestId`, destination `threadId`, `planId`, `sourceSurfaceId` and eventual `runId`. `status` distinguishes queued/processing, waiting for Thread capacity, completed, dropped, failed and interrupted. Stage evidence and its checkpoint commit together. Receipt status `completed` means intake finished; linked Run status independently describes action progress.
+
+| Payload | Content |
+| --- | --- |
+| Input / `incoming_input` | Original text, source namespace/event identity/label/optional HTTP(S) URL, optional occurredAt and explicit target. |
+| Filter/Route/Act / `engine_request` | Stage, exact validated `model_request`, instruction identities/order and bounded selection scope. No producing Run. |
+| Filter/Route/Act / `engine_response` | Public output text and allowlisted provider execution metadata. |
+| Filter / `filter_result` | Pass/drop and concise reason. |
+| Route / `route_result` | Existing/new choice, saved destination, explicit-target flag, rationale and ambiguity/assumption. |
+| Act / `act_plan` | Independent action, showSource and showResponse choices plus reason. This intake assessment does not itself start an action workflow. |
+| Filter/Route/Act / `engine_error` | Stage, safe code/message and bounded public invalid output when present. |
+| Surface / `message` with `speaker: source` | Source label/identity, original text and `inputArtifactId`; sourced from the presentation plan. |
+
+Database triggers freeze incoming roots and engine evidence. On explicit intake Retry, an unfinished stage copies its captured request into a new immutable attempt; completed stage/placement records remain unchanged. Startup interrupts unfinished intake without provider dispatch. A waiting-capacity checkpoint is not a Decision or a product Run.
+
+For warranted work, `Threads.acceptIncoming` saves the existing Run/checkpoint and captured request in the intake transaction. `request.incoming` identifies the Input and response visibility. If a source entry is hidden, that Input still enters this Run once as labeled external evidence. Response context is captured at Run acceptance, including after a busy Thread becomes available. Normal response Topic retrieval remains scoped to the destination's memberships.
+
+The shared executor retains its final `model_output` as `response_artifact_id` when response visibility is false; no Surface is created. Visible replies retain their usual Surface checkpoint. Later history selects visible source entries and latest completed replies by root Input identity; response-only entries do not require a mirrored user message. Hidden internal results stay out of Thread history and Topic retrieval.
+
 ## Image storage and description Runs
 
 `attachments` owns one upload Input, immutable filename/metadata, the latest description Run/result text, creation time and optional expiry. Metadata contains original/model/thumbnail descriptors (SHA-256, MIME type, bytes and displayed dimensions), plus the transform version. Storage paths derive from the instance root, attachment UUID and descriptor hash; payloads never accept arbitrary filesystem paths.
@@ -120,7 +145,7 @@ Explicit tools place these records beneath the current `tool_call` within its ch
 
 ## Instructions and captured requests
 
-`instructions` stores current name/text for a common editor. `topics.instruction_id` and `threads.instruction_id` are nullable, unique FKs implementing [INST-R02](../specs/features/instructions.md#rules). Null means no custom document. Global documents instead have a unique stable `key`, currently `response`, `image-description`, `video-caption` and `video-understanding`; Topic/Thread documents have a null key.
+`instructions` stores current name/text for a common editor. `topics.instruction_id` and `threads.instruction_id` are nullable, unique FKs implementing [INST-R02](../specs/features/instructions.md#rules). Null means no custom document. Global documents instead have a unique stable `key`, currently `response`, `image-description`, `video-caption`, `video-understanding`, `engine-filter`, `engine-route` and `engine-assess`; Topic/Thread documents have a null key.
 
 The unique constraints prevent sharing within each owner type, but not across Topics and Threads. For ownership changes, use a `READ COMMITTED` transaction: lock the Instruction row, then check both owner tables in a separate query so the check sees changes committed while waiting for the lock. Reject a different owner or a global key. All attachment/key changes must follow this lock protocol; an owned document cannot become a global prompt. Create/copy and attach a document atomically. Soft-deleting a Topic retains its document; erasure remains G06. See [PostgreSQL snapshot behavior](https://www.postgresql.org/docs/current/transaction-iso.html#XACT-READ-COMMITTED).
 
@@ -145,7 +170,7 @@ The first response workflow uses this minimal shape at acceptance:
 }
 ```
 
-`request_artifact_id` is required and immutable for this workflow; it references this Run's frozen `model_request` Act. `response_artifact_id` stays null until a response is saved, then references this Run's Surface (or its result Act for a description). Create the result and set the reference atomically. A completed empty reply still has a Surface; failure/cancellation before output may have none. In that case, display the Run's outcome beside its originating user message.
+`request_artifact_id` is required and immutable for this workflow; it references this Run's frozen `model_request` Act. `response_artifact_id` stays null until a response is saved, then references this Run's Surface (or its result Act for a description). Create the result and set the reference atomically. A completed empty chat reply still has a Surface; incoming internal work instead references its final model output under the incoming-item contract above. Failure/cancellation before output may have none. In that case, display the Run's outcome beside its originating user message.
 
 Validate each reference's existence, layer, type and producing Run on write; JSON references have no SQL FKs. Commit checkpoint changes with their related Artifacts/outcome. Terminal Runs freeze the checkpoint; status and error remain separate columns.
 
@@ -170,14 +195,14 @@ Persisting state does not implement safe continuation. The initial restart behav
 
 ## Thread visibility
 
-[CONV-R14](../specs/features/threads.md#requirements) defines manual archive and pin behavior. `is_archived` and `is_pinned` are independent booleans, defaulting to false. Update the changed flag and `updated_at` together. Neither flag records when it changed or schedules a future action. Derive ongoing activity from Runs.
+[CONV-R14](../specs/features/threads.md#requirements) defines manual archive and pin behavior. `is_archived` and `is_pinned` are independent booleans, defaulting to false. Manual archive and title edits preserve `updated_at`, which orders Threads by content/work activity. Neither flag records when it changed or schedules a future action. Derive ongoing activity from Runs.
 
 ## Execution and transactions
 
 1. Check `request_key` before rejecting a busy thread. A matching command hash returns the existing Run; conflicting reuse fails. Recheck under the target thread lock so concurrent duplicate submissions cannot create two Runs. The unique key is the final guard.
 2. In one transaction, persist Input, user Surface and queued Run; capture a consistent thread/instruction selection, select the provider/model/options, insert the request Act and complete `state`. Insert the Run before its Act; an incomplete checkpoint is allowed only inside this transaction. Retry transaction conflicts before dispatch. Commit before any provider call.
 3. Claim work with an atomic queued-to-running transition and set `started_at`. Only the process that successfully claims the row dispatches the captured request. Persist the response Surface and checkpoint reference together, then persist content before delivering it to the client.
-4. Every response-content or checkpoint write locks the Run and verifies it is still running. Cancellation and settlement use the same row lock. Commit any final content/checkpoint together with status/error/end time; late output cannot overwrite a stopped Run. Completed empty responses still have a Surface with an empty content array.
+4. Every response-content or checkpoint write locks the Run and verifies it is still running. Cancellation and settlement use the same row lock. Commit any final content/checkpoint together with status/error/end time; late output cannot overwrite a stopped Run. Completed empty visible responses still have a Surface with an empty content array.
 
 One queued/running execution per thread initially prevents concurrent response generation there. `created_at` records persistence; `started_at` may be later while work waits for capacity, or null if stopped before execution. Client reconnect reads saved rows without dispatching again. Settled Runs never reset to queued.
 

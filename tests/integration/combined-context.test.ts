@@ -74,7 +74,7 @@ test('Topic and filesystem context coexist in the running app', {timeout: 120000
       assert.equal(new Set(calls.flatMap(call=>call.citationIds!)).size,calls.flatMap(call=>call.citationIds!).length);
       const frozen=JSON.stringify(await db.artifact.findMany({where:{runId:mixed.id},orderBy:{id:'asc'}}));
       app=await desktop(instance);const page=app.page;
-      await page.getByRole('button',{name:'Combined evidence',exact:true}).click();
+      await page.getByRole('region',{name:'Topic Ash development',exact:true}).getByRole('button',{name:'Combined evidence',exact:true}).click();
       for(const [index,label] of ['Prior finding','Source file'].entries()){
         await page.getByRole('link',{name:label,exact:true}).click();
         await page.locator('.inspector > code').filter({hasText:calls[index].resultArtifactId!}).waitFor();

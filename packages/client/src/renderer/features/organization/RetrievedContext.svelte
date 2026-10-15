@@ -18,7 +18,7 @@
         {#if capture.value.truncated}<p class="limit">Partial results or shortened excerpts.</p>{/if}
         {#each capture.value.results as source}
           <article>
-            <strong>{source.threadTitle} · {source.speaker==='ash'?'Ash':'You'}</strong>
+            <strong>{source.threadTitle} · {source.speaker==='ash'?'Ash':source.speaker==='source'?source.sourceLabel??'External source':'You'}</strong>
             <p class="excerpt">{source.text}</p>
             <small>Characters {source.offset.toLocaleString()}–{(source.offset+source.text.length).toLocaleString()} of {source.totalCharacters.toLocaleString()}{source.truncated?' · Excerpt':''}</small>
             {#each source.images as image}<p class="image">Image {image.id}<br>{image.descriptionAvailable?'Saved description; pixels not supplied':'Description unavailable; pixels not supplied'}{image.summaryRunId?` · Description Run ${image.summaryRunId}`:''}</p>{/each}

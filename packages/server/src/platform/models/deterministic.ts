@@ -14,6 +14,18 @@ export const deterministicModel: ModelAdapter = {
     const { mode } = request.options;
     if (mode === 'fail-before') throw new ModelFailure('deterministic_failure', 'The test model failed before producing output.');
     if (mode === 'empty') return;
+    if(request.purpose?.startsWith('engine_')) {
+      const packet=JSON.parse(String(request.messages.at(-1)!.content)),text=String(packet.input.text).toLowerCase();
+      if(request.purpose==='engine_filter'){yield JSON.stringify({type:'filter_result',outcome:/spam|unsubscribe|promotion/.test(text)?'drop':'pass',reason:'Deterministic synthetic relevance assessment.'});return;}
+      if(request.purpose==='engine_route'){
+        const words=text.match(/[a-z0-9]{3,}/g)??[];
+        const candidates=(packet.candidates as {id:string;title:string;excerpts:{text:string}[]}[]).map(c=>({...c,score:words.filter(w=>(c.title+' '+c.excerpts.map(e=>e.text).join(' ')).toLowerCase().includes(w)).length})).sort((a,b)=>b.score-a.score);
+        const best=candidates[0],ambiguous=!!best&&best.score>0&&candidates[1]?.score===best.score;
+        yield JSON.stringify({destination:best?.score?'existing':'new',threadId:best?.score?best.id:null,title:best?.score?best.title:String(packet.input.text).slice(0,70),reason:'Deterministic synthetic matching; no external model was called.',ambiguous,assumption:ambiguous?'Assumed the first equally matching continuing matter is the intended destination.':''});return;
+      }
+      const internal=/internal work/.test(text),silent=/no presentation/.test(text),respond=/respond|summari[sz]e|\?/.test(text);
+      yield JSON.stringify({type:'act_plan',action:internal||respond,showSource:!internal&&!silent&&!/respond only/.test(text),showResponse:respond&&!internal,reason:'Deterministic synthetic action and presentation assessment.'});return;
+    }
     if(request.purpose==='image_summary') {
       const content=request.messages.at(-1)?.content;
       const image=Array.isArray(content)?content.find(block=>block.type==='image'):undefined;

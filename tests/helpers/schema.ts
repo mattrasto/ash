@@ -16,7 +16,7 @@ export async function checkDiagram(db: postgres.Sql, evidence: string) {
     await tx.unsafe('CREATE SCHEMA diagram_check');
     await tx.unsafe('SET LOCAL search_path = diagram_check');
     await tx.unsafe(sql);
-    const names=['topics','threads','thread_topics','artifacts','instructions','runs','attachments','artifact_attachments','provider_continuations'];
+    const names=['topics','threads','thread_topics','artifacts','instructions','runs','attachments','artifact_attachments','provider_continuations','incoming_items'];
     async function signature(schema:string) {
       const columns=await tx.unsafe(`SELECT table_name,column_name,udt_name,is_nullable,column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name = ANY($2) ORDER BY table_name,column_name`,[schema,names]);
       const keys=await tx.unsafe(`SELECT t.relname AS table_name,c.contype,pg_get_constraintdef(c.oid) AS definition FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname=$1 AND t.relname = ANY($2) AND c.contype IN ('p','f')`,[schema,names]);

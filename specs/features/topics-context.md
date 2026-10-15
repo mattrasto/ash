@@ -12,7 +12,7 @@ A **Topic** groups related Threads. A **Thread** is a continuing matter, as defi
 
 ## User flow
 
-1. Create an **Insurance** Topic from the sidebar. Open its menu → Instructions and save “Add all items related to both homeowners and car insurance to Insurance.” The shared editor labels these as routing guidance; organization remains manual in this phase.
+1. Create an **Insurance** Topic from the sidebar. Open its menu → Instructions and save “Add all items related to both homeowners and car insurance to Insurance.” The shared editor labels these as routing guidance; Topic membership remains manual.
 2. Link an earlier thread about homeowners insurance to that Topic.
 3. Use the New Thread icon beside **Insurance**, whether the Topic is expanded or collapsed. This explicitly links the new Thread to Insurance. Its Topic membership is visible in the Thread header.
 4. Ask, “What deductible did we discuss for my homeowners insurance?” Ash can search the linked Topic and read the relevant excerpt from the earlier thread.
@@ -29,7 +29,7 @@ A **Topic** groups related Threads. A **Thread** is a continuing matter, as defi
 
 Use the same Settings editor for global, Topic and Thread instructions. The editor identifies the owner and where its guidance applies; each scope is saved independently. Its behavior is defined in [INST-R07–08](instructions.md#editor).
 
-The editor distinguishes routing guidance from response guidance. Applicability comes before the priority rule in [INST-R05](instructions.md#rules): Topic routing instructions are not injected into chat answers. This phase supports saving and editing them; automatic routing remains deferred. Instruction text and Topic membership never grant tool permission ([INST-R06](instructions.md#rules)).
+The editor distinguishes routing guidance from response guidance. Applicability comes before the priority rule in [INST-R05](instructions.md#rules): Topic routing instructions are not injected into chat answers. Incoming placement follows [ART-R12–13](artifacts.md#incoming-item-slice). Instruction text and Topic membership never grant tool permission ([INST-R06](instructions.md#rules)).
 
 ## What enters an answer
 
@@ -40,7 +40,7 @@ The editor distinguishes routing guidance from response guidance. Applicability 
 | Other threads | Search/read within linked Topics when Ash needs more information; include only returned excerpts. |
 
 - **CTX-R02 — Source fidelity:** preserve the exact content supplied and its source identity. Deduplicate overlapping history and retrieval results. Distinguish image pixels from saved descriptions under [IMG-R05](images.md#rules).
-- **CTX-R03 — Topic retrieval:** Ash can search message text and saved image descriptions by keyword, then read bounded excerpts from matching messages. Search covers threads sharing a linked Topic, including archived threads, without duplicating overlapping results. Visible user messages and completed answers are eligible; internal processing records and unfinished/failed answers are excluded. Retrieved content is evidence, not new instructions or authorization.
+- **CTX-R03 — Topic retrieval:** Ash can search message text and saved image descriptions by keyword, then read bounded excerpts from matching messages. Search covers threads sharing a linked Topic, including archived threads, without duplicating overlapping results. Visible user messages, labeled incoming source entries and completed answers are eligible; internal processing records and unfinished/failed answers are excluded. Retrieved content is evidence, not new instructions or authorization.
 - **CTX-R04 — Isolation:** a Thread with no Topics has no automatic cross-thread retrieval. A Thread linked to several Topics can retrieve within their combined scope. Unrelated threads remain outside that scope. Merely mentioning a Topic or thread in a message does not change membership.
 - **CTX-R05 — Bounds and failures:** retrieval has finite search and excerpt limits. Show when results are partial, an excerpt is shortened, an image description is unavailable, or a source cannot be read. An incomplete search cannot support a claim that no matching material exists anywhere. Older history may be omitted to fit context. If applicable instructions and the current input cannot fit, preserve the draft and explain what must be reduced before sending; do not silently drop them.
 
@@ -69,4 +69,6 @@ The editor distinguishes routing guidance from response guidance. Applicability 
 
 ## Deferred
 
-Explicit references to prior messages/images (CTX-R01 and TC04–05 reserved), automatic routing/organization, inferred membership, generated titles, embeddings, semantic memory, automatic summaries, instruction edit history and Ash-authored instruction changes. No artifact moves/split/merge, general permissions UI, Codex integration or self-modification. Existing thread naming behavior remains unchanged; further title work belongs to visibility.
+Explicit references to prior messages/images (CTX-R01 and TC04–05 reserved), organization operations and inferred membership, generated titles, embeddings, semantic memory, automatic summaries, instruction edit history and Ash-authored instruction changes. No artifact moves/split/merge, general permissions UI, Codex integration or self-modification. Existing thread naming behavior remains unchanged; further title work belongs to visibility.
+
+Incoming-item routing uses [ART-R12–13](artifacts.md#incoming-item-slice); its bounded candidate discovery is separate from the response retrieval rules above.

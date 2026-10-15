@@ -12,8 +12,8 @@
   const scope=$derived(ownerKey.split(':')[0]);
   const selectedTopic=$derived(topics.find(topic=>ownerKey===`topic:${topic.id}`));
   const selectedThread=$derived(threads.find(item=>ownerKey===`thread:${item.id}`));
-  const title=$derived(scope==='topic'?selectedTopic?.name??'Topic':scope==='thread'?selectedThread?.title??'Thread':ownerKey==='global:response'?'Global response guidance':'Image description guidance');
-  const purpose=$derived(scope==='topic'?'Routing guidance · Saved for the Route layer. Organization is manual in this phase.':scope==='thread'?'Applies to this thread. Thread guidance takes priority over global response guidance.':ownerKey==='global:response'?'Applies to chat responses. Individual threads can add more specific guidance.':'Applies only when describing uploaded images.');
+  const title=$derived(scope==='topic'?selectedTopic?.name??'Topic':scope==='thread'?selectedThread?.title??'Thread':saved?.document?.name??'Global guidance');
+  const purpose=$derived(scope==='topic'?'Guides autonomous placement of incoming items. Topic membership remains manual.':scope==='thread'?'Applies to this thread. Thread guidance takes priority over global response guidance.':ownerKey==='global:response'?'Applies to chat responses. Individual threads can add more specific guidance.':ownerKey==='global:engine-filter'?'Assesses incoming relevance; dropped sources remain inspectable.':ownerKey==='global:engine-route'?'Chooses an existing or new Thread autonomously and records assumptions.':ownerKey==='global:engine-assess'?'Chooses useful work, source visibility and response visibility separately.':ownerKey==='global:video-caption'?'Applies to background video captions and narration.':ownerKey==='global:video-understanding'?'Applies to video understanding tools.':'Applies only when describing uploaded images.');
   async function load(key:string) {
     loading=true;error='';notice='';conflict=false;
     try {const value=await api<OwnedInstruction>(`instructions/${key.replace(':','/')}`);ownerKey=key;saved=value;text=value.document?.text??'';}
@@ -52,7 +52,7 @@
     {#if notice}<p class="notice" role="status">{notice}</p>{/if}
       <label for="instruction-owner">Instruction owner</label>
       <select id="instruction-owner" value={ownerKey} disabled={loading||busy||!!pendingMove} onchange={event=>{const key=event.currentTarget.value;event.currentTarget.value=ownerKey;move(()=>void load(key));}}>
-        <optgroup label="Global"><option value="global:response">Response guidance</option><option value="global:image-description">Image descriptions</option><option value="global:video-caption">Video captions and narration</option><option value="global:video-understanding">Video understanding</option></optgroup>
+        <optgroup label="Global"><option value="global:response">Response guidance</option><option value="global:image-description">Image descriptions</option><option value="global:video-caption">Video captions and narration</option><option value="global:video-understanding">Video understanding</option><option value="global:engine-filter">Incoming Filter</option><option value="global:engine-route">Incoming Route</option><option value="global:engine-assess">Incoming action and presentation</option></optgroup>
         {#if topics.length}<optgroup label="Topics · routing">{#each topics as topic}<option value={`topic:${topic.id}`}>{topic.name}</option>{/each}</optgroup>{/if}
         {#if threads.length}<optgroup label="Threads">{#each threads as item}<option value={`thread:${item.id}`}>{item.title}{item.id===thread?.id?' · current':''}</option>{/each}</optgroup>{/if}
       </select>

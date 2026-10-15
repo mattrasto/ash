@@ -164,7 +164,7 @@ export class ToolExecutor {
         });
         if (!calls.length) {
           await this.checkpoint(id, async (tx, state, threadId) => {
-            state.response_artifact_id = await this.artifact(tx, id, threadId, outputId, MessagePayload.parse({ type: 'message', initial_thread_id: threadId, speaker: 'ash', content: commentary ? [{ type: 'text', text: commentary }] : [] }), undefined, true);
+            state.response_artifact_id = initial.incoming?.showResponse === false ? outputId : await this.artifact(tx, id, threadId, outputId, MessagePayload.parse({ type: 'message', initial_thread_id: threadId, speaker: 'ash', ...(initial.incoming?{inputArtifactId:initial.incoming.inputArtifactId}:{}), content: commentary ? [{ type: 'text', text: commentary }] : [] }), undefined, true);
             await tx.run.update({ where: { id }, data: { status: 'completed', endedAt: new Date() } });
           });
           return;

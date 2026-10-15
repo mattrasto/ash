@@ -27,7 +27,7 @@ export class TopicRetrieval {
       AND EXISTS (SELECT 1 FROM thread_topics membership JOIN topics topic ON topic.id=membership.topic_id
         WHERE membership.thread_id=a.thread_id AND topic.deleted_at IS NULL
           AND topic.id IN (${Prisma.join(scope.topics.map(topic=>Prisma.sql`${topic.id}::uuid`))}))
-      AND (a.payload->>'speaker'='user' OR (a.payload->>'speaker'='ash' AND EXISTS (
+      AND (a.payload->>'speaker' IN ('user','source') OR (a.payload->>'speaker'='ash' AND EXISTS (
         SELECT 1 FROM runs r WHERE r.id=a.run_id AND r.status='completed'
           AND NOT EXISTS (SELECT 1 FROM runs newer WHERE newer.input_artifact_id=r.input_artifact_id
             AND newer.status='completed' AND (newer.ended_at,newer.id)>(r.ended_at,r.id)))))`;
@@ -56,7 +56,7 @@ export class TopicRetrieval {
     if (offset>0 && /[\uDC00-\uDFFF]/.test(source.text[offset]??'')) offset--;
     let end = Math.min(source.text.length,offset+length);
     if (end<source.text.length && /[\uD800-\uDBFF]/.test(source.text[end-1]??'')) end--;
-    return {artifactId:source.row.id,threadId:source.row.threadId!,threadTitle:source.row.thread!.title,speaker:source.payload.speaker,
+    return {artifactId:source.row.id,threadId:source.row.threadId!,threadTitle:source.row.thread!.title,speaker:source.payload.speaker,...(source.payload.source?{sourceLabel:source.payload.source.label}:{}),
       createdAt:source.row.createdAt.toISOString(),text:source.text.slice(offset,end),offset,totalCharacters:source.text.length,
       truncated:offset>0 || end<source.text.length,images:source.images.filter(image=>image.start<end && image.end>offset).map(({start,end,...image})=>image)};
   }

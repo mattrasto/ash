@@ -152,3 +152,16 @@ Table provider_continuations {
 }
 Ref: provider_continuations.output_artifact_id > artifacts.id [delete: restrict]
 Ref: provider_continuations.run_id > runs.id [delete: restrict]
+
+Table incoming_items {
+ id uuid [pk, not null, note: 'Same identity as the retained Input; immutable.']
+ source_key text [unique, not null, note: 'Hash of source namespace/event identity; immutable delivery deduplication key.']
+ request_hash text [not null, note: 'Original content and explicit-target hash; rejects conflicting delivery.']
+ status text [not null, note: 'Intake lifecycle: queued, processing, waiting_capacity, completed, dropped, failed or interrupted.']
+ state jsonb [not null, note: 'Current stage and immutable Artifact references, target and eventual Run. Updated transactionally with progress.']
+ error text [note: 'Safe current failure summary; null without a failure. Earlier failures remain Artifacts.']
+ created_at timestamptz(6) [not null, note: 'Receipt time; immutable.']
+ updated_at timestamptz(6) [not null, note: 'Latest checkpoint change.']
+ indexes { (status, created_at) }
+}
+Ref: incoming_items.id > artifacts.id [delete: restrict]

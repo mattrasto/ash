@@ -9,6 +9,13 @@ export interface Scenario {
 
 // Product rules stay in specs/. These IDs identify executable checks, not new requirements.
 export const scenarios: Scenario[] = [
+ {id:'engine-filter-route',title:'Retained incoming sources, autonomous placement and captured guidance',suite:'workflow',requirements:['AE01','AE02','AE03','AE04','AE06','AE07'],fixture:'scratchpad / empty'},
+ {id:'engine-context-bounds',title:'Dense routing history fits the captured context budget with recorded omissions',suite:'workflow',requirements:['AE03','AE06'],fixture:'scratchpad / empty'},
+ {id:'engine-presentation-context',title:'Independent action and presentation with source-aware context and tool authorization',suite:'workflow',requirements:['AE05','AE06','AE10','AE11'],fixture:'scratchpad / empty'},
+ {id:'engine-provider-capture',title:'Provider protocol preserves configured caps and captured metadata',suite:'workflow',requirements:['AE06','AE09'],fixture:'scratchpad / empty'},
+ {id:'engine-recovery-capacity',title:'Busy destinations, explicit retry and interruption preserve intake evidence',suite:'workflow',requirements:['AE07','AE08','AE09'],fixture:'scratchpad / empty'},
+ {id:'engine-internal-desktop',title:'Internal Run completion is inspectable without a reply',suite:'desktop',requirements:['AE05','AE06'],fixture:'scratchpad'},
+ {id:'engine-desktop',title:'Incoming processing, source presentation and inspection preserve navigation',suite:'desktop',requirements:['AE01','AE05','AE06'],fixture:'scratchpad'},
   {id:'video-background-context',title:'Background video caption and narration enter later immutable context',suite:'workflow',requirements:['VID-A05','VID-A17'],fixture:'scratchpad / empty'},
   {id:'video-tools-scope-evidence',title:'Single-video tools deduplicate work and retain bounded playable evidence',suite:'workflow',requirements:['VID-A01','VID-A18','VID-A19','VID-A21'],fixture:'scratchpad / empty'},
   {id:'video-processing-bounds',title:'Segmented video processing retains partial coverage and source offsets',suite:'workflow',requirements:['VID-A02','VID-A05','VID-A07'],fixture:'scratchpad / empty'},

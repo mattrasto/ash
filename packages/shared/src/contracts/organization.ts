@@ -7,7 +7,7 @@ export const ChangeTopic = z.object({expectedUpdatedAt:z.string().datetime(), na
 export const ChangeMembership = z.object({expectedVersion:z.number().int().nonnegative(), topicIds:z.array(id).max(100)}).strict()
   .refine(value => new Set(value.topicIds).size === value.topicIds.length, 'Duplicate Topics.');
 export const InstructionOwner = z.discriminatedUnion('scope', [
-  z.object({scope:z.literal('global'), key:z.enum(['response','image-description','video-caption','video-understanding'])}).strict(),
+  z.object({scope:z.literal('global'), key:z.enum(['response','image-description','video-caption','video-understanding','engine-filter','engine-route','engine-assess'])}).strict(),
   z.object({scope:z.literal('topic'), id}).strict(),
   z.object({scope:z.literal('thread'), id}).strict(),
 ]);
@@ -23,7 +23,7 @@ export interface MembershipView {version:number;topics:LinkedTopic[]}
 export const TopicSearch = z.object({query:z.string().trim().min(1).max(160)}).strict();
 export const TopicRead = z.object({artifactId:id,offset:z.number().int().min(0).max(1_000_000).default(0)}).strict();
 export const TopicExcerpt=z.object({
-  artifactId:id,threadId:id,threadTitle:z.string(),speaker:z.enum(['user','ash']),createdAt:z.string().datetime(),
+  artifactId:id,threadId:id,threadTitle:z.string(),speaker:z.enum(['user','ash','source']),sourceLabel:z.string().optional(),createdAt:z.string().datetime(),
   text:z.string(),offset:z.number().int().nonnegative(),totalCharacters:z.number().int().nonnegative(),truncated:z.boolean(),
   images:z.array(z.object({id,summaryRunId:id.nullable(),descriptionAvailable:z.boolean()}).strict()),
 }).strict();

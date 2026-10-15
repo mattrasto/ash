@@ -48,7 +48,7 @@ test('topics-settings-desktop: Sidebar Topics and fixed Settings preserve owners
   await topic('Insurance').getByRole('button',{name:'Insurance thread',exact:true}).dragTo(topic('Home').getByRole('button',{name:'Topic Home',exact:true}));await expect(topic('Home').getByRole('button',{name:'Insurance thread',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Actions for Topic Insurance',exact:true}).click();await page.getByRole('menuitem',{name:'Instructions',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'Settings',exact:true}),text=dialog.getByLabel('Instruction text'),owner=dialog.getByLabel('Instruction owner');
-  await expect(dialog.getByText(/Saved for the Route layer/)).toBeVisible();await expect(text).toHaveValue('');
+  await expect(dialog.getByText(/Guides autonomous placement of incoming items/)).toBeVisible();await expect(text).toHaveValue('');
   const bounds=await dialog.boundingBox();expect(bounds?.width).toBe(760);expect(bounds?.height).toBe(640);
   await text.fill('Add homeowners and car insurance items to Insurance.');await dialog.getByRole('button',{name:'Save instructions',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('Instructions saved');expect(await dialog.boundingBox()).toEqual(bounds);
   await owner.selectOption({label:'Image descriptions'});await expect(dialog.getByText(/Applies only when describing/)).toBeVisible();expect(await dialog.boundingBox()).toEqual(bounds);

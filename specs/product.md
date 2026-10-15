@@ -9,7 +9,7 @@ Ash is a private personal agent: part companion, helper and second brain. It sho
 - **Distinct identity:** Ash is not the user. Drafting and sending/publishing follow the configurable defaults in [PERM-R02](features/permissions.md#rules), which supersede the overview's original prohibition.
 - **Cross-device presence:** desktop, mobile and suitable wearables; input/output and behavior adapt to the device. Desktop is described as voice-first and the main work surface.
 - **Background capability:** Ash can continue work in the background. The overview also requests computer/browser work while the user's computer is off; deployment and local-device limitations remain open (G02).
-- **User control:** topic/thread guidance is editable and organizational automation is suggested by default. Statements implying automatic initial organization conflict with this default (G04).
+- **User control:** topic/thread guidance is editable and initial incoming-item placement is autonomous under [ART-R12](features/artifacts.md#incoming-item-slice); later reorganization is suggested by default.
 - **Traceability:** visible results lead back to inputs and recorded processing. Captured requests preserve what informed execution. Storage, recovery and deferred application history follow [ART-R08–10](features/artifacts.md#rules).
 - **Private access:** others cannot interact with the user's Ash. This does not yet specify hosting, model-provider data handling, observation consent or retention (G02, G06, G09).
 - **Adaptability:** Ash can improve instructions, build custom apps and eventually modify its code. Instruction changes by Ash require an explicit Decision. Other self-modification boundaries need definition (G10).

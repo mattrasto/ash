@@ -53,7 +53,7 @@ IDs are registered in `tests/scenarios.ts`. `tests/integration/topics-context.te
 | `topics-settings-desktop` | TOP-R01–04; INST-R07–09 | Hidden Electron: create/rename/delete Topics from the sidebar, link/unlink via nested checkbox menus and drag-and-drop, expand groups, create linked/unlinked Threads and switch instruction owners through the common editor. Check purpose labels, keyboard navigation, focus restoration, Save/Discard when switching/closing, Cancel, stale-save errors and draft preservation. Topic deletion explains that threads remain. Assert stable modal bounds and internal scrolling at 1040×830 and 740×650. |
 | `context-inspection-desktop` | CTX-R08–09; TC08–09 | Complete the acceptance journey and inspect included instructions/history/retrieved text, source links, pixels versus descriptions and factual limit markers. Distinguish available Topics from sources read, and inspect each model request. Reload/reopen preserves the record. Automated windows stay hidden and non-focusable throughout interaction and resizing. |
 
-Instruction conflict handling inside Route is deferred with Route execution. The tools chat owns generic executor/provider fault coverage; these checks exercise Topic integration with that boundary rather than duplicating its test suite. No routine unit-test or line-coverage target is added.
+Instruction conflict handling inside Route is covered by [incoming-engine verification](../features/artifacts.md#verification). The tools chat owns generic executor/provider fault coverage; these checks exercise Topic integration with that boundary rather than duplicating its test suite. No routine unit-test or line-coverage target is added.
 
 ## App exploration and separate review
 

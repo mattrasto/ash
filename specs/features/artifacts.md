@@ -1,6 +1,6 @@
 # Artifact ownership and history
 
-Rules accepted by the user, 2026-10-09 · Direct text path implemented; other engine paths deferred
+Ownership accepted, 2026-10-09 · Autonomous incoming-item behavior accepted, 2026-10-14 · Incoming slice implemented · Synthetic boundary and desktop checks passing
 
 [Source](../HUMAN_SPEC.md) · [Data model](../../docs/data-model.md)
 
@@ -20,6 +20,33 @@ Process inputs before their destination is known and reorganize visible threads 
 - **ART-R08 — Recovery:** current database rows are authoritative. Recovery uses PostgreSQL physical base backups and archived WAL for point-in-time recovery (PITR); application-event reconstruction is not required. Artifacts retain recorded engine activity for inspection. This replaces the source spec's Replayable State requirement. Restoring data must not execute models, tools or external effects; operational requirements are in [backup and recovery](../../docs/data-model.md#backup-and-recovery).
 - **ART-R09 — Streaming drafts:** the current response Surface's payload content may grow while its Run is running; a terminal Run outcome freezes that content. In the initial one-response-per-Run flow, display state comes from that Run: running means generating, completed means finished, and failed/cancelled/interrupted means stopped. There is no independent Artifact completeness field. Identity, source links, captured requests and original provenance remain immutable. Individual streaming chunks do not require history records.
 - **ART-R10 — Application history and undo:** audit history is deferred, including past names, memberships, moves and instruction edits. Desktop session state may support undo of manual edits by issuing reversing backend changes that reject conflicts with newer edits. This does not promise undo across restarts or devices. Captured model requests retain the instruction text actually used; PITR is recovery, not a searchable change history.
+
+## Incoming-item slice
+
+Accepted, 2026-10-14. Synthetic text items exercise the same ingestion boundary future Connections will use. Connection adapters, inferred Topic membership, moves/split/merge, notifications and device-specific presentation remain follow-ons.
+
+- **ART-R11 — Receipt and Filter:** durably retain original text, source identity, optional source URL and event time before assessment. A source/event identity deduplicates delivery; changed content under that identity is rejected. Record pass/drop and a concise reason. Drop stops propagation, not retention; it creates no Thread, Run or Surface. Processing failures remain errors, not drops. Direct user messages retain their existing Filter/Route bypass.
+- **ART-R12 — Autonomous Route:** preserve a trusted explicit Thread target. Otherwise choose the best-fitting existing Thread or create a new one for a separate matter or weak fit. Make a reasonable assumption when uncertain, including consequential conflicts among Topic routing instructions; record the assumption and placement rationale without asking or creating a Decision. Initial placement is automatic; later reorganization remains suggestion-based. Asking the user to double-check ambiguous placements is a possible follow-on, not part of this slice.
+- **ART-R13 — Routing context:** use bounded Thread candidates, saved source entries/completed responses and applicable Topic routing guidance. Route may discover Threads beyond an answer's Topic scope, including archived Threads; record candidate scope, exact supplied excerpts/instructions, ordering and omissions. This access is for placement only. Do not automatically change memberships, archive state or existing titles. New Threads start unlinked. Topic guidance does not become response guidance. External content remains evidence, not instructions or authorization.
+- **ART-R14 — Act and presentation:** assess action, source visibility and response visibility separately. An informational item may produce only a source entry; a relevant item may remain entirely internal. Start an existing Run/tool workflow only when work is warranted. Its result can remain internal or become an Ash response. A selected source entry survives failure to start the action. Label external source entries with their source; never present them as user messages. Permissions owns authorization; Decisions owns required-input waiting/resumption. This slice does not redefine either.
+- **ART-R15 — Captures and recovery:** persist each model request before dispatch and retain its validated outcome or safe failure evidence. Each processing record has one immediate source; context references are separate. Retry failed/interrupted intake explicitly from saved progress and the captured current request, without repeating settled stages or duplicating placement, source entries or Runs. Busy destinations retain accepted inputs until capacity is available; capture response context when the Run is accepted. Restart marks unfinished intake interrupted without replaying provider calls; restoring/displaying data never dispatches work.
+- **ART-R16 — Inspection:** a Processing view makes dropped, failed, internal-only and surfaced inputs discoverable. It links to full lineage, source metadata, placement assumptions, requests, stage outcomes and any Run. Normal Threads show only selected source entries/responses. Inspection reads saved evidence without invoking a provider. Internal completion is a successful Run with no response Surface, not an empty chat reply.
+
+### Acceptance criteria
+
+| ID | Synthetic scenario | Required result |
+| --- | --- | --- |
+| AE01 | Receive irrelevant promotional text. | One retained Input and drop outcome; no Thread, Run or Surface. |
+| AE02 | Receive an item with an explicit Thread target and competing routing guidance. | Target preserved; direct chat also keeps its existing bypass and behavior. |
+| AE03 | Receive a matching update, then an unrelated new matter. | Reuse the matching Thread; create one unlinked Thread for the new matter. Capture bounded context and placement rationale. |
+| AE04 | Two Threads fit equally or Topic instructions conflict. | Place autonomously; record ambiguity and the chosen assumption. No routing question/Decision. |
+| AE05 | Process source-only, response-only, internal-work and no-work/no-presentation items. | Independent action/presentation choices; no fake user messages, filler replies or unread-response indicators for internal-only work. Tool work uses the existing executor and authorization hook. |
+| AE06 | Inspect a dropped item and a multi-stage response after changing guidance. | Full source tree and exact historical context remain available; reopening performs no model calls. |
+| AE07 | Deliver the same source event concurrently and reuse its identity with changed content. | One pipeline/placement/source/initial Run; conflicting reuse rejected. |
+| AE08 | Route to a busy Thread. | Receipt persists, no second active Run, no lost input; work starts after capacity returns without blocking other Threads. |
+| AE09 | Fail or restart between stages, then explicitly retry. | Retain failure and prior stages; a selected source entry survives action preparation failure; no silent drop, automatic provider replay or duplicate Thread/Surface/Run. |
+| AE10 | External text asks Ash to override guidance or permissions. | It remains labeled source evidence; action still passes through the existing authorization boundary. |
+| AE11 | Follow up in a Thread containing source entries and response-only results. | Context includes eligible visible content once, preserves provenance and latest-completed retry selection, and omits hidden internal results. |
 
 ## Example flow
 
@@ -43,9 +70,9 @@ Process inputs before their destination is known and reorganize visible threads 
 
 ## Remaining scope
 
-Moves and references remain deferred from the [first thread journey](threads.md#scope). The six-table schema and direct text path are implemented; [coverage and remaining scope](../../docs/features/threads.md).
+Moves and references remain deferred from the [first thread journey](threads.md#scope). The core schema and direct text path are implemented; [coverage and remaining scope](../../docs/features/threads.md).
 
 - **G03:** choose backup storage, retention, recovery targets and restore verification.
 - **Moves:** define behavior during active runs and effects on context that has not yet been captured.
 - **References/erasure:** define behavior when a referenced target moves or is erased; retention remains G06.
-- **TODO:** specify the remaining Artifact Engine stages and inspection behavior.
+- **Follow-ons:** connection adapters, optimistic placement review, organization operations and broader media ingestion.

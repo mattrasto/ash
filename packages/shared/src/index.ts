@@ -40,3 +40,5 @@ export * from './contracts/tools.ts';
 export * from './contracts/video-understanding.ts';
 
 export { ZodError } from 'zod';
+
+export * from './contracts/artifacts.ts';

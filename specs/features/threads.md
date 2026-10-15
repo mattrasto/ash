@@ -20,7 +20,7 @@ Current delivery: Threads with [image input and descriptions](images.md), OpenAI
 
 Deferred from the broader design below: pin controls and PITR operation/restore verification. Requirement and acceptance IDs remain stable for those later deliveries. [Implementation](../../docs/features/threads.md) · [Test plan](../../docs/plans/persisted-chat-tests.md).
 
-Deferred: voice and Live Threads, model-generated naming, automatic organization/archiving, artifact moves and references, split/merge, semantic memory, other file attachments, external integrations and inputs, task execution, mobile and self-modification. OpenAI is the first live provider; [live verification](../../docs/features/threads.md#verification) records the tested model and allowance. [Image rules and acceptance](images.md) and [tool execution and inspection](tools.md) extend this scope.
+Deferred: voice and Live Threads, model-generated naming, automatic organization/archiving, artifact moves and references, split/merge, semantic memory, other file attachments, external integrations (synthetic incoming text follows [ART-R11–16](artifacts.md#incoming-item-slice)), task execution, mobile and self-modification. OpenAI is the first live provider; [live verification](../../docs/features/threads.md#verification) records the tested model and allowance. [Image rules and acceptance](images.md) and [tool execution and inspection](tools.md) extend this scope.
 
 ## User flow
 

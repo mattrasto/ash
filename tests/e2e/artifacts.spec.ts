@@ -1,0 +1,38 @@
+import {test,expect} from '../support/fixtures.ts';
+test('engine-desktop',async({ash})=>{
+ const {page}=ash;
+ await page.getByLabel('Message',{exact:true}).fill('Preserve this draft');
+ await page.getByRole('button',{name:'Processing',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Incoming processing'});
+ await dialog.getByRole('button',{name:'Add synthetic item'}).click();
+ await page.getByLabel('Synthetic source text').fill('October rent receipt paid in full');
+ await dialog.getByRole('button',{name:'Process item',exact:true}).click();
+ await expect(dialog.getByText('Processed',{exact:true})).toBeVisible();
+ await dialog.getByRole('button',{name:'Inspect item'}).click();
+ await expect(page.getByRole('heading',{name:'Placement',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Action and presentation'})).toBeVisible();
+ await page.getByRole('button',{name:'Close inspector'}).click();
+ await expect(page.getByLabel('Message',{exact:true})).toHaveValue('Preserve this draft');
+ await page.getByRole('button',{name:'Processing',exact:true}).click();await dialog.getByRole('button',{name:'Open Thread'}).click();
+ await expect(page.getByRole('article',{name:'Source entry'})).toContainText('October rent receipt');
+ await expect(page.getByRole('article',{name:'Ash response'})).toHaveCount(0);
+ await page.getByRole('button',{name:'Inspect source entry'}).click();await expect(page.getByRole('heading',{name:'Source',exact:true})).toBeVisible();
+ await page.keyboard.press('Escape');
+ await page.getByRole('button',{name:'Processing',exact:true}).click();await dialog.getByRole('button',{name:'Add synthetic item'}).click();
+ await page.getByLabel('Synthetic source text').fill('Unsubscribe from this spam promotion');await dialog.getByRole('button',{name:'Process item',exact:true}).click();
+ await expect(dialog.getByText('Filtered out',{exact:true})).toBeVisible();await page.keyboard.press('Escape');await page.reload();
+ await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();await page.getByRole('button',{name:'Processing',exact:true}).click();await expect(dialog.getByText('Filtered out',{exact:true})).toBeVisible();
+});
+
+test('engine-internal-desktop',async({ash})=>{
+ const {page}=ash;
+ await page.getByLabel('Message',{exact:true}).fill('Internal work tracking');await page.getByRole('button',{name:'Send message',exact:true}).click();
+ await expect(page.getByRole('article',{name:'Ash response'})).toHaveCount(1);await expect(page.getByLabel('Stop response',{exact:true})).toHaveCount(0);
+ const original=await page.evaluate(()=>JSON.parse(localStorage.getItem('ash-read-runs')??'{}'));
+ await page.getByRole('button',{name:'Processing',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Incoming processing'});
+ await dialog.getByRole('button',{name:'Add synthetic item'}).click();await page.getByLabel('Synthetic source text').fill('Internal work: summarize an incoming update');await dialog.getByRole('button',{name:'Process item',exact:true}).click();
+ await expect(dialog.getByText('Processed · Work completed',{exact:true})).toBeVisible();await dialog.getByRole('button',{name:'Inspect item',exact:true}).click();await page.getByRole('button',{name:'completed · Inspect Run',exact:true}).click();await expect(page.getByRole('heading',{name:'Run · completed',exact:true})).toBeVisible();await page.getByRole('button',{name:'Close inspector',exact:true}).click();
+ await page.getByRole('button',{name:'Processing',exact:true}).click();await dialog.getByRole('button',{name:'Open Thread',exact:true}).click();await expect(page.getByTestId('message')).toHaveCount(2);
+ await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('ash-read-runs')??'{}'))).toEqual(original);
+ await page.getByRole('button',{name:'New Thread',exact:true}).click();await expect(page.getByLabel('Unread response',{exact:true})).toHaveCount(0);
+});
