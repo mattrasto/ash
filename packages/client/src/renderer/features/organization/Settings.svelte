@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import type { OwnedInstruction, ThreadView, TopicView } from '@ash/shared';
   type Api = <T>(path:string,body?:object)=>Promise<T>;
-  let {api,thread,threads,initialOwner='global:response',onClose}:{api:Api;thread:ThreadView|null;threads:ThreadView[];initialOwner?:string;onClose:()=>void}=$props();
+  let {api,thread,threads,initialOwner='global:response',captureMic=true,onCaptureMic,onClose}:{api:Api;thread:ThreadView|null;threads:ThreadView[];initialOwner?:string;captureMic?:boolean;onCaptureMic?:(value:boolean)=>void;onClose:()=>void}=$props();
   let dialog:HTMLDialogElement;
   let topics=$state<TopicView[]>([]);
   let ownerKey=$state('global:response'),saved=$state<OwnedInstruction|null>(null),text=$state('');
@@ -52,7 +52,7 @@
     {#if notice}<p class="notice" role="status">{notice}</p>{/if}
       <label for="instruction-owner">Instruction owner</label>
       <select id="instruction-owner" value={ownerKey} disabled={loading||busy||!!pendingMove} onchange={event=>{const key=event.currentTarget.value;event.currentTarget.value=ownerKey;move(()=>void load(key));}}>
-        <optgroup label="Global"><option value="global:response">Response guidance</option><option value="global:image-description">Image descriptions</option></optgroup>
+        <optgroup label="Global"><option value="global:response">Response guidance</option><option value="global:image-description">Image descriptions</option><option value="global:video-caption">Video captions and narration</option><option value="global:video-understanding">Video understanding</option></optgroup>
         {#if topics.length}<optgroup label="Topics · routing">{#each topics as topic}<option value={`topic:${topic.id}`}>{topic.name}</option>{/each}</optgroup>{/if}
         {#if threads.length}<optgroup label="Threads">{#each threads as item}<option value={`thread:${item.id}`}>{item.title}{item.id===thread?.id?' · current':''}</option>{/each}</optgroup>{/if}
       </select>
@@ -63,6 +63,7 @@
         <p class="hint authority">Instructions do not grant tool permissions.</p>
         {#if conflict}<button disabled={busy} onclick={compareSaved}>Compare latest saved text</button><details open><summary>Saved text</summary><pre>{saved.document?.text??'(No saved document)'}</pre></details>{/if}
       {/if}
+      {#if onCaptureMic}<section class="recording-settings"><h3>Screen recording</h3><label><input type="checkbox" checked={captureMic} onchange={event=>onCaptureMic?.(event.currentTarget.checked)}/> Include microphone audio</label><p class="hint">Saved on this device. Record screen starts with this setting.</p></section>{/if}
   </div>
   <footer>
     {#if pendingMove}<div class="unsaved" role="alert"><p>Save your instruction changes before leaving?</p><button class="primary" disabled={busy} onclick={()=>void save(true)}>Save and continue</button><button disabled={busy} onclick={discardMove}>Discard changes</button><button disabled={busy} onclick={()=>pendingMove=null}>Keep editing</button></div>

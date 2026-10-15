@@ -8,7 +8,9 @@ test('chat-persistence: Keyboard messages and drafts survive desktop reopening',
   const message = page.getByLabel('Message', { exact: true });
   await message.fill('Saved by the acceptance scenario');
   await message.press('Tab');
-  await expect(page.getByRole('button', { name: 'Attach images', exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Record screen', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Attach images or videos', exact: true })).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeFocused();
   await page.keyboard.press('Enter');

@@ -1,6 +1,6 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { Prisma, type Artifact, type PrismaClient, type Run } from '@prisma/client';
-import { InputPayload, MessagePayload, RequestPayload, RunState, ModelExecution, isActive, type ModelMode, type ToolLimits } from '@ash/shared';
+import { InputPayload, MessagePayload, RequestPayload, RunState, ModelExecution, isActive, isVideoAttachment, AttachmentMetadata, type ModelMode, type ToolLimits } from '@ash/shared';
 import { selectContext, ContextLimitError, type ScopedInstruction } from '../context/select.ts';
 import { memberships } from '../organization/service.ts';
 import { deterministicModel } from '../../platform/models/deterministic.ts';
@@ -96,6 +96,29 @@ export class Threads {
   async submit(threadId: string, requestKey: string, text: string, mode: ModelMode, attachmentIds:string[]=[]) {
     return this.accept(threadId, requestKey, {kind:'send',text,mode,...(attachmentIds.length?{attachmentIds}:{})});
   }
+  async submitMessage(threadId:string,requestKey:string,text:string,mode:ModelMode,attachmentIds:string[]) {
+    const rows=await this.db.attachment.findMany({where:{id:{in:attachmentIds}}});
+    const onlyVideos=!text&&attachmentIds.length>0&&rows.length===attachmentIds.length&&rows.every(row=>'durationSeconds' in AttachmentMetadata.parse(row.metadata));
+    if(!onlyVideos)return this.submit(threadId,requestKey,text,mode,attachmentIds);
+    if(this.stopping)throw new ThreadError(503,'The backend is stopping.');
+    const hash=createHash('sha256').update(JSON.stringify({threadId,text,mode,attachmentIds})).digest('hex');
+    return this.db.$transaction(async tx=>{
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${requestKey},0))`;
+      await tx.$queryRaw`SELECT id FROM threads WHERE id=${threadId}::uuid FOR UPDATE`;
+      const duplicate=await tx.artifact.findUnique({where:{id:requestKey}});
+      if(duplicate){const payload=InputPayload.parse(duplicate.payload);if(payload.type!=='message_input'||payload.submissionHash!==hash)throw new ThreadError(409,'This submission key was already used for different content.');return {id:duplicate.id,requestKey,status:'stored',inputArtifactId:duplicate.id,threadId};}
+      if(await tx.run.findUnique({where:{requestKey}}))throw new ThreadError(409,'This submission key was already used for another operation.');
+      const thread=await tx.thread.findUnique({where:{id:threadId}});if(!thread)throw new ThreadError(404,'Thread not found.');
+      if(await tx.run.findFirst({where:{threadId,status:{in:['queued','running']}}}))throw new ThreadError(409,'A response is already active in this thread.');
+      await retainImages(tx,attachmentIds);const now=new Date(),surfaceId=randomUUID();
+      await tx.artifact.create({data:{id:requestKey,layer:'input',threadId,actor:'user',payload:InputPayload.parse({type:'message_input',text,attachmentIds,submissionHash:hash}),createdAt:now,updatedAt:now}});
+      await tx.artifact.create({data:{id:surfaceId,layer:'surface',sourceId:requestKey,threadId,actor:'user',payload:MessagePayload.parse({type:'message',initial_thread_id:threadId,speaker:'user',content:attachmentIds.map(attachmentId=>({type:'video',attachmentId}))}),createdAt:now,updatedAt:now}});
+      await referenceImages(tx,requestKey,attachmentIds);await referenceImages(tx,surfaceId,attachmentIds);
+      const first=await tx.artifact.count({where:{threadId,layer:'input'}});
+      await tx.thread.update({where:{id:threadId},data:{updatedAt:now,...(thread.title==='New Thread'&&first===1?{title:'Video Thread'}:{})}});
+      return {id:requestKey,requestKey,status:'stored',inputArtifactId:requestKey,threadId};
+    });
+  }
   async retry(id: string, requestKey: string, mode: ModelMode) {
     const previous = await this.db.run.findUnique({where:{id}});
     if (!previous?.threadId) throw new ThreadError(404, 'Thread Run not found.');
@@ -106,15 +129,18 @@ export class Threads {
     const hash = createHash('sha256').update(JSON.stringify({threadId,...command})).digest('hex');
     const existing = await this.db.run.findUnique({where:{requestKey}});
     if (existing) return runView(this.existing(existing, hash));
+    if(await this.db.artifact.findUnique({where:{id:requestKey}}))throw new ThreadError(409,'This submission key was already used for another operation.');
     let saved: Run | undefined;
     for (let attempt=0; attempt<5; attempt++) {
       try {
         saved = await this.db.$transaction(async tx => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${requestKey},0))`;
           await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId}::uuid FOR UPDATE`;
           const thread = await tx.thread.findUnique({where:{id:threadId}});
           if (!thread) throw new ThreadError(404, 'Thread not found.');
           const duplicate = await tx.run.findUnique({where:{requestKey}});
           if (duplicate) return this.existing(duplicate,hash);
+          if(await tx.artifact.findUnique({where:{id:requestKey}}))throw new ThreadError(409,'This submission key was already used for another operation.');
           if (await tx.run.findFirst({where:{threadId,status:{in:['queued','running']}}})) throw new ThreadError(409, 'A response is already active in this thread.');
           const now = new Date();
           let inputId: string;
@@ -125,11 +151,11 @@ export class Threads {
               await tx.thread.update({where:{id:threadId},data:{title:Array.from(title).length>80?Array.from(title).slice(0,79).join('')+'…':title}});
             }
             const attachmentIds=command.attachmentIds??[];
-            await retainImages(tx,attachmentIds);
+            const attachments=await retainImages(tx,attachmentIds);
             inputId = randomUUID();
             await tx.artifact.create({data:{id:inputId,layer:'input',sourceId:null,threadId,runId:null,actor:'user',payload:InputPayload.parse({type:attachmentIds.length?'message_input':'text_input',text:command.text,...(attachmentIds.length?{attachmentIds}:{})}),createdAt:now,updatedAt:now}});
             const surfaceId=randomUUID();
-            await tx.artifact.create({data:{id:surfaceId,layer:'surface',sourceId:inputId,threadId,runId:null,actor:'user',payload:MessagePayload.parse({type:'message',initial_thread_id:threadId,speaker:'user',content:[...(command.text?[{type:'text',text:command.text}]:[]),...attachmentIds.map(attachmentId=>({type:'image',attachmentId}))]}),createdAt:now,updatedAt:now}});
+            await tx.artifact.create({data:{id:surfaceId,layer:'surface',sourceId:inputId,threadId,runId:null,actor:'user',payload:MessagePayload.parse({type:'message',initial_thread_id:threadId,speaker:'user',content:[...(command.text?[{type:'text',text:command.text}]:[]),...attachmentIds.map(attachmentId=>({type:isVideoAttachment(attachments.find(a=>a.id===attachmentId)!)?'video':'image',attachmentId}))]}),createdAt:now,updatedAt:now}});
             await referenceImages(tx,inputId,attachmentIds);await referenceImages(tx,surfaceId,attachmentIds);
             const instruction = await tx.instruction.findUniqueOrThrow({where:{key:'response'}});
             const instructions:ScopedInstruction[] = [{document:instruction,scope:'global',ownerId:'response'}];
@@ -156,6 +182,7 @@ export class Threads {
           const run = await tx.run.create({data:{id:runId,inputArtifactId:inputId,threadId,retryOfId:command.kind === 'retry' ? command.previousId : null,status:'queued',state,requestKey,requestHash:hash,createdAt:now}});
           await tx.artifact.create({data:{id:requestId,layer:'act',sourceId:inputId,threadId,runId,actor:'ash',payload:asJson(request),createdAt:now,updatedAt:now}});
           await referenceImages(tx,requestId,request.selection.images?.map(image=>image.id)??[]);
+          await referenceImages(tx,requestId,request.selection.videos?.map(video=>video.id)??[]);
           await tx.thread.update({where:{id:threadId},data:{updatedAt:now}});
           return run;
         }, {isolationLevel:Prisma.TransactionIsolationLevel.Serializable});

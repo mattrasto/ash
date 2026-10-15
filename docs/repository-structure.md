@@ -49,7 +49,8 @@ ash/
 │   │   │   ├── app.ts                # App assembly
 │   │   │   ├── modules/
 │   │   │   │   ├── threads/    # Threads and thread operations
-│   │   │   │   ├── attachments/      # Image storage, descriptions and cleanup
+│   │   │   │   ├── attachments/      # Image/video ingestion, storage and cleanup
+│   │   │   │   ├── video/            # Video analysis plans, segmentation and tools
 │   │   │   │   ├── organization/     # Topics and membership
 │   │   │   │   ├── artifacts/        # Engine records, lineage and Surface content
 │   │   │   │   ├── runs/             # Execution and linked retries

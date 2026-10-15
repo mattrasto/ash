@@ -1,20 +1,35 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { Prisma, type PrismaClient, type Attachment, type Run } from '@prisma/client';
-import { ImageMetadata, IMAGE_LIMITS, RequestPayload, RunState, DescriptionPayload, imageDescription,
-  type AttachmentView, type ModelExecution } from '@ash/shared';
+import { mkdir,mkdtemp,open,rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { Readable } from 'node:stream';
+import { ImageMetadata, AttachmentMetadata, VIDEO_LIMITS, isVideoAttachment, IMAGE_LIMITS, RequestPayload, RunState, DescriptionPayload, imageDescription,
+  VideoUnderstandingPayload, type AttachmentView, type ModelExecution } from '@ash/shared';
 import { ModelFailure, type ModelAdapter } from '../../platform/models/adapter.ts';
 import { runView } from '../threads/views.ts';
 import { ImageStorage, AttachmentError, processImage } from './storage.ts';
+import {processVideo,fileHash} from './video.ts';
+import {VideoAnalysis} from '../video/service.ts';
+import {deterministicVideoProvider} from '../../platform/models/gemini-video.ts';
 
 type Tx=Prisma.TransactionClient;
 const json=(value:unknown)=>value as Prisma.InputJsonValue;
 const include={summaryRun:true} as const;
 function view(row:Attachment & {summaryRun:Run|null}):AttachmentView {
-  return {id:row.id,filename:row.filename,metadata:ImageMetadata.parse(row.metadata),inputArtifactId:row.inputArtifactId,
+  const metadata=AttachmentMetadata.parse(row.metadata);
+  return {id:row.id,filename:row.filename,...('durationSeconds' in metadata?{kind:'video' as const,metadata}:{metadata}),inputArtifactId:row.inputArtifactId,
     createdAt:row.createdAt.toISOString(),expiresAt:row.expiresAt?.toISOString()??null,summary:row.summary,summaryRun:row.summaryRun?runView(row.summaryRun):null};
 }
 export async function attachmentViews(tx:Tx,artifactIds:string[]) {
-  return (await tx.attachment.findMany({where:{references:{some:{artifactId:{in:artifactIds}}}},include})).map(view);
+  return hydrateViews(tx,await tx.attachment.findMany({where:{references:{some:{artifactId:{in:artifactIds}}}},include}));
+}
+async function hydrateViews(tx:Pick<Tx,'artifact'>,rows:Array<Attachment & {summaryRun:Run|null}>):Promise<AttachmentView[]>{
+  const ids=rows.flatMap(row=>row.summaryRun&&'durationSeconds' in (row.metadata as object)?[RunState.parse(row.summaryRun.state).response_artifact_id].filter((id):id is string=>!!id):[]);
+  const results=new Map((await tx.artifact.findMany({where:{id:{in:ids}}})).map(row=>[row.id,row.payload]));
+  return rows.map(row=>{const attachment=view(row),id=row.summaryRun?RunState.parse(row.summaryRun.state).response_artifact_id:null;
+    const result=id?VideoUnderstandingPayload.safeParse(results.get(id)):null;
+    return isVideoAttachment(attachment)&&result?.success?{...attachment,understanding:{caption:result.data.result.caption,actionItems:result.data.result.actionItems,complete:result.data.complete,transcript:result.data.result.transcript,
+      limitations:result.data.result.limitations,coverage:result.data.coverage,timing:result.data.timing,resultArtifactId:id!,requestIds:result.data.requestIds}}:attachment;});
 }
 export async function referenceImages(tx:Tx,artifactId:string,ids:string[]) {
   if(ids.length)await tx.artifactAttachment.createMany({data:[...new Set(ids)].map(attachmentId=>({artifactId,attachmentId})),skipDuplicates:true});
@@ -27,7 +42,8 @@ export async function retainImages(tx:Tx,ids:string[]) {
     if(!row || (row.expiresAt && row.expiresAt.getTime()<=Date.now()))throw new AttachmentError(409,'An attachment expired or is unavailable. Remove it and attach the image again.');
     rows.push(view(row));
   }
-  if(rows.reduce((n,row)=>n+row.metadata.original.sizeBytes,0)>IMAGE_LIMITS.perMessage)throw new AttachmentError(413,'Images in one message must total at most 20 MiB.');
+  if(rows.filter(row=>!isVideoAttachment(row)).reduce((n,row)=>n+row.metadata.original.sizeBytes,0)>IMAGE_LIMITS.perMessage)throw new AttachmentError(413,'Images in one message must total at most 20 MiB.');
+  if(rows.filter(isVideoAttachment).reduce((n,row)=>n+row.metadata.original.sizeBytes,0)>VIDEO_LIMITS.perMessage)throw new AttachmentError(413,'Videos in one message must total at most 4 GiB.');
   if(ids.length)await tx.attachment.updateMany({where:{id:{in:ids}},data:{expiresAt:null}});
   return rows;
 }
@@ -37,14 +53,15 @@ export class Attachments {
   private uploads=new Map<string,Promise<AttachmentView>>();
   private tail:Promise<unknown>=Promise.resolve();
   private stopping=false;
-  constructor(readonly db:PrismaClient,readonly storage:ImageStorage,private model:ModelAdapter,private autoDispatch=true) {}
+  constructor(readonly db:PrismaClient,readonly storage:ImageStorage,private model:ModelAdapter,private autoDispatch=true,
+    readonly video:VideoAnalysis=new VideoAnalysis(db,storage,deterministicVideoProvider,autoDispatch)) {}
   async recover() {
-    await this.db.run.updateMany({where:{threadId:null,status:{in:['queued','running']}},data:{status:'interrupted',endedAt:new Date(),error:{code:'server_interrupted',message:'The image description was interrupted. Retry it explicitly.'}}});
+    await this.db.run.updateMany({where:{threadId:null,status:{in:['queued','running']}},data:{status:'interrupted',endedAt:new Date(),error:{code:'server_interrupted',message:'Attachment analysis was interrupted. Retry it explicitly.'}}});
   }
   async get(id:string) {
     const row=await this.db.attachment.findUnique({where:{id},include});
     if(!row || (row.expiresAt && row.expiresAt.getTime()<=Date.now()))throw new AttachmentError(404,'Image not found or upload expired.');
-    return view(row);
+    return (await hydrateViews(this.db,[row]))[0];
   }
   async upload(id:string,filename:string,bytes:Buffer) {
     if(this.stopping)throw new AttachmentError(503,'The backend is stopping.');
@@ -60,6 +77,33 @@ export class Attachments {
     const task=this.acceptUpload(id,filename,bytes,hash);
     this.uploads.set(id,task);
     try{return check(await task);}finally{this.uploads.delete(id);}
+  }
+  async uploadVideo(id:string,filename:string,stream:Readable,incomplete=false,recorded=false) {
+    if(this.stopping)throw new AttachmentError(503,'The backend is stopping.');
+    filename=filename.split(/[\\/]/).at(-1)!.replace(/[\x00-\x1f\x7f]/g,'').trim().slice(0,160)||'Video';
+    const prior=this.uploads.get(id);
+    if(!prior&&this.uploads.size>=2)throw new AttachmentError(429,'Two attachments are uploading. Retry in a moment.');
+    const task=(async()=>{
+      await this.storage.prepare();const tmp=join(this.storage.root,'..','video-temp');await mkdir(tmp,{recursive:true,mode:0o700});
+      const dir=await mkdtemp(join(tmp,'upload-')),path=join(dir,'source'),file=await open(path,'wx',0o600);
+      try {
+        let size=0;try{for await(const chunk of stream){size+=chunk.length;if(size>VIDEO_LIMITS.perFile)throw new AttachmentError(413,'Each video must be at most 2 GiB.');await file.writeFile(chunk);}await file.sync();}finally{await file.close();}
+        const hash=await fileHash(path),existing=prior?await prior:await this.db.attachment.findUnique({where:{id},include}).then(row=>row?view(row):null);
+        if(existing){if(!isVideoAttachment(existing)||existing.filename!==filename||existing.metadata.original.hash!==hash||!!existing.metadata.incomplete!==incomplete||!!existing.metadata.recorded!==recorded)throw new AttachmentError(409,'This upload ID was already used for another attachment.');return this.get(id);}
+        const processed=await processVideo(path,tmp);
+        try {
+          await this.storage.remove(id);await this.storage.publish(id,processed.blobs);
+          const row=await this.db.$transaction(async tx=>{
+            const now=new Date(),inputId=randomUUID();
+            await tx.artifact.create({data:{id:inputId,layer:'input',actor:'user',payload:{type:'video_upload',attachmentId:id,filename},createdAt:now,updatedAt:now}});
+            const attachment=await tx.attachment.create({data:{id,filename,inputArtifactId:inputId,metadata:json({...processed.metadata,...(incomplete?{incomplete:true}:{}),...(recorded?{recorded:true}:{})}),createdAt:now,expiresAt:new Date(now.getTime()+IMAGE_LIMITS.draftLifetimeMs)}});
+            await referenceImages(tx,inputId,[id]);await this.video.create(tx,attachment,randomUUID());return tx.attachment.findUniqueOrThrow({where:{id},include});
+          });if(this.autoDispatch)this.video.dispatch(row.summaryRunId!);return view(row);
+        }finally{await processed.dispose();}
+      }finally{await rm(dir,{recursive:true,force:true});}
+    })();
+    if(!prior)this.uploads.set(id,task);
+    try{return await task;}finally{if(!prior)this.uploads.delete(id);}
   }
   private async acceptUpload(id:string,filename:string,bytes:Buffer,hash:string) {
     const existing=await this.db.attachment.findUnique({where:{id},include});
@@ -79,6 +123,7 @@ export class Attachments {
     return view(row);
   }
   private async createSummary(tx:Tx,attachment:Attachment,key:string,previous?:Run,uploadHash?:string) {
+    if('durationSeconds' in (attachment.metadata as object))return this.video.create(tx,attachment,key,{operation:'caption'},previous);
     let request:RequestPayload;
     if(previous) {
       const saved=await tx.artifact.findUniqueOrThrow({where:{id:RunState.parse(previous.state).request_artifact_id}});
@@ -110,10 +155,17 @@ export class Attachments {
         return duplicate;
       }
       const previous=attachment.summaryRun;
-      if(!previous || previous.id!==previousId || ['queued','running','completed'].includes(previous.status))throw new AttachmentError(409,'Only the latest failed or interrupted description can be retried.');
+      let missingRecordingDraft=false;
+      const media=AttachmentMetadata.parse(attachment.metadata);
+      if(previous?.status==='completed'&&'durationSeconds' in media&&media.recorded){
+        const responseId=RunState.parse(previous.state).response_artifact_id;
+        const saved=responseId?await tx.artifact.findUnique({where:{id:responseId}}):null,result=VideoUnderstandingPayload.safeParse(saved?.payload);
+        missingRecordingDraft=result.success&&(result.data.result.actionItems===undefined||!result.data.complete);
+      }
+      if(!previous || previous.id!==previousId || ['queued','running'].includes(previous.status)||previous.status==='completed'&&!missingRecordingDraft)throw new AttachmentError(409,'Only the latest failed, interrupted or incomplete recording analysis can be retried.');
       return this.createSummary(tx,attachment,key,previous);
     });
-    if(this.autoDispatch && run.status==='queued')this.dispatch(run.id);
+    if(this.autoDispatch && run.status==='queued'){const attachment=await this.get(id);if(isVideoAttachment(attachment))this.video.dispatch(run.id);else this.dispatch(run.id);}
     return this.get(id);
   }
   dispatch(id:string) {
@@ -165,7 +217,8 @@ export class Attachments {
         await tx.artifactAttachment.deleteMany({where:{attachmentId:id}});
         await tx.attachment.delete({where:{id}});
         // Remove children before parents, retaining accepted graphs via the reference guard above.
-        for(const type of ['image_description','model_request'])for(const artifact of artifacts.filter(a=>(a.payload as {type:string}).type===type))await tx.artifact.delete({where:{id:artifact.id}});
+        const pending=new Map(artifacts.filter(a=>a.id!==row.inputArtifactId).map(a=>[a.id,a]));
+        while(pending.size){const parents=new Set([...pending.values()].map(a=>a.sourceId));const leaves=[...pending.values()].filter(a=>!parents.has(a.id));if(!leaves.length)throw Error('Invalid attachment Artifact chain');for(const a of leaves){await tx.artifact.delete({where:{id:a.id}});pending.delete(a.id);}}
         // Retry timestamps can tie; delete leaves before their retry_of parents.
         const remaining=new Map(runs.map(run=>[run.id,run]));
         while(remaining.size) {
@@ -186,6 +239,7 @@ export class Attachments {
   async stop() {
     this.stopping=true;await Promise.allSettled(this.uploads.values());await this.recover();
     for(const job of this.jobs.values())job.controller.abort();
+    await this.video.stop();
     await Promise.allSettled([...this.jobs.values()].map(job=>job.promise));
   }
 }

@@ -74,7 +74,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       const foreign=await createInstance(ws,'test','empty');
       const foreignConfig=ServerConfig.parse(await json(join(foreign.root,'server.json'))),foreignDb=connectProduct(foreignConfig.databaseUrl);
       try{const other=new Threads(foreignDb);const id=randomUUID();await other.createThread(id,'Other instance');await assert.rejects(other.submit(id,randomUUID(),'Foreign image','normal',[attachment.id]),/unavailable/);}finally{await foreignDb.$disconnect();await disposeInstance(ws,foreign.id);}
-      const asset=await images.upload(randomUUID(),'corrupt.png',bytes);images.dispatch(asset.summaryRun!.id);await captionDone(asset.id);
+      const asset=await images.upload(randomUUID(),'corrupt.png',bytes);assert.ok('model' in asset.metadata);images.dispatch(asset.summaryRun!.id);await captionDone(asset.id);
       await writeFile(join(storage.root,asset.id,asset.metadata.model.hash),Buffer.alloc(asset.metadata.model.sizeBytes));
       const run=await threads.submit(thread,randomUUID(),'Broken bytes','normal',[asset.id]);threads.dispatch(run.id);
       const failed=await settle(thread,run.id);assert.equal(failed.runs.find(r=>r.id===run.id)!.status,'failed');
@@ -129,10 +129,10 @@ test('persisted images, description Runs and desktop workflow (no external calls
       await page.getByLabel('Thread title').fill('Image workspace');await page.getByRole('button',{name:'Save title',exact:true}).click();
       await page.getByRole('heading',{name:'Image workspace',exact:true}).waitFor();
       const uploads=[{name:'screenshot.png',mimeType:'image/png',buffer:bytes},{name:'portrait.jpg',mimeType:'image/jpeg',buffer:await orientedFixture()},{name:'second.png',mimeType:'image/png',buffer:await screenshotFixture('SECOND IMAGE')}];
-      await page.getByLabel('Choose images',{exact:true}).setInputFiles(uploads);
+      await page.getByLabel('Choose images or videos',{exact:true}).setInputFiles(uploads);
       await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),v=>v);
       await page.getByLabel('Message',{exact:true}).fill('Look at these screenshots.');
-      await page.getByLabel('Choose images',{exact:true}).setInputFiles({name:'invalid.svg',mimeType:'image/svg+xml',buffer:Buffer.from('<svg/>')});
+      await page.getByLabel('Choose images or videos',{exact:true}).setInputFiles({name:'invalid.svg',mimeType:'image/svg+xml',buffer:Buffer.from('<svg/>')});
       assert.equal(await page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),false);await page.getByRole('button',{name:'Remove invalid.svg',exact:true}).click();
       await page.getByRole('button',{name:'Preview portrait.jpg',exact:true}).click();
       await page.getByRole('dialog').waitFor();assert.equal(await page.getByRole('button',{name:'Use again',exact:true}).count(),0);assert.equal(await page.getByRole('button',{name:'Inspect image',exact:true}).count(),0);await page.getByRole('dialog').press('ArrowRight');assert.match(await page.getByRole('dialog').innerText(),/second.png/);await page.getByRole('dialog').press('ArrowLeft');
@@ -167,7 +167,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       await page.getByRole('button',{name:'Open screenshot.png',exact:true}).click({button:'right'});
       await page.getByRole('menuitem',{name:'Copy description',exact:true}).click();await page.getByText('Description copied',{exact:true}).waitFor();
       assert.match(await app.evaluate(()=>(globalThis as any).__textCopy),/Deterministic test description/);
-      await page.getByLabel('Choose images',{exact:true}).setInputFiles(uploads[0]);await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),v=>v);assert.equal(await page.getByTestId('draft-image').count(),1);
+      await page.getByLabel('Choose images or videos',{exact:true}).setInputFiles(uploads[0]);await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),v=>v);assert.equal(await page.getByTestId('draft-image').count(),1);
       assert.equal(await page.getByLabel('Message',{exact:true}).evaluate(el=>el===document.activeElement),true);
       await page.getByLabel('Message',{exact:true}).fill('Saved image draft');
       await app.close();app=await launch();page=await app.firstWindow();page.on('pageerror',error=>errors.push(error.message));await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
@@ -176,7 +176,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       // A recoverable upload error keeps both the file and text draft.
       let failUpload=true;
       await page.route('**/api/attachments/*',async route=>{if(route.request().method()==='PUT'&&failUpload){failUpload=false;await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Synthetic upload interruption'})});}else await route.continue();});
-      await page.getByLabel('Choose images',{exact:true}).setInputFiles({name:'retry.png',mimeType:'image/png',buffer:bytes});
+      await page.getByLabel('Choose images or videos',{exact:true}).setInputFiles({name:'retry.png',mimeType:'image/png',buffer:bytes});
       await page.getByRole('button',{name:'Retry upload',exact:true}).click();
       await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),v=>v);
       assert.equal(await page.getByLabel('Message',{exact:true}).inputValue(),'Saved image draft');
@@ -187,7 +187,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
         const gate=new Promise<void>(resolve=>release=resolve),started=new Promise<void>(resolve=>arrived=resolve);
         await page.route('**/api/attachments/*',async route=>{if(route.request().method()==='PUT'){arrived();await gate;}await route.continue().catch(()=>{});});
         const filename=remove?'removed.png':'other-thread.png';
-        await page.getByLabel('Choose images',{exact:true}).setInputFiles({name:filename,mimeType:'image/png',buffer:bytes});await started;
+        await page.getByLabel('Choose images or videos',{exact:true}).setInputFiles({name:filename,mimeType:'image/png',buffer:bytes});await started;
         if(remove)await page.getByRole('button',{name:`Remove ${filename}`,exact:true}).click();
         await page.getByRole('button',{name:'Frozen image context',exact:true}).click();release();
         await page.getByRole('heading',{name:'Frozen image context',exact:true}).waitFor();assert.equal(await page.getByTestId('draft-image').count(),0);
@@ -226,7 +226,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       // More than both former count caps survives composition, request capture and reload.
       await page.getByRole('button',{name:'New Thread',exact:true}).click();
       await page.getByRole('heading',{name:'New Thread',exact:true}).waitFor();
-      await page.getByLabel('Choose images',{exact:true}).setInputFiles(Array.from({length:9},(_,i)=>({name:`batch-${i+1}.png`,mimeType:'image/png',buffer:bytes})));
+      await page.getByLabel('Choose images or videos',{exact:true}).setInputFiles(Array.from({length:9},(_,i)=>({name:`batch-${i+1}.png`,mimeType:'image/png',buffer:bytes})));
       await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),v=>v);
       assert.equal(await page.getByTestId('draft-image').count(),9);
       await page.getByRole('button',{name:'Send message',exact:true}).click();

@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { ImageBlock, TextBlock, ModelContent, type AttachmentView } from './attachments.ts';
+import { ImageBlock, VideoBlock, VideoFile, TextBlock, ModelContent, type AttachmentView } from './attachments.ts';
 import { ToolRequest, ToolWorkflow, type ToolArtifact } from './tools.ts';
+import {VideoPlan,VideoModelRequest,VideoModelResponse,VideoUnderstandingPayload} from './video-understanding.ts';
 
 export const Uuid = z.string().uuid();
 export const ModelMode = z.enum(['normal', 'slow', 'fail', 'fail-before', 'empty']);
@@ -9,8 +10,8 @@ export const CreateThread = z.object({ id: Uuid, title: z.string().trim().min(1)
 export const UpdateThread = z.object({title:z.string().trim().min(1).max(160).optional(),isArchived:z.boolean().optional()}).strict()
   .refine(value=>Object.keys(value).length>0,'Choose a thread change.');
 export const SendMessage = z.object({ requestKey: Uuid, text: z.string().trim().max(4000), mode: ModelMode.default('normal'), attachmentIds:z.array(Uuid).default([]) }).strict()
-  .refine(value=>value.text.length>0 || value.attachmentIds.length>0,'A message needs text or an image.')
-  .refine(value=>new Set(value.attachmentIds).size===value.attachmentIds.length,'Duplicate image references.');
+  .refine(value=>value.text.length>0 || value.attachmentIds.length>0,'A message needs text or an attachment.')
+  .refine(value=>new Set(value.attachmentIds).size===value.attachmentIds.length,'Duplicate attachment references.');
 export const RetryRun = z.object({ requestKey: Uuid, mode: ModelMode.default('normal') }).strict();
 export const RunStatus = z.enum(['queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted']);
 export type RunStatus = z.infer<typeof RunStatus>;
@@ -25,13 +26,14 @@ export const RunState = z.object({ request_artifact_id: Uuid, response_artifact_
 export const RunError = z.object({ code: z.string(), message: z.string(), details: z.record(z.unknown()).optional() }).strict();
 export const InputPayload = z.discriminatedUnion('type',[
   z.object({ type: z.literal('text_input'), text: z.string() }).strict(),
-  z.object({ type: z.literal('message_input'), text: z.string(), attachmentIds:z.array(Uuid) }).strict(),
+  z.object({ type: z.literal('message_input'), text: z.string(), attachmentIds:z.array(Uuid),submissionHash:z.string().optional() }).strict(),
   z.object({ type: z.literal('image_upload'), attachmentId:Uuid, filename:z.string() }).strict(),
+  z.object({ type: z.literal('video_upload'), attachmentId:Uuid, filename:z.string() }).strict(),
 ]);
 export const DescriptionPayload = z.object({type:z.literal('image_description'),attachmentId:Uuid,text:z.string()}).strict();
 export const MessagePayload = z.object({
   type: z.literal('message'), initial_thread_id: Uuid, speaker: z.enum(['user', 'ash']),
-  content: z.array(z.union([TextBlock,ImageBlock])),
+  content: z.array(z.union([TextBlock,ImageBlock,VideoBlock])),
 }).strict();
 export const OpenAIOptions = z.object({
   api: z.literal('responses'), store: z.literal(false), maxOutputTokens: z.number().int().min(16).max(16384),
@@ -52,6 +54,7 @@ const requestContent = {
     omitted: z.array(z.object({ id: Uuid, reason: z.enum(['not-completed', 'superseded', 'context-limit']) }).strict()),
     maxCharacters: z.number().int().positive(),
     images:z.array(z.object({id:Uuid,artifactId:Uuid,representation:z.enum(['image','description']),reason:z.enum(['recent','history-window','image-budget','text-only']),summaryRunId:Uuid.nullable()}).strict()).optional(),
+    videos:z.array(z.object({id:Uuid,artifactId:Uuid,original:VideoFile,representation:z.enum(['metadata','caption-transcript']),reason:z.enum(['understanding-unavailable','generated-evidence']),summaryRunId:Uuid.nullable().optional(),resultArtifactId:Uuid.optional()}).strict()).optional(),
   }).strict(),
 };
 export const RequestPayload = z.discriminatedUnion('provider', [
@@ -60,7 +63,8 @@ export const RequestPayload = z.discriminatedUnion('provider', [
 ]);
 export type RequestPayload = z.infer<typeof RequestPayload>;
 export type MessagePayload = z.infer<typeof MessagePayload>;
-export type ArtifactPayload = z.infer<typeof InputPayload> | MessagePayload | RequestPayload | z.infer<typeof DescriptionPayload> | ToolArtifact;
+export const VideoArtifact=z.union([VideoPlan,VideoModelRequest,VideoModelResponse,VideoUnderstandingPayload]);
+export type ArtifactPayload = z.infer<typeof InputPayload> | MessagePayload | RequestPayload | z.infer<typeof DescriptionPayload> | ToolArtifact | z.infer<typeof VideoArtifact>;
 export interface ThreadView {
   id: string; title: string; createdAt: string; updatedAt: string; isArchived:boolean;
   latestRun?: {id:string;status:RunStatus;endedAt:string|null}|null;

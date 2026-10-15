@@ -2,7 +2,7 @@
 
 Implemented and verified, 2026-10-12
 
-Behavior: [UX01–05](../../specs/features/threads.md#thread-ux) and [image rules](../../specs/features/images.md#rules). Product features absent from Ash—voice, tasks, tools, Topics and canvas—are outside this pass.
+Behavior: [UX01–05](../../specs/features/threads.md#thread-ux) and [image rules](../../specs/features/images.md#rules). This document records the 2026-10-12 UX pass; later [Topics](topics-context.md), [tools](../plans/inspectable-tools-tests.md) and [video/recording](recording-feedback.md) have their own delivery documentation. Voice, tasks and canvas remain outside this pass.
 
 ## Asha review
 

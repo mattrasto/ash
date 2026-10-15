@@ -9,6 +9,11 @@ export interface Scenario {
 
 // Product rules stay in specs/. These IDs identify executable checks, not new requirements.
 export const scenarios: Scenario[] = [
+  {id:'video-background-context',title:'Background video caption and narration enter later immutable context',suite:'workflow',requirements:['VID-A05','VID-A17'],fixture:'scratchpad / empty'},
+  {id:'video-tools-scope-evidence',title:'Single-video tools deduplicate work and retain bounded playable evidence',suite:'workflow',requirements:['VID-A01','VID-A18','VID-A19','VID-A21'],fixture:'scratchpad / empty'},
+  {id:'video-processing-bounds',title:'Segmented video processing retains partial coverage and source offsets',suite:'workflow',requirements:['VID-A02','VID-A05','VID-A07'],fixture:'scratchpad / empty'},
+  {id:'video-recovery-failure',title:'Video failures, explicit retry, cancellation and cleanup preserve the source',suite:'workflow',requirements:['VID-A06','VID-A07','VID-A21'],fixture:'scratchpad / empty'},
+  {id:'video-understanding-desktop',title:'Video context remains hidden and citations open saved playback moments',suite:'workflow',requirements:['VID-A01','VID-A18','VID-R19'],fixture:'scratchpad / empty'},
   { id: 'combined-context', title: 'Topic and filesystem context coexist with independent scope and availability', suite: 'workflow', requirements: ['CTX-R03','CTX-R04','TOOL-R02','TOOL-A11'], fixture: 'scratchpad / empty' },
   { id: 'TOOL-01', title: 'Multi-round filesystem answer and captured source citations', suite: 'workflow', requirements: ['TOOL-A01'], fixture: 'scratchpad / empty' },
   { id: 'TOOL-03', title: 'Filesystem operations enforce canonical scopes', suite: 'workflow', requirements: ['TOOL-A02'], fixture: 'scratchpad / empty' },
@@ -75,6 +80,13 @@ export const scenarios: Scenario[] = [
   { id: 'chat-ownership', title: 'backend ownership and crash recovery cannot silently repeat work', suite: 'workflow', requirements: ['DEV-06'], fixture: 'scratchpad / empty' },
   { id: 'chat-instructions', title: 'queued and retried requests retain the original instruction snapshot', suite: 'workflow', requirements: ['INST-R04'], fixture: 'scratchpad / empty' },
   { id: 'chat-desktop', title: 'desktop sends, inspects, preserves drafts and reconnects during generation', suite: 'workflow', requirements: ['C01', 'C03', 'C04', 'C11'], fixture: 'scratchpad / empty' },
+  {id:'videos-storage',title:'Streamed video validation, immutable originals and ranged playback',suite:'workflow',requirements:['VID-R01','VID-A13'],fixture:'scratchpad / empty'},
+  {id:'videos-thread',title:'Video submissions preserve delivery identity and disclose captured media context',suite:'workflow',requirements:['VID-R12','VID-A12'],fixture:'scratchpad / empty'},
+  {id:'videos-desktop',title:'Video draft, playback, seeking, save and microphone preference',suite:'workflow',requirements:['VID-R13','VID-A14'],fixture:'scratchpad / empty'},
+  {id:'recording-lifecycle',title:'Synthetic capture, thread binding, repeated extensions, automatic stop and discard',suite:'workflow',requirements:['VID-A08','VID-A09','VID-A10','VID-A15','VID-A16'],fixture:'scratchpad / empty'},
+  {id:'recording-startup-cancel',title:'Stop, Discard and Quit release capture while microphone permission is pending',suite:'workflow',requirements:['VID-R08','VID-A10'],fixture:'scratchpad / empty'},
+  {id:'recording-upload-recovery',title:'Accepted recording uploads recover without a durable composer acknowledgement or duplicate analysis',suite:'workflow',requirements:['VID-R10','VID-A06','VID-A11'],fixture:'scratchpad / empty'},
+  {id:'recording-viewer-retry',title:'Viewer analysis retry inserts action items once and preserves draft edits',suite:'workflow',requirements:['VID-R18','VID-A20'],fixture:'scratchpad / empty'},
   { id: 'images-snapshot', title: 'upload identity is idempotent, captioning is independent, and request snapshots freeze late descriptions', suite: 'workflow', requirements: ['IM03', 'IM05'], fixture: 'scratchpad / empty' },
   { id: 'images-boundaries', title: 'server rejects invalid uploads, foreign IDs and corrupt bytes before model execution', suite: 'workflow', requirements: ['IM06'], fixture: 'scratchpad / empty' },
   { id: 'images-description-retry', title: 'failed descriptions can be retried without a chat message; restart never redispatches', suite: 'workflow', requirements: ['IM03'], fixture: 'scratchpad / empty' },

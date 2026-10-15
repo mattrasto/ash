@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { ArtifactView, RunView } from '@ash/shared';
-  let {run,artifacts,selectedId='',onInspect}:{run:RunView;artifacts:ArtifactView[];selectedId?:string;onInspect:(id:string)=>void}=$props();
+  let {run,artifacts,selectedId='',onInspect,onVideo}:{run:RunView;artifacts:ArtifactView[];selectedId?:string;onInspect:(id:string)=>void;onVideo?:(id:string,seconds:number)=>void}=$props();
   const selectedRequestId=$derived(run.state.tools?.calls.find(call=>call.callArtifactId===selectedId||call.resultArtifactId===selectedId)?.requestId
     ??run.state.tools?.rounds.find(round=>round.requestId===selectedId||round.outputId===selectedId)?.requestId
     ??run.state.tools?.rounds.at(-1)?.requestId);
@@ -34,7 +34,7 @@
                 {#each payload.result.content as content}{#if content.type==='text'}<pre>{content.text}</pre>{:else}<pre>{JSON.stringify(content,null,2)}</pre>{/if}{/each}
                 {#if payload.result.status!=='success'}<p>{payload.result.error.code}: {payload.result.error.message}</p>{/if}
                 {#each payload.result.omissions as omission}<p>{omission}</p>{/each}
-                {#each payload.result.references as ref}<details><summary>{ref.label}</summary><pre>{JSON.stringify(ref,null,2)}</pre></details>{/each}
+                {#each payload.result.references as ref}<details><summary>{ref.label}</summary>{#if ref.kind==='video'&&typeof ref.location.attachmentId==='string'&&typeof ref.location.startSeconds==='number'}<button onclick={()=>onVideo?.(ref.location.attachmentId as string,ref.location.startSeconds as number)}>Open video at this moment</button>{/if}<pre>{JSON.stringify(ref,null,2)}</pre></details>{/each}
               {/if}
               <button onclick={()=>onInspect(call.resultArtifactId!)}>Inspect saved result</button>
             {/if}

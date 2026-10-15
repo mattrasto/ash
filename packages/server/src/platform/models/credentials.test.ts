@@ -4,7 +4,7 @@ import { chmod, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { readOpenAIKey } from './credentials.ts';
+import { readOpenAIKey,readGeminiKey } from './credentials.ts';
 
 test('local credentials parse quotes/comments without populating the process environment',async t=>{
   const checkout=await mkdtemp(join(tmpdir(),'ash-credentials-'));
@@ -13,6 +13,9 @@ test('local credentials parse quotes/comments without populating the process env
   await writeFile(join(checkout,'.env.local'),'# Development key\nOPENAI_API_KEY="synthetic-private-key" # comment\nVITE_PRIVATE_KEY=must-not-load\nNODE_OPTIONS=must-not-load\nDATABASE_URL=must-not-load\n',{mode:0o600});
   assert.equal(await readOpenAIKey(checkout),'synthetic-private-key');
   assert.ok(isDeepStrictEqual({...process.env},before),'Credential loading must not change environment variables');
+  await assert.rejects(readGeminiKey(checkout),/GEMINI_API_KEY/);
+  await writeFile(join(checkout,'.env.local'),'OPENAI_API_KEY=synthetic-openai\nGEMINI_API_KEY="synthetic-google" # independent key\n',{mode:0o600});
+  assert.equal(await readGeminiKey(checkout),'synthetic-google');assert.equal(await readOpenAIKey(checkout),'synthetic-openai');
 });
 
 test('missing, blank, multiline, exposed and symlinked credential files fail without revealing values',async t=>{

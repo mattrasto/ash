@@ -86,6 +86,7 @@ Isolated per-app stores/runtimes must coexist with one core backend/database. Sa
 
 ## Feature-level details
 
+- Recording feedback: [capture defaults](features/recording-feedback.md#before-screen-recording) and [video understanding defaults](features/recording-feedback.md#before-video-understanding) are implemented; [Live Mode integration](features/recording-feedback.md#live-mode-integration) remains future work.
 - Causality: [ART-R07](features/artifacts.md#rules) settles single-source chains initially; revisit merging only for a concrete workflow.
 - Moves/references: see [remaining artifact scope](features/artifacts.md#remaining-scope).
 - Visibility: manual archive/pin state is accepted under [CONV-R14](features/threads.md#requirements). Automatic archive timing/revival, automation overrides, read markers, pin ordering and notification effects remain open.

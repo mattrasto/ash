@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import type { Artifact, Run, Instruction } from '@prisma/client';
 import { selectContext } from './select.ts';
-import { modelContentText, type AttachmentView, type MessagePayload, IMAGE_LIMITS } from '@ash/shared';
+import { modelContentText, type ImageAttachmentView, type MessagePayload, IMAGE_LIMITS } from '@ash/shared';
 const time = new Date('2026-10-09T12:00:00Z');
 const instruction: Instruction = {id:randomUUID(),key:'response',name:'Base',text:'Be useful.',createdAt:time,updatedAt:time};
 const threadId = randomUUID();
@@ -36,7 +36,7 @@ test('an unanswered input contributes no invented assistant message',()=>{
 });
 test('image history budgets degrade to labeled descriptions and text-only consumers keep stable IDs',()=>{
   const descriptor={hash:'a'.repeat(64),mimeType:'image/webp' as const,sizeBytes:1000,width:100,height:100};
-  const assets:AttachmentView[]=Array.from({length:12},(_,index)=>({id:randomUUID(),filename:`${index}.png`,metadata:{original:descriptor,model:descriptor,thumbnail:descriptor,transform:'rotate-strip-webp-v1'},createdAt:time.toISOString(),expiresAt:null,inputArtifactId:randomUUID(),summary:`Description ${index}`,summaryRun:null}));
+  const assets:ImageAttachmentView[]=Array.from({length:12},(_,index)=>({id:randomUUID(),filename:`${index}.png`,metadata:{original:descriptor,model:descriptor,thumbnail:descriptor,transform:'rotate-strip-webp-v1'},createdAt:time.toISOString(),expiresAt:null,inputArtifactId:randomUUID(),summary:`Description ${index}`,summaryRun:null}));
   const artifacts=assets.map((asset,index)=>{
     const row=surface(`Question ${index}`,'user',randomUUID(),null,index);
     (row.payload as unknown as MessagePayload).content.push({type:'image',attachmentId:asset.id});return row;
@@ -53,7 +53,7 @@ test('image history budgets degrade to labeled descriptions and text-only consum
 });
 test('newest images consume the history count budget first',()=>{
   const descriptor={hash:'b'.repeat(64),mimeType:'image/png' as const,sizeBytes:100000,width:100,height:100};
-  const assets:AttachmentView[]=Array.from({length:12},()=>({id:randomUUID(),filename:'image.png',metadata:{original:descriptor,model:descriptor,thumbnail:descriptor,transform:'rotate-strip-webp-v1'},createdAt:time.toISOString(),expiresAt:null,inputArtifactId:randomUUID(),summary:null,summaryRun:null}));
+  const assets:ImageAttachmentView[]=Array.from({length:12},()=>({id:randomUUID(),filename:'image.png',metadata:{original:descriptor,model:descriptor,thumbnail:descriptor,transform:'rotate-strip-webp-v1'},createdAt:time.toISOString(),expiresAt:null,inputArtifactId:randomUUID(),summary:null,summaryRun:null}));
   const artifacts=Array.from({length:3},(_,i)=>{
     const row=surface('Look','user',randomUUID(),null,i);(row.payload as unknown as MessagePayload).content.push(...assets.slice(i*4,i*4+4).map(a=>({type:'image' as const,attachmentId:a.id})));return row;
   });
@@ -65,7 +65,7 @@ test('newest images consume the history count budget first',()=>{
 });
 test('current input has no image-count cap, while image bytes remain bounded',()=>{
   const descriptor={hash:'c'.repeat(64),mimeType:'image/png' as const,sizeBytes:100000,width:100,height:100};
-  const assets:AttachmentView[]=Array.from({length:12},()=>({id:randomUUID(),filename:'image.png',metadata:{original:descriptor,model:descriptor,thumbnail:descriptor,transform:'rotate-strip-webp-v1'},createdAt:time.toISOString(),expiresAt:null,inputArtifactId:randomUUID(),summary:null,summaryRun:null}));
+  const assets:ImageAttachmentView[]=Array.from({length:12},()=>({id:randomUUID(),filename:'image.png',metadata:{original:descriptor,model:descriptor,thumbnail:descriptor,transform:'rotate-strip-webp-v1'},createdAt:time.toISOString(),expiresAt:null,inputArtifactId:randomUUID(),summary:null,summaryRun:null}));
   const row=surface('Look at all twelve','user',randomUUID());
   (row.payload as unknown as MessagePayload).content.push(...assets.map(a=>({type:'image' as const,attachmentId:a.id})));
   const result=selectContext([row],[],instruction,12000,assets);

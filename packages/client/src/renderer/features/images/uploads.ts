@@ -1,10 +1,11 @@
 import type { AttachmentView } from '@ash/shared';
-export interface DraftImage {id:string;filename:string;size:number;status:'uploading'|'ready'|'error';progress:number;error?:string;preview?:string;attachment?:AttachmentView}
+export interface DraftImage {id:string;filename:string;size:number;status:'uploading'|'ready'|'error';progress:number;error?:string;preview?:string;kind?:'image'|'video';captureId?:string;incomplete?:boolean;attachment?:AttachmentView;recordingDraft?:'pending'|'inserted'|'empty'|'error';recordingDraftError?:string}
 export function uploadImage(id:string,file:File,onProgress:(fraction:number)=>void,onRequest:(xhr:XMLHttpRequest)=>void):Promise<AttachmentView> {
   return new Promise((resolve,reject)=>{
     const xhr=new XMLHttpRequest();onRequest(xhr);
-    xhr.open('PUT',`/api/attachments/${id}`);xhr.timeout=60000;
-    xhr.setRequestHeader('content-type','application/octet-stream');xhr.setRequestHeader('x-image-filename',encodeURIComponent(file.name));
+    const video=file.type.startsWith('video/')||/\.(mp4|mov|webm)$/i.test(file.name);
+    xhr.open('PUT',`/api/attachments/${id}`);xhr.timeout=video?240000:60000;
+    xhr.setRequestHeader('content-type',video?'application/x-ash-video':'application/octet-stream');xhr.setRequestHeader('x-image-filename',encodeURIComponent(file.name));
     xhr.upload.onprogress=event=>{if(event.lengthComputable)onProgress(event.loaded/event.total);};
     xhr.onerror=()=>reject(new Error('Upload disconnected. Retry without losing your draft.'));
     xhr.ontimeout=()=>reject(new Error('Upload timed out. Retry without losing your draft.'));

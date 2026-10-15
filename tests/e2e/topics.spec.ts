@@ -97,7 +97,7 @@ test('topics-settings-desktop: Sidebar Topics and fixed Settings preserve owners
   try{
     await page.getByRole('button',{name:'New Thread in Insurance',exact:true}).click();await entering;
     await expect(message).toBeDisabled();await expect(message).toHaveValue('Draft survives organization');
-    await expect(page.getByRole('button',{name:'Attach images',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'Send message',exact:true})).toBeDisabled();
+    await expect(page.getByRole('button',{name:'Attach images or videos',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'Send message',exact:true})).toBeDisabled();
     await expect(page.getByText('Creating Thread…',{exact:true})).toBeVisible();await expect(page.getByTestId('message')).toHaveCount(2);
   }finally{release();await completion;await page.unroute('**/api/threads');}
   await expect(page.getByTestId('message')).toHaveCount(0);await expect(page.getByLabel('Thread Topics',{exact:true})).toHaveText('Insurance');await expect(message).toBeFocused();

@@ -20,7 +20,8 @@ Sequencing is proposed. Source names refer to overview headings.
 | Semantic memory | Durable facts/preferences, freshness and forgetting | Later; design unresolved | Memory Engine; G06 |
 | Thread visibility | Intelligent archive timing, revival, activity indicators; consider overrides, pinning and undo | Manual archive/pin and Run status first; archive automation later | Visibility; G04, G06 |
 | Live Mode | Continuous voice/video; separate Live Threads; focus on other threads; pause, resume and device handoff | Later | Live Mode; G02, G09 |
-| [Images](features/images.md) and other input | Images and descriptions; later dictation, files, video and continuous streams | Images implemented; other formats later | Artifact Engine; Agent / Basics; Data Primitives; G06, G09 |
+| [Images](features/images.md) and other input | Images and descriptions; later dictation, files and continuous streams | Images implemented; other formats later | Artifact Engine; Agent / Basics; Data Primitives; G06, G09 |
+| [Screen recording and video understanding](features/recording-feedback.md) | Video attachments, one-click recording, automatic captions and understanding tools; eventual Live Mode integration | Recording and Flash understanding implemented; native capture verified; analysis checks documented | Revised user direction, 2026-10-14; feature-level decisions |
 | [Tool execution and inspection](features/tools.md) | Common tool lifecycle, concurrency, progress and inspection; read-only filesystem tools | Implemented | Agent / Basics; Artifact Engine; G08, G09 |
 | Tasks | User/Ash ownership, unassigned work, snooze/complete/archive/delete; independent of threads with links | Later | Built-In Features / Tasks; G06, G07 |
 | Decisions | Collect required user input; snooze/respond; optional comments and urgent notification | Later, before gated agent actions | Built-In Features / Decisions; G08 |

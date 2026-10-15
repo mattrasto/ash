@@ -42,6 +42,7 @@ export class TopicRetrieval {
     let cursor=0;
     const text = payload.content.map(block=>{
       if (block.type === 'text') {cursor+=block.text.length+1;return block.text;}
+      if(block.type==='video'){const asset=assets.get(block.attachmentId);const description=`[Video ${block.attachmentId}; pixels/audio not included]`;const caption=asset?.summary?'\nGenerated video caption: '+asset.summary.slice(0,1000):'\nVideo caption unavailable.';cursor+=description.length+caption.length+1;return description+caption;}
       const asset = assets.get(block.attachmentId);
       const description=`[Image ${block.attachmentId}; pixels not included]\n${asset?.summary ? `Generated description: ${asset.summary}` : 'Description unavailable.'}`;
       images.push({id:block.attachmentId,summaryRunId:asset?.summaryRunId??null,descriptionAvailable:!!asset?.summary,start:cursor,end:cursor+description.length});

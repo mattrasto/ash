@@ -194,6 +194,7 @@ export class ToolExecutor {
           request = RequestPayload.parse({ ...request, tools: { ...request.tools, previousOutputIds: [...request.tools!.previousOutputIds, outputId], results: [...request.tools!.results, ...results] } });
           requestId = await this.artifact(tx, id, threadId, outputId, request);
           await referenceImages(tx, requestId, request.selection.images?.map(image => image.id) ?? []);
+          await referenceImages(tx, requestId, request.selection.videos?.map(video => video.id) ?? []);
         });
       }
     } catch (error) { controller.abort(); throw error; }

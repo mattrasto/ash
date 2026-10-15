@@ -1,8 +1,11 @@
 import { app, BrowserWindow, session, ipcMain, clipboard, nativeImage, dialog, shell } from 'electron';
 import { readFileSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import {createWriteStream} from 'node:fs';
+import {Readable} from 'node:stream';
+import {pipeline} from 'node:stream/promises';
 import { join } from 'node:path';
-import { Uuid, type AttachmentView } from '@ash/shared';
+import { Uuid, isVideoAttachment, type AttachmentView } from '@ash/shared';
+import {installRecording} from './recording.ts';
 
 async function main() {
 const config = JSON.parse(readFileSync(process.env.ASH_CLIENT_CONFIG!, 'utf8')) as {
@@ -23,6 +26,7 @@ const win = new BrowserWindow({
   // Keep hidden renderers painting so automation, streaming and screenshots still run.
   webPreferences: { backgroundThrottling: !config.background, contextIsolation: true, sandbox: true, nodeIntegration: false, preload: join(config.root, 'build/preload.cjs') },
 });
+const disposeRecording=installRecording(win,config);win.on('closed',disposeRecording);
 function trusted(event:Electron.IpcMainInvokeEvent) {
   if(event.sender!==win.webContents || event.senderFrame!==win.webContents.mainFrame || new URL(event.senderFrame.url).origin!==new URL(config.url).origin)throw new Error('Invalid media request');
 }
@@ -42,19 +46,20 @@ ipcMain.handle('media:image-action',async(event,value:unknown,action:unknown)=>{
   const metadata=await fetch(endpoint,{redirect:'error',signal:AbortSignal.timeout(10000)});
   if(!metadata.ok)throw new Error('Image unavailable');
   const attachment=await metadata.json() as AttachmentView;
-  const response=await fetch(`${endpoint}/${action==='copy'?'clipboard':'original'}`,{redirect:'error',signal:AbortSignal.timeout(15000)});
-  if(!response.ok)throw new Error('Image unavailable');
-  const bytes=Buffer.from(await response.arrayBuffer());
-  if(bytes.length>100*1024*1024)throw new Error('Image too large');
+  if(isVideoAttachment(attachment)&&action==='copy')throw new Error('Video clipboard copying is unavailable.');
   if(action==='copy') {
+    const response=await fetch(`${endpoint}/clipboard`,{redirect:'error',signal:AbortSignal.timeout(15000)});if(!response.ok)throw new Error('Image unavailable');
+    const bytes=Buffer.from(await response.arrayBuffer());if(bytes.length>100*1024*1024)throw new Error('Image too large');
     const image=nativeImage.createFromBuffer(bytes);if(image.isEmpty())throw new Error('Image decode failed');
     clipboard.writeImage(image);return 'copied';
   }
-  const extension={'image/png':'png','image/jpeg':'jpg','image/webp':'webp'}[attachment.metadata.original.mimeType];
+  const extension={'image/png':'png','image/jpeg':'jpg','image/webp':'webp','video/mp4':'mp4','video/quicktime':'mov','video/webm':'webm'}[attachment.metadata.original.mimeType];
   const name=attachment.filename.replace(/\.[^.]*$/,'')+`.${extension}`;
-  const result=await dialog.showSaveDialog(win,{defaultPath:name,filters:[{name:'Image',extensions:[extension]}]});
+  const result=await dialog.showSaveDialog(win,{defaultPath:name,filters:[{name:isVideoAttachment(attachment)?'Video':'Image',extensions:[extension]}]});
   if(result.canceled||!result.filePath)return 'cancelled';
-  await writeFile(result.filePath,bytes,{mode:0o600});return 'saved';
+  const response=await fetch(`${endpoint}/original`,{redirect:'error',signal:AbortSignal.timeout(240000)});if(!response.ok)throw new Error('Attachment unavailable');
+  if(!response.body)throw new Error('Attachment unavailable');
+  await pipeline(Readable.fromWeb(response.body as any),createWriteStream(result.filePath,{mode:0o600}));return 'saved';
 });
 win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 win.webContents.on('will-navigate', (event, url) => {

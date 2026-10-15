@@ -72,7 +72,7 @@ Every payload has a required string `type` validated against its layer. The appl
 | Act / `model_request` | Exact model-visible messages, instruction/context selection, and this call's `provider`, `model` and `options`. See [captured requests](#instructions-and-captured-requests). |
 | Surface / `message` | `initial_thread_id`, `speaker`, ordered `content` blocks and any presentation metadata. |
 
-`payload.speaker` is required for Surface messages: `user` for the mirrored user message, `ash` for the reply. Omit it from other payloads; internal model roles belong in `messages`. Surface messages support text blocks and `{type: "image", attachmentId}` blocks. For example:
+`payload.speaker` is required for Surface messages: `user` for the mirrored user message, `ash` for the reply. Omit it from other payloads; internal model roles belong in `messages`. Surface messages support text blocks and `{type: "image" | "video", attachmentId}` blocks. For example:
 
 ```json
 {
@@ -108,9 +108,19 @@ Upload acceptance creates `image_upload` → `model_request` in a transaction, w
 
 Structured request messages embed immutable image descriptors, detail settings and then-current description text. `selection.images` records the representation, reason, source Artifact and description Run identity. See [IMG-R03–06](../specs/features/images.md#rules) for retry/context rules; existing string-content text requests remain valid.
 
+## Video attachments
+
+[Video attachments and recording](features/recording-feedback.md) reuse `attachments` and `artifact_attachments`; image metadata remains backward-readable. Video metadata adds original/playback/thumbnail descriptors, duration and audio availability. A `video_upload` Input owns the asset and a threadless caption/transcript Summary Run. Surface messages use `{type: "video", attachmentId}` blocks. Captured chat requests retain `selection.videos` source descriptors, then-current analysis identity and restrictive asset references; model-visible text contains bounded caption/transcript or a pending/unavailable marker.
+
+A video-only submission has an Input and mirrored Surface without a response Run. Its submission UUID is the Input ID; `message_input.submissionHash` preserves the submitted-content identity. A submission-key advisory lock serializes these receipts with normal response submissions, so duplicate delivery reuses the recorded input and changed content is rejected. No application audit log or additional table is introduced.
+
+Video analysis records `video_analysis` plans with frozen source descriptors, instruction text and processing bounds; `video_model_request` captures each supplied media hash/offset, prompt, response schema and sampling settings. `video_model_response` retains visible structured output and allowlisted execution metadata. `video_understanding` collects source-relative transcript/observations and explicit coverage/limitations. Original media and supplied derivatives remain immutable. The attachment caches caption text; its Summary Run points to the canonical result Artifact, from which views load narration.
+
+Explicit tools place these records beneath the current `tool_call` within its chat Run, preserving the one-initial-Run-per-Input constraint. Completed equivalent analysis can be reused after current/captured scope checks. Background caption failures preserve completed partial evidence and allow an explicit new retry Run. No new table or migration is needed. [Processing and inspection](features/recording-feedback.md#video-understanding).
+
 ## Instructions and captured requests
 
-`instructions` stores current name/text for a common editor. `topics.instruction_id` and `threads.instruction_id` are nullable, unique FKs implementing [INST-R02](../specs/features/instructions.md#rules). Null means no custom document. Global documents instead have a unique stable `key`, currently `response` and `image-description`; Topic/Thread documents have a null key.
+`instructions` stores current name/text for a common editor. `topics.instruction_id` and `threads.instruction_id` are nullable, unique FKs implementing [INST-R02](../specs/features/instructions.md#rules). Null means no custom document. Global documents instead have a unique stable `key`, currently `response`, `image-description`, `video-caption` and `video-understanding`; Topic/Thread documents have a null key.
 
 The unique constraints prevent sharing within each owner type, but not across Topics and Threads. For ownership changes, use a `READ COMMITTED` transaction: lock the Instruction row, then check both owner tables in a separate query so the check sees changes committed while waiting for the lock. Reject a different owner or a global key. All attachment/key changes must follow this lock protocol; an owned document cannot become a global prompt. Create/copy and attach a document atomically. Soft-deleting a Topic retains its document; erasure remains G06. See [PostgreSQL snapshot behavior](https://www.postgresql.org/docs/current/transaction-iso.html#XACT-READ-COMMITTED).
 
