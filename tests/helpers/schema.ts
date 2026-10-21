@@ -1,17 +1,16 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { readFile, writeFile } from 'node:fs/promises';
 import type postgres from 'postgres';
-import { exec } from '../../scripts/dev/io.ts';
 
 // Compare the committed diagram against actual migrated tables, preserving its hand-written notes.
 export async function checkDiagram(db: postgres.Sql, evidence: string) {
   const require = createRequire(join(process.cwd(),'package.json'));
-  const cli = join(dirname(require.resolve('@dbml/cli/package.json')),'bin/dbml2sql.js');
+  const { exporter } = require('@dbml/core');
   const sqlPath = join(evidence,'diagram.sql');
-  await exec(process.execPath,[cli,'specs/data/model.dbml','--postgres','-o',sqlPath]);
-  const sql=await readFile(sqlPath,'utf8');
+  const sql=exporter.export(await readFile('specs/data/model.dbml','utf8'),'postgres');
+  await writeFile(sqlPath,sql);
   await db.begin(async tx=>{
     await tx.unsafe('CREATE SCHEMA diagram_check');
     await tx.unsafe('SET LOCAL search_path = diagram_check');

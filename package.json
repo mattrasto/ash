@@ -26,17 +26,22 @@
     "test:desktop": "playwright test --config tests/playwright.config.ts"
   },
   "devDependencies": {
-    "@dbml/cli": "10.3.1",
+    "@dbml/core": "10.3.1",
     "@playwright/test": "1.58.2",
     "@sveltejs/vite-plugin-svelte": "5.1.1",
     "@types/node": "22.19.17",
-    "electron": "41.10.6",
+    "electron": "42.11.3",
     "esbuild": "0.28.1",
     "playwright": "1.58.2",
     "postgres": "3.4.8",
     "svelte-check": "4.1.0",
-    "tsx": "4.21.0",
+    "tsx": "4.23.15",
     "typescript": "5.9.3",
-    "vite": "6.4.3"
+    "vite": "6.4.4"
+  },
+  "pnpm": {
+    "overrides": {
+      "@prisma/config@6.19.3>deepmerge-ts": "8.0.2"
+    }
   }
 }

@@ -10,6 +10,8 @@ The Electron/Svelte shell opens [persisted chat](features/threads.md). Desktop v
 
 Prerequisites: macOS desktop session, Node 22.12 or later, pnpm 9 and running Docker Desktop. Versions are pinned in the lockfile and PostgreSQL image digest. `pnpm verify` runs hidden Electron windows; a graphical session is still required. The [verified baseline](testing.md#verified-baseline) covers macOS automated and manual checks. Linux/Windows remain unverified.
 
+Schema verification uses `@dbml/core` directly, avoiding unused database connectors. The root `pnpm.overrides` pins Prisma 6's merge dependency to patched `deepmerge-ts` 8.0.2 for [GHSA-ggr8-5vv4-36mx](https://github.com/advisories/GHSA-ggr8-5vv4-36mx); recheck this override when upgrading Prisma.
+
 ```sh
 pnpm dev:setup
 pnpm dev
