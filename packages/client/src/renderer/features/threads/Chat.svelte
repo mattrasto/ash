@@ -17,10 +17,19 @@
   import ContextView from '../organization/ContextView.svelte';
   import RetrievedContext from '../organization/RetrievedContext.svelte';
   import type { TopicView } from '@ash/shared';
+  import type { DecisionView, SavePermission } from '@ash/shared';
+  import DecisionsPage from '../decisions/Page.svelte';
+  import DecisionCard from '../decisions/Card.svelte';
   type Pending = {requestKey:string;text:string;mode:ModelMode;attachmentIds?:string[]};
   let info = $state<PreviewInfo | null>(null);
   let threads = $state<ThreadView[]>([]);
   let topics=$state<TopicView[]>([]);
+  let decisions=$state<DecisionView[]>([]),decisionsOpen=$state(false);
+  let proposedRule=$state<SavePermission|undefined>(undefined),settingsTab=$state<'instructions'|'permissions'>('instructions');
+  function closeDecisions(){decisionsOpen=false;void tick().then(()=>{scrolling?.restore(scrollPositions[selected]);autosize();document.querySelector<HTMLButtonElement>('[data-open-feature="decisions"]')?.focus();});}
+  function openDecisions(){if(decisionsOpen){closeDecisions();return;}rememberScroll();inspectedId='';inspection=null;decisionsOpen=true;}
+  function openSettings(owner='global:response'){settingsTab='instructions';proposedRule=undefined;settings=owner;}
+  function reviewRule(rule:SavePermission){proposedRule=rule;settingsTab='permissions';settings='global:response';}
   let settings=$state<string|null>(null);
   let selected = $state('');
   let detail = $state<ThreadDetail | null>(null);
@@ -95,7 +104,7 @@
   });
   class ApiError extends Error { constructor(message:string, public status?:number) { super(message); } }
   async function api<T>(path:string, body?:object):Promise<T> {
-    const response = await fetch(`/api/${path}`, {method:body ? 'POST' : 'GET', headers:{'content-type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {}), signal:AbortSignal.timeout(10000)});
+    const response = await fetch(`/api/${path}`, {method:body ? 'POST' : 'GET', headers:{'content-type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {}), signal:AbortSignal.timeout(['permissions/formalize','permissions/review'].includes(path)?40000:10000)});
     if (!response.ok) { const data = await response.json().catch(() => ({})); throw new ApiError(data.error ?? 'The request failed.',response.status); }
     return response.json();
   }
@@ -204,8 +213,8 @@
     if(phase==='leave'){dragDepth=Math.max(0,dragDepth-1);isDragOver=dragDepth>0;}
     if(phase==='drop'){dragDepth=0;isDragOver=false;if(event.dataTransfer.files.length)addFiles(event.dataTransfer.files);}
   }
-  function scroll(){scrolling?.scroll();clearTimeout(scrollTimer);scrollTimer=setTimeout(rememberScroll,200);}
-  function rememberScroll(){if(selected&&!restoring&&scrolling){scrollPositions[selected]=scrolling.position();localStorage.setItem('ash-chat-scroll',JSON.stringify(scrollPositions));}}
+  function scroll(){if(decisionsOpen)return;scrolling?.scroll();clearTimeout(scrollTimer);scrollTimer=setTimeout(rememberScroll,200);}
+  function rememberScroll(){if(selected&&!restoring&&scrolling&&!decisionsOpen){scrollPositions[selected]=scrolling.position();localStorage.setItem('ash-chat-scroll',JSON.stringify(scrollPositions));}}
   function latest(){scrolling?.latest();rememberScroll();}
   function autosize(){if(textarea){textarea.style.height='auto';textarea.style.height=`${Math.min(240,window.innerHeight*.3,Math.max(30,textarea.scrollHeight))}px`;}}
   $effect(()=>{drafts[selected];selected;textarea;let current=true;void tick().then(()=>{if(current)autosize();});return()=>{current=false;};});
@@ -214,6 +223,7 @@
   function closeInspector(){inspectedId='';inspection=null;inspectionFocus?.focus({preventScroll:true});}
   function key(event:KeyboardEvent){
     if(viewer||document.querySelector('dialog[open]'))return;
+    if(event.key==='Escape'&&decisionsOpen){event.preventDefault();closeDecisions();return;}
     if(event.key==='Escape'&&inspectedId){event.preventDefault();closeInspector();}
     if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='n'){event.preventDefault();if(connected)void createThread();}
     if((event.metaKey||event.ctrlKey)&&event.key==='\\'){event.preventDefault();toggleSidebar();}
@@ -249,7 +259,7 @@
     await tick();scrolling?.layout();
   }
   async function selectThread(id:string) {
-    rememberScroll();restoring=true;selected = id; detail = null; inspection = null; inspectedId = ''; error = '';jumpVisible=false; saveLocal();
+    rememberScroll();decisionsOpen=false;restoring=true;selected = id; detail = null; inspection = null; inspectedId = ''; error = '';jumpVisible=false; saveLocal();
     try { await loadThread(id);await tick();autosize(); } catch (e) { error = (e as Error).message; }
   }
   async function refresh() {
@@ -261,6 +271,7 @@
       if(revision!==threadRevision)return;
       threads=listed;
       topics=await api<TopicView[]>('topics');
+      decisions=await api<DecisionView[]>('decisions');
       if(revision!==threadRevision)return;
       if (!selected && threads.length) selected = (threads.find(thread=>!thread.isArchived)??threads[0]).id;
       if (!creating && selected && !threads.some(thread => thread.id === selected)) { selected = threads[0]?.id ?? ''; detail = null; }
@@ -305,6 +316,7 @@
     } finally { submitting = false; }
   }
   async function inspect(id:string) {
+    decisionsOpen=false;
     if(!inspectedId)inspectionFocus=document.activeElement as HTMLElement;
     inspectedId = id;
     try { const value = await api<InspectionView>(`artifacts/${id}`); if (inspectedId === id) inspection = value; }
@@ -347,15 +359,15 @@
 </script>
 
 <svelte:window onkeydown={key} onresize={autosize}/>
-<svelte:head><title>Ash — {info?.source ? info.source.branch ?? `Detached ${info.source.revision}` : 'Preview'} — {detail?.thread.title ?? 'Chat'}</title></svelte:head>
+<svelte:head><title>Ash — {info?.source ? info.source.branch ?? `Detached ${info.source.revision}` : 'Preview'} — {decisionsOpen?'Decisions':detail?.thread.title ?? 'Chat'}</title></svelte:head>
 <div class="preview-shell" style={`--accent:hsl(${hue} 29% 37%);--tint:hsl(${hue} 24% 92%)`}>
 <PreviewBar {info}/>
 <div class="shell">
-  {#if sidebarOpen}<Sidebar {threads} {topics} {api} onChanged={refresh} onInstructions={owner=>settings=owner} {selected} {connected} {creating} {readRuns} onSelect={selectThread} onCreate={createThread} onUpdate={updateThread} onClose={toggleSidebar}/>{/if}
+  {#if sidebarOpen}<Sidebar {threads} {topics} {api} onChanged={refresh} onInstructions={openSettings} onDecisions={openDecisions} decisionsActive={decisionsOpen} pendingDecisions={decisions.filter(d=>d.status==='pending').length} {selected} {connected} {creating} {readRuns} onSelect={selectThread} onCreate={createThread} onUpdate={updateThread} onClose={toggleSidebar}/>{/if}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="main-column" ondragenter={(e)=>drag(e,'enter')} ondragover={(e)=>drag(e,'over')} ondragleave={(e)=>drag(e,'leave')} ondrop={(e)=>drag(e,'drop')}>
+  <div class="main-column" class:covered={decisionsOpen} ondragenter={(e)=>drag(e,'enter')} ondragover={(e)=>drag(e,'over')} ondragleave={(e)=>drag(e,'leave')} ondrop={(e)=>drag(e,'drop')}>
     {#if isDragOver}<div class="drop-overlay"><strong>Drop images or videos here</strong><span>PNG, JPEG, WebP, MP4, MOV or WebM</span></div>{/if}
-    <header>{#if !sidebarOpen}<button class="icon-button" aria-label="Show sidebar" title="Show sidebar" onclick={toggleSidebar}><Icon name="sidebar"/></button>{/if}<div class="heading"><span class="eyebrow">THREAD</span><h1>{detail?.thread.title ?? 'New Thread'}</h1>{#if detail?.thread.isArchived}<span class="archived-label">Archived</span>{/if}</div><div class="header-actions"><div class="header-controls"><button class="settings-button" disabled={!connected} onclick={()=>processing=true}>Processing</button><button class="settings-button" disabled={!connected} onclick={()=>settings='global:response'}>Settings</button></div><span class="connection" data-testid="connection"><i class:offline={!connected}></i>{connected ? 'Connected' : 'Reconnecting…'}</span></div></header>
+    <header>{#if !sidebarOpen}<button class="icon-button" aria-label="Show sidebar" title="Show sidebar" onclick={toggleSidebar}><Icon name="sidebar"/></button>{/if}<div class="heading"><span class="eyebrow">THREAD</span><h1>{detail?.thread.title ?? 'New Thread'}</h1>{#if detail?.thread.isArchived}<span class="archived-label">Archived</span>{/if}</div><div class="header-actions"><div class="header-controls"><button class="settings-button" disabled={!connected} onclick={()=>processing=true}>Processing</button><button class="settings-button" disabled={!connected} onclick={()=>openSettings()}>Settings</button></div><span class="connection" data-testid="connection"><i class:offline={!connected}></i>{connected ? 'Connected' : 'Reconnecting…'}</span></div></header>
     {#if detail}<div class="topic-strip" aria-label="Thread Topics">{#each detail.membership?.topics??[] as topic}<span>{topic.name}</span>{:else}<span>No Topics</span>{/each}</div>{/if}
     <div class="model-banner"><span class="model-dot"></span>{#if info?.model?.provider === 'openai'}OpenAI · {info.model.model}{#if info.model.session}<span>· {info.model.session.callsUsed}{#if info.model.session.maxCalls !== null} / {info.model.session.maxCalls}{/if} calls{#if info.model.session.expiresAt !== null} · expires {new Date(info.model.session.expiresAt).toLocaleTimeString()}{/if}</span>{/if}{:else}Deterministic test model <span>· No external calls</span>{/if}</div>
     {#if error}<div class="error" role="alert">{error}</div>{/if}
@@ -368,6 +380,7 @@
         <Message {artifact} {run} outcomes={payload.speaker!=='ash'?outcomes(payload.inputArtifactId??artifact.sourceId!):[]} images={messageImages(payload)} blocked={!!active||!!(run&&actionBusy[run.id])} onInspect={inspect} onCitation={(resultId,citationId)=>void openCitation(resultId,citationId)} onRetry={run=>runAction(run,'retry')} onOpen={openImages}/>
 
       {/each}
+      {#each detail?.decisions??[] as decision(decision.id)}<DecisionCard {decision} {api} onChanged={refresh} onRule={reviewRule} runs={detail?.runs??[]}/>{/each}
     </div><div class="bottom-spacer" bind:this={spacer} aria-hidden="true"></div></main>
     {#if recording}<div class="recording-status" role="status"><strong>{recording.phase==='starting'?'Starting recording…':recording.phase==='finishing'?'Finishing recording…':'Recording'}</strong><span>{formatVideoDuration(recording.elapsedMs/1000)} · {recording.source} · {recording.mic?'Mic on':'No microphone'}</span><button onclick={()=>void stopRecording()} disabled={recording.phase!=='recording'}>Stop</button><button onclick={()=>void stopRecording(true)} disabled={recording.phase==='finishing'}>Discard</button>{#if recording.warning&&recording.phase==='recording'}<span>Stops in {formatVideoDuration(recording.remainingMs/1000)}</span><button onclick={()=>window.ashRecording.extend(recording!.id)}>Extend by 10 minutes</button>{/if}</div>{/if}
     {#if recordingNotice}<div class="recording-notice" role="status">{recordingNotice}</div>{/if}
@@ -386,6 +399,7 @@
     </div>
   </div>
   {#if processing}<Processing {api} onClose={()=>processing=false} onInspect={id=>void tick().then(()=>inspect(id))} onThread={id=>void selectThread(id)}/>{/if}
+  {#if decisionsOpen}<DecisionsPage {decisions} {api} onChanged={refresh} onThread={selectThread} onRule={reviewRule} onSettings={()=>openSettings()} onClose={closeDecisions}/>{/if}
   {#if inspectedId}
     <aside class="inspector" aria-label="Artifact inspector"><div class="inspector-heading"><h2>Artifact inspector</h2><button aria-label="Close inspector" onclick={closeInspector}>×</button></div>
       {#if inspection}
@@ -406,8 +420,9 @@
 </div>
 </div>
 {#if viewer}<Viewer images={viewer.images.map(currentImage)} startIndex={viewer.index} startSeconds={viewer.startSeconds??0} onClose={()=>viewer=null} onRetry={retryDescription}/>{/if}
-{#if settings}<Settings {api} thread={detail?.thread??null} {threads} initialOwner={settings} {captureMic} onCaptureMic={value=>{captureMic=value;localStorage.setItem('ash-recording-microphone',String(value));}} onClose={()=>settings=null}/>{/if}
+{#if settings}<Settings {api} thread={detail?.thread??null} {threads} initialOwner={settings} initialTab={settingsTab} initialRule={proposedRule} onChanged={refresh} {captureMic} onCaptureMic={value=>{captureMic=value;localStorage.setItem('ash-recording-microphone',String(value));}} onClose={()=>settings=null}/>{/if}
 <style>
+  .main-column.covered{display:none}
   .recording-draft-status{font-size:11px;color:#7b896e;margin:0 4px 8px}.recording-draft-status:empty{display:none}.recording-draft-status button{border:0;background:transparent;color:var(--accent);font:inherit;text-decoration:underline;padding:0 5px}
   .attachment-actions{display:flex;gap:4px;align-items:center}
 
@@ -419,7 +434,7 @@
   .header-controls{display:flex;gap:8px;align-items:center}.header-actions{display:flex;align-items:flex-end;flex-direction:column;gap:9px}.settings-button{border:1px solid #d5ddcb;border-radius:6px;padding:5px 9px;background:#f1f4e9;color:#738565;font-size:11px;-webkit-app-region:no-drag}.topic-strip{display:flex;flex-wrap:wrap;gap:5px;padding:0 30px 10px}.topic-strip span{background:#eaf0e2;color:#687e59;padding:5px 9px;border-radius:5px;font-size:10px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   :global(*){box-sizing:border-box}:global(body){margin:0;background:#f7f7f2;color:#2d342e;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px}:global(button),:global(input),:global(textarea),:global(select){font:inherit}:global(button){cursor:pointer}:global(button:disabled){cursor:default;opacity:.45}:global(button:focus-visible),:global(input:focus-visible),:global(textarea:focus-visible),:global(select:focus-visible),:global(summary:focus-visible){outline:2px solid var(--accent);outline-offset:3px}
   .archived-label{display:inline-block;font-size:10px;color:#8b947f;margin-top:5px}
-  .preview-shell{height:100vh;min-height:400px;display:flex;flex-direction:column}.shell{display:flex;flex:1;min-height:0}.main-column{position:relative;display:flex;flex-direction:column;flex:1;min-width:300px}header{padding:25px 30px 16px;display:flex;align-items:center;gap:14px;-webkit-app-region:drag}.heading{flex:1;min-width:0}h1{font-family:Georgia,serif;font-weight:400;font-size:23px;letter-spacing:-.5px;margin:6px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.eyebrow{font-size:9px;font-weight:600;letter-spacing:1.8px;color:#82907a}.icon-button{border:0;background:transparent;display:flex;color:#7e8a73;padding:6px;-webkit-app-region:no-drag}.connection{font-size:10px;display:flex;gap:6px;align-items:center;white-space:nowrap;color:#7f8878}.connection i,.model-dot{display:inline-block;width:6px;height:6px;background:var(--accent);border-radius:50%}.connection .offline{background:#a77455}.model-banner{padding:0 30px 12px;font-size:10px;color:#7c8772;display:flex;gap:7px;align-items:center}.model-banner span:last-child{color:#969d90}
+  .preview-shell{height:100vh;min-height:400px;display:flex;flex-direction:column}.shell{display:flex;flex:1;min-height:0;overflow:hidden}.main-column{position:relative;display:flex;flex-direction:column;flex:1;min-width:300px}header{padding:25px 30px 16px;display:flex;align-items:center;gap:14px;-webkit-app-region:drag}.heading{flex:1;min-width:0}h1{font-family:Georgia,serif;font-weight:400;font-size:23px;letter-spacing:-.5px;margin:6px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.eyebrow{font-size:9px;font-weight:600;letter-spacing:1.8px;color:#82907a}.icon-button{border:0;background:transparent;display:flex;color:#7e8a73;padding:6px;-webkit-app-region:no-drag}.connection{font-size:10px;display:flex;gap:6px;align-items:center;white-space:nowrap;color:#7f8878}.connection i,.model-dot{display:inline-block;width:6px;height:6px;background:var(--accent);border-radius:50%}.connection .offline{background:#a77455}.model-banner{padding:0 30px 12px;font-size:10px;color:#7c8772;display:flex;gap:7px;align-items:center}.model-banner span:last-child{color:#969d90}
   .transcript{flex:1;overflow:auto;padding:0 max(24px,calc((100% - 730px)/2));scrollbar-width:thin;overflow-anchor:none}.messages{display:flow-root}.bottom-spacer{pointer-events:none}.empty{text-align:center;margin:65px 0;color:#929989}.empty-glyph{font-size:45px;color:#9baa8f}.empty h2{font-family:Georgia,serif;font-weight:400;color:#68765b;font-size:27px;margin:22px 0 13px}.empty p{font-size:12px;line-height:1.8}
   .composer{position:relative;flex-shrink:0;padding:12px 24px 18px}.composer form{max-width:730px;margin:auto;border:1px solid #d9e0cf;border-radius:14px;background:#fffefa;padding:12px;transition:border-color .15s}.composer form:focus-within{border-color:#9bad8b}.composer textarea{display:block;width:100%;border:0;outline:none;resize:none;min-height:30px;max-height:min(240px,30vh);overflow-y:auto;background:transparent;color:#35422e;line-height:1.6;padding:3px 4px;font-size:14px}.composer textarea:focus-visible{outline:none}.composer-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:5px}.composer-actions span{font-size:9px;color:#9aa18f}.composer-actions button{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #cdd7c2;border-radius:50%;padding:6px;color:var(--accent);background:var(--tint);flex-shrink:0}.composer-actions .primary{background:var(--accent);color:white}.composer-actions .attach{background:transparent;border-color:transparent}.composer-actions .stop{color:#966b51;background:#f6eee7;border-color:#ddc9b9}.jump-latest{position:absolute;bottom:calc(100% + 12px);left:50%;transform:translateX(-50%);border:1px solid #ccd5c1;background:#fafcf5;border-radius:20px;padding:8px 14px;font-size:11px;color:var(--accent);box-shadow:0 3px 12px #20351d15;white-space:nowrap}
   .draft-images{display:flex;gap:8px;flex-wrap:wrap;padding:0 0 9px}.draft-image{display:flex;align-items:center;gap:7px;border:1px solid #dce3d3;border-radius:7px;max-width:240px;padding:5px;background:#f3f5ed;min-width:0}.draft-thumb{width:43px;height:43px;border:0;background:#e5ebdc;border-radius:4px;padding:0;overflow:hidden;flex-shrink:0}.draft-thumb img{width:100%;height:100%;object-fit:cover}.draft-meta{display:grid;gap:3px;min-width:0}.draft-meta strong{font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}.draft-meta span{font-size:9px;color:#89967a;max-width:155px;overflow-wrap:anywhere}.draft-meta button{font-size:10px;border:0;background:transparent;color:var(--accent);padding:0;text-align:left}.remove-image{border:0;background:transparent;color:#839273;font-size:16px;align-self:flex-start;padding:0 3px}.upload-error{border-color:#bb957d}.upload-error .draft-meta span{color:#9d644b}.drop-overlay{position:absolute;inset:12px;border:2px dashed var(--accent);border-radius:15px;z-index:8;background:#f3f6eced;pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--accent)}.drop-overlay strong{font:25px Georgia,serif}.drop-overlay span{font-size:12px}

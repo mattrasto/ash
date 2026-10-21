@@ -29,6 +29,7 @@ model Thread {
   memberships   ThreadTopic[]
   artifacts     Artifact[]
   runs          Run[]
+  decisions     Decision[]
   @@map("threads")
 }
 model ThreadTopic {
@@ -71,10 +72,43 @@ model Artifact {
   attachmentInput Attachment?
   attachmentReferences ArtifactAttachment[]
   continuation ProviderContinuation?
+  decisions Decision[]
   @@index([sourceId])
   @@index([runId])
   @@index([threadId, createdAt, id])
   @@map("artifacts")
+}
+
+model Permission {
+  id String @id @db.Uuid
+  category String
+  effect String
+  policy Json @db.JsonB
+  createdAt DateTime @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  @@index([category, deletedAt])
+  @@map("permissions")
+}
+model Decision {
+  id String @id @db.Uuid
+  threadId String? @map("thread_id") @db.Uuid
+  sourceArtifactId String? @map("source_artifact_id") @db.Uuid
+  status String @default("pending")
+  request Json @db.JsonB
+  resolution Json? @db.JsonB
+  snoozedUntil DateTime? @map("snoozed_until") @db.Timestamptz(6)
+  dueAt DateTime? @map("due_at") @db.Timestamptz(6)
+  createdAt DateTime @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(6)
+  thread Thread? @relation(fields:[threadId],references:[id],onDelete:Restrict,onUpdate:NoAction)
+  sourceArtifact Artifact? @relation(fields:[sourceArtifactId],references:[id],onDelete:Restrict,onUpdate:NoAction)
+  @@index([status, createdAt, id])
+  @@index([status, snoozedUntil])
+  @@index([status, dueAt])
+  @@index([threadId])
+  @@index([sourceArtifactId])
+  @@map("decisions")
 }
 model Run {
   id String @id @db.Uuid

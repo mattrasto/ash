@@ -3,6 +3,8 @@ import { IncomingPayload, IncomingSource, EngineOutcome, EngineStage } from './a
 import { ImageBlock, VideoBlock, VideoFile, TextBlock, ModelContent, type AttachmentView } from './attachments.ts';
 import { ToolRequest, ToolWorkflow, type ToolArtifact } from './tools.ts';
 import {VideoPlan,VideoModelRequest,VideoModelResponse,VideoUnderstandingPayload} from './video-understanding.ts';
+import { DecisionDependency, type DecisionView } from './decisions.ts';
+import type { PermissionEvaluation } from './permissions.ts';
 
 export const Uuid = z.string().uuid();
 export const ModelMode = z.enum(['normal', 'slow', 'fail', 'fail-before', 'empty']);
@@ -14,7 +16,7 @@ export const SendMessage = z.object({ requestKey: Uuid, text: z.string().trim().
   .refine(value=>value.text.length>0 || value.attachmentIds.length>0,'A message needs text or an attachment.')
   .refine(value=>new Set(value.attachmentIds).size===value.attachmentIds.length,'Duplicate attachment references.');
 export const RetryRun = z.object({ requestKey: Uuid, mode: ModelMode.default('normal') }).strict();
-export const RunStatus = z.enum(['queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted']);
+export const RunStatus = z.enum(['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'interrupted']);
 export type RunStatus = z.infer<typeof RunStatus>;
 export const ModelExecution = z.object({
   requestId: z.string().max(256).optional(), responseId: z.string().max(256).optional(), model: z.string().max(200).optional(),
@@ -23,7 +25,7 @@ export const ModelExecution = z.object({
     totalTokens: z.number().int().nonnegative(), cachedInputTokens: z.number().int().nonnegative(), reasoningTokens: z.number().int().nonnegative() }).strict().optional(),
 }).strict();
 export type ModelExecution = z.infer<typeof ModelExecution>;
-export const RunState = z.object({ request_artifact_id: Uuid, response_artifact_id: Uuid.nullable(), model: ModelExecution.optional(), tools: ToolWorkflow.optional() }).strict();
+export const RunState = z.object({ request_artifact_id: Uuid, response_artifact_id: Uuid.nullable(), model: ModelExecution.optional(), tools: ToolWorkflow.optional(), decisions:z.array(DecisionDependency).max(4096).refine(items=>new Set(items.map(d=>`${d.decisionId}:${d.stepKey}`)).size===items.length,'Duplicate Decision dependency.').optional() }).strict();
 export const RunError = z.object({ code: z.string(), message: z.string(), details: z.record(z.unknown()).optional() }).strict();
 export const InputPayload = z.discriminatedUnion('type',[
   IncomingPayload,
@@ -70,7 +72,7 @@ export type MessagePayload = z.infer<typeof MessagePayload>;
 export const VideoArtifact=z.union([VideoPlan,VideoModelRequest,VideoModelResponse,VideoUnderstandingPayload]);
 export const EngineRequest=z.object({type:z.literal('engine_request'),stage:EngineStage,request:RequestPayload,scope:z.record(z.unknown())}).strict();
 export const EngineArtifact=z.union([EngineRequest,EngineOutcome,z.object({type:z.literal('engine_response'),text:z.string().max(16000),model:ModelExecution.optional()}).strict()]);
-export type ArtifactPayload =  z.infer<typeof EngineArtifact> | z.infer<typeof InputPayload> | MessagePayload | RequestPayload | z.infer<typeof DescriptionPayload> | ToolArtifact | z.infer<typeof VideoArtifact>;
+export type ArtifactPayload =  z.infer<typeof EngineArtifact> | z.infer<typeof InputPayload> | MessagePayload | RequestPayload | z.infer<typeof DescriptionPayload> | ToolArtifact | PermissionEvaluation | z.infer<typeof VideoArtifact>;
 export interface ThreadView {
   id: string; title: string; createdAt: string; updatedAt: string; isArchived:boolean;
   latestRun?: {id:string;status:RunStatus;endedAt:string|null}|null;
@@ -84,7 +86,7 @@ export interface RunView {
   status: RunStatus; state: z.infer<typeof RunState>; error: z.infer<typeof RunError> | null;
   createdAt: string; startedAt: string | null; endedAt: string | null;
 }
-export interface ThreadDetail { thread: ThreadView; artifacts: ArtifactView[]; runs: RunView[]; attachments?:AttachmentView[]; membership?:import('./organization.ts').MembershipView }
+export interface ThreadDetail { thread: ThreadView; artifacts: ArtifactView[]; runs: RunView[]; attachments?:AttachmentView[]; membership?:import('./organization.ts').MembershipView; decisions?:DecisionView[] }
 export interface InspectionView { selectedId: string; input: ArtifactView; artifacts: ArtifactView[]; runs: RunView[]; attachments?:AttachmentView[] }
 export interface ModelInfo {
   provider: 'deterministic' | 'openai'; model: string;

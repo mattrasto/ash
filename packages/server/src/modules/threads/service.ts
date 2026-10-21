@@ -10,6 +10,8 @@ import { attachmentViews, retainImages, referenceImages } from '../attachments/s
 import { AttachmentError, type ImageStorage } from '../attachments/storage.ts';
 import { ToolExecutor, captureTools, interruptTools } from '../tools/executor.ts';
 import type { ToolRuntime } from '../tools/contract.ts';
+import { Decisions } from '../decisions/service.ts';
+import { Permissions } from '../permissions/service.ts';
 export { artifactView, runView } from './views.ts';
 
 type Tx = Prisma.TransactionClient;
@@ -21,7 +23,9 @@ const asJson = (value: unknown) => value as Prisma.InputJsonValue;
 export class Threads {
   private jobs = new Map<string, {controller: AbortController; promise: Promise<void>}>();
   private stopping = false;
-  constructor(readonly db: PrismaClient, private model: ModelAdapter = deterministicModel, private autoDispatch = true, private images?:ImageStorage, private tools?:ToolRuntime, private toolLimits?:ToolLimits) {}
+  private scheduling=false;
+  private scheduleAgain=false;
+  constructor(readonly db: PrismaClient, private model: ModelAdapter = deterministicModel, private autoDispatch = true, private images?:ImageStorage, private tools?:ToolRuntime, private toolLimits?:ToolLimits, private decisions?:Decisions, private permissions?:Permissions) {if(decisions)decisions.onChanged=()=>{void this.resumeWaiting().catch(()=>console.error('Decision resumption failed'));};}
 
   async recover() {
     const pending = await this.db.run.findMany({where:{threadId:{not:null},status:{in:['queued','running']}}});
@@ -29,8 +33,41 @@ export class Threads {
       await tx.$queryRaw`SELECT id FROM runs WHERE id=${run.id}::uuid FOR UPDATE`;
       const current = await tx.run.findUniqueOrThrow({where:{id:run.id}});
       if (!isActive(current.status)) return;
+      const state=RunState.parse(current.state);
+      if(state.decisions?.length&&state.tools?.rounds.at(-1)?.status==='completed'&&!state.tools.calls.some(c=>['running','unknown'].includes(c.status))){
+        for(const call of state.tools.calls)if(call.status==='preparing'){call.status=call.decisionId?'waiting':'queued';delete call.reservedBytes;}
+        state.tools.reservedResultBytes=0;
+        await tx.run.update({where:{id:run.id},data:{status:'waiting',state:asJson(state)}});return;
+      }
       await tx.run.update({where:{id:run.id},data:{status:'interrupted',state:asJson(interruptTools(RunState.parse(current.state),false)),endedAt:new Date(),error:{code:'server_interrupted', message:'The backend stopped before this response finished. Retry explicitly to continue.'}}});
     });
+    if(this.autoDispatch&&!this.stopping)await this.resumeWaiting();
+  }
+  async resumeWaiting(){
+    if(!this.decisions||this.stopping||!this.autoDispatch)return;
+    if(this.scheduling){this.scheduleAgain=true;return;}
+    this.scheduling=true;
+    try{
+      do{
+      this.scheduleAgain=false;
+      const waiting=await this.db.run.findMany({where:{status:'waiting',threadId:{not:null}},orderBy:[{createdAt:'asc'},{id:'asc'}]});
+      for(const run of waiting){
+        if(this.jobs.has(run.id))continue;
+        const ready=await this.db.$transaction(async tx=>{
+          await tx.$queryRaw`SELECT id FROM threads WHERE id=${run.threadId}::uuid FOR UPDATE`;
+          await tx.$queryRaw`SELECT id FROM runs WHERE id=${run.id}::uuid FOR UPDATE`;
+          const current=await tx.run.findUniqueOrThrow({where:{id:run.id}});if(current.status!=='waiting')return false;
+          if(await tx.run.findFirst({where:{threadId:run.threadId,status:{in:['queued','running']}}}))return false;
+          const state=RunState.parse(current.state),dependencies=state.decisions?.filter(d=>d.status==='waiting')??[];
+          let ready=!dependencies.length;
+          for(const dependency of dependencies){const decision=await tx.decision.findUnique({where:{id:dependency.decisionId}});if(decision&&['resolved','cancelled'].includes(decision.status))ready=true;}
+          if(!ready)return false;
+          await tx.run.update({where:{id:run.id},data:{status:'queued'}});return true;
+        });
+        if(ready)this.dispatch(run.id);
+      }
+      }while(this.scheduleAgain&&!this.stopping);
+    }finally{this.scheduling=false;}
   }
   async createThread(id: string, title: string, topicId?:string) {
     const existing = await this.db.thread.findUnique({where:{id}});
@@ -69,7 +106,8 @@ export class Threads {
       if (!thread) throw new ThreadError(404, 'Thread not found.');
       const artifacts = await tx.artifact.findMany({where:{threadId,layer:'surface'},orderBy:order});
       const runs = await tx.run.findMany({where:{threadId},orderBy:order});
-      return {thread, artifacts:artifacts.map(artifactView), runs:runs.map(runView),attachments:await attachmentViews(tx,artifacts.map(a=>a.id)),membership:await memberships(tx,threadId)};
+      const decisionIds=runs.flatMap(run=>RunState.parse(run.state).decisions?.map(dependency=>dependency.decisionId)??[]);
+      return {thread, artifacts:artifacts.map(artifactView), runs:runs.map(runView),attachments:await attachmentViews(tx,artifacts.map(a=>a.id)),membership:await memberships(tx,threadId),...(this.decisions?{decisions:(await tx.decision.findMany({where:{OR:[{threadId},{id:{in:decisionIds}}]},orderBy:order})).map(row=>({ ...row,request:row.request,resolution:row.resolution,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString(),dueAt:row.dueAt?.toISOString()??null,snoozedUntil:row.snoozedUntil?.toISOString()??null}))}:{})};
     }, {isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead});
   }
   async inspect(id: string) {
@@ -173,7 +211,7 @@ export class Threads {
             request = RequestPayload.parse({type:'model_request',...this.model.configuration(command.mode),...context,selection:{...context.selection,topics}});
           } else {
             const previous = await tx.run.findUniqueOrThrow({where:{id:command.previousId}});
-            if (isActive(previous.status)) throw new ThreadError(409, 'Wait for the previous Run to stop before retrying.');
+            if (isActive(previous.status)||previous.status==='waiting') throw new ThreadError(409, 'Wait for the previous Run to stop before retrying.');
             inputId = previous.inputArtifactId;
             const priorRequest = await tx.artifact.findUniqueOrThrow({where:{id:RunState.parse(previous.state).request_artifact_id}});
             const prior = RequestPayload.parse(priorRequest.payload);
@@ -204,7 +242,12 @@ export class Threads {
       }
     }
     if (!saved) throw new Error('Submission was not saved');
-    if (this.autoDispatch && saved.status === 'queued') this.dispatch(saved.id);
+    try {
+      if(command.kind==='send')await this.decisions?.resolveClearChat(threadId,saved.inputArtifactId,command.text);
+    } finally {
+      // The message and Run are already committed, even if answer interpretation fails.
+      if (this.autoDispatch && saved.status === 'queued') this.dispatch(saved.id);
+    }
     return runView(saved);
   }
   /** Intake owns this transaction, so Run acceptance and its checkpoint commit together. */
@@ -240,13 +283,14 @@ export class Threads {
   dispatch(id: string) {
     if (this.stopping || this.jobs.has(id)) return;
     const controller = new AbortController();
-    const promise = this.execute(id,controller.signal).finally(() => this.jobs.delete(id));
+    const promise = this.execute(id,controller.signal).finally(() => {this.jobs.delete(id);void this.resumeWaiting().catch(()=>console.error('Decision resumption failed'));});
     this.jobs.set(id,{controller,promise});
     // Operational persistence failures are logged without request/provider contents.
     void promise.catch(() => console.error(JSON.stringify({event:'run-worker-error',runId:id})));
   }
   private async execute(id: string, signal: AbortSignal) {
-    const claim = await this.db.run.updateMany({where:{id,status:'queued'},data:{status:'running',startedAt:new Date()}});
+    const existing=await this.db.run.findUniqueOrThrow({where:{id}});
+    const claim = await this.db.run.updateMany({where:{id,status:'queued'},data:{status:'running',startedAt:existing.startedAt??new Date()}});
     if (!claim.count) return;
     try {
       const run = await this.db.run.findUniqueOrThrow({where:{id}});
@@ -258,7 +302,7 @@ export class Threads {
         await this.images.read(block.attachmentId,block.image);
       }
       if (parsed.tools) {
-        await new ToolExecutor(this.db,this.model,this.tools,this.images).execute(id,parsed,request.id,signal);
+        await new ToolExecutor(this.db,this.model,this.tools,this.images,this.decisions,this.permissions).execute(id,parsed,request.id,signal);
         return;
       }
       for await (const event of this.model.stream(parsed,signal,this.images?image=>this.images!.dataUrl(image):undefined)) {
@@ -314,8 +358,9 @@ export class Threads {
       await tx.$queryRaw`SELECT id FROM runs WHERE id = ${id}::uuid FOR UPDATE`;
       const run = await tx.run.findUnique({where:{id}});
       if (!run?.threadId) throw new ThreadError(404,'Thread Run not found.');
-      if (!isActive(run.status)) return run;
-      return tx.run.update({where:{id},data:{status:'cancelled',state:asJson(interruptTools(RunState.parse(run.state),true)),endedAt:new Date()}});
+      if (!isActive(run.status)&&run.status!=='waiting') return run;
+      const state=RunState.parse(run.state);await this.decisions?.cancelWorkIn(tx,id,state);
+      return tx.run.update({where:{id},data:{status:'cancelled',state:asJson(interruptTools(state,true)),endedAt:new Date()}});
     });
     this.jobs.get(id)?.controller.abort();
     return runView(saved);

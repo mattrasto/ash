@@ -6,7 +6,7 @@ export interface ToolContext {
   readonly callId: string;
   readonly signal: AbortSignal;
   /** Trusted authorization boundary, also used for targets discovered by traversal. */
-  readonly authorize: (action: ToolAction) => Promise<ToolAuthorization>;
+  readonly authorize: (action: ToolAction, options?:{optional?:boolean}) => Promise<ToolAuthorization>;
 }
 
 export interface PreparedToolAction {
@@ -94,3 +94,6 @@ export function composeToolRuntimes(...runtimes: ToolRuntime[]): ToolRuntime {
 export class ToolActionFailure extends Error {
   constructor(readonly code: string, message: string, readonly denied = false) { super(message); }
 }
+
+/** Authorization suspended the call. Adapters must propagate this through traversal catches. */
+export class ToolSuspension extends Error {}

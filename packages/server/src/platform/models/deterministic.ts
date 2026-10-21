@@ -35,6 +35,16 @@ export const deterministicModel: ModelAdapter = {
     const inputs = request.messages.filter(message => message.role === 'user');
     const previous = request.messages.filter(message => message.role === 'assistant').length;
     const userText=modelContentText(inputs.at(-1)!.content);
+    if(request.tools?.definitions.some(tool=>tool.name==='decisions.ask')&&/^ask me\b/i.test(userText)){
+      if(!request.tools.previousOutputIds.length){yield {kind:'output',calls:[{callId:'ordinary_question',name:'decisions.ask',arguments:JSON.stringify({question:userText.replace(/^ask me\s*/i,'')||'Which folder should I use?',reason:'Your answer is needed to continue.'})}]};return;}
+      yield `Saved answer: ${request.tools.results.at(-1)?.result.content.map(c=>c.type==='text'?c.text:'').join('')}.`;yield {kind:'output',calls:[]};return;
+    }
+    const ordinary=request.tools?.resources.filter(r=>r.kind==='decision')??[];
+    if(ordinary.length===1&&request.tools?.definitions.some(tool=>tool.name==='decisions.answer')){
+      const question=JSON.parse(ordinary[0].label);
+      const option=question.options.find((o:{id:string;label:string})=>[o.id,o.label].some(v=>v.toLowerCase()===userText.trim().toLowerCase()));
+      if((option||/^answer:\s*\S/i.test(userText))&&!request.tools.previousOutputIds.length){yield {kind:'output',calls:[{callId:'ordinary_answer',name:'decisions.answer',arguments:JSON.stringify({decisionId:ordinary[0].id,value:option?.id??userText.replace(/^answer:\s*/i,'')})}]};return;}
+    }
     if(request.tools?.resources.some(resource=>resource.kind==='topic') && ['topic.search','topic.read'].every(name=>request.tools!.definitions.some(tool=>tool.name===name)) && /topic|prior threads/i.test(userText)) {
       await delay(mode==='slow'?1000:80,undefined,{signal});
       const round=request.tools.previousOutputIds.length;

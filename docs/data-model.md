@@ -26,13 +26,26 @@ The initial [thread journey](../specs/features/threads.md) uses six tables; [ima
 
 Typed drafts and selection state belong to the desktop client. Provider credentials and model configuration belong to the backend configuration.
 
+## Permissions and Decisions extension
+
+Tables, immutable answers and single-rule Permissions with reviewed overrides implemented, 2026-10-14 · [Delivery plan](plans/permissions-decisions-tests.md).
+
+| Addition | Canonical design |
+| --- | --- |
+| `decisions` | [Reviewed requests, immutable resolutions and scoped approval](features/decisions.md#storage). |
+| `permissions` | [Editable standing policy](features/permissions.md#persistence). |
+| Run dependency/checkpoint data, waiting status and constraints | [Run state dependencies](features/decisions.md#run-state-dependencies) and [existing Run changes](features/decisions.md#existing-run-changes). |
+| Permission-evaluation Act payload | [Captured evaluation evidence](features/permissions.md#evaluation-artifacts). |
+
+Keep feature ownership separate. Use foreign keys for relational references and validate JSON references in resolution/checkpoint data and Permission override links. The new Permission policy uses existing columns; its [contract and migration](features/permissions.md#persistence) replace resource/activity and mixed matchers without adding entity, relationship or version tables. Waiting tool steps resume within their original Run under the [execution contract](features/decisions.md#execution-integration). Retention/erasure policy belongs to the separate security/privacy design. Schema changes follow the [synchronization workflow](architecture.md#schema-workflow).
+
 ## Run boundary
 
 A Run tracks an Act workflow and its outputs, including Surface Artifacts. Routine Listen/Input/Filter/Route processing and intake action/presentation assessment do not create Run rows. Those stages may use workers or model calls; using a worker does not itself create a product Run.
 
 A workflow may contain several model calls using different providers or models. Each call has its own Artifact payload. Find produced Artifacts through `artifacts.run_id`; the checkpoint references those currently needed by the workflow.
 
-Thread Runs produce one answer through one or more model/tool calls. User Input and its directly mirrored Surface precede that Run and have no producing `run_id`. Image-description Runs consume an upload Input, have null `thread_id`, and produce an internal result Act without a Surface. [Tool execution](features/tools.md#execution-and-inspection) defines multi-call checkpoints; durable waits/resumption and other threadless workflows still need contracts.
+Thread Runs produce one answer through one or more model/tool calls. User Input and its directly mirrored Surface precede that Run and have no producing `run_id`. Image-description Runs consume an upload Input, have null `thread_id`, and produce an internal result Act without a Surface. [Tool execution](features/tools.md#execution-and-inspection) defines multi-call checkpoints; Decision waits resume from saved tool progress; other threadless workflows still need contracts.
 
 ## Artifacts and placement
 
@@ -191,7 +204,7 @@ Each captured source excerpt gains a dispatcher-owned `citationId`; the handler'
 
 `provider_continuations` links one private JSON output-item array to its output Artifact and Run. Runtime roles can select/insert, not update/delete; inspection never joins this table. Public output payloads retain its hash/byte count, checked before replay. A database trigger prevents updating captured request/output/call/result payloads or deleting thread captures; expired threadless image summaries retain their existing cleanup path.
 
-Persisting state does not implement safe continuation. The initial restart behavior remains interruption and explicit retry under [execution and transactions](#execution-and-transactions).
+Known Decision checkpoints support [durable continuation](features/decisions.md#execution-integration). Other interrupted execution follows [execution and transactions](#execution-and-transactions).
 
 ## Thread visibility
 
@@ -208,7 +221,7 @@ One queued/running execution per thread initially prevents concurrent response g
 
 Explicit retry creates another Run with a new command key, the same input/target and `retry_of_id` pointing to the previous settled Run. Its new call record follows the [captured request contract](#instructions-and-captured-requests). It creates no duplicate user Surface and leaves the prior outcome intact. Fresh context or a changed prompt is a new submission.
 
-The deployment must enforce one backend owner before startup recovery. After a restart, mark queued/running executions interrupted before accepting work; the response reflects that Run outcome without an Artifact status update. Never automatically repeat a provider call. Leases, worker takeover, general durable waits and multiple workers require a separate execution design.
+The deployment must enforce one backend owner before startup recovery. After a restart, resume only eligible [Decision checkpoints](features/decisions.md#execution-integration); mark other queued/running executions interrupted before accepting work. The response reflects that Run outcome without an Artifact status update. Never automatically repeat an active provider call or a dispatched action with an unknown outcome. Leases, worker takeover, general background waits and multiple workers require a separate execution design.
 
 ## Application edits and undo
 

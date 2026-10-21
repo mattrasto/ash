@@ -8,11 +8,17 @@ import { threadRoutes } from './modules/threads/routes.ts';
 import { deterministicModel } from './platform/models/deterministic.ts';
 import { openAIModel } from './platform/models/openai.ts';
 import { openSession } from './platform/models/session.ts';
-import { readOpenAIKey,readGeminiKey } from './platform/models/credentials.ts';
+import { readOpenAIKey,readGeminiKey,readJevKey } from './platform/models/credentials.ts';
 import {geminiVideoProvider,deterministicVideoProvider} from './platform/models/gemini-video.ts';
 import {VideoAnalysis} from './modules/video/service.ts';
 import {videoRuntime} from './modules/video/tools.ts';
 import {ensureVideoInstructions} from './modules/video/instructions.ts';
+import { Decisions, DecisionError, fingerprint } from './modules/decisions/service.ts';
+import { decisionRoutes } from './modules/decisions/routes.ts';
+import { decisionRuntime } from './modules/decisions/tools.ts';
+import { Permissions, PermissionError } from './modules/permissions/service.ts';
+import { permissionRoutes } from './modules/permissions/routes.ts';
+import { JevEvaluator, offlineEvaluator, unavailableEvaluator } from './modules/permissions/evaluator.ts';
 import { Attachments } from './modules/attachments/service.ts';
 import { ImageStorage, AttachmentError } from './modules/attachments/storage.ts';
 import { attachmentRoutes } from './modules/attachments/routes.ts';
@@ -53,7 +59,23 @@ await imageStorage.prepare();
 const video=new VideoAnalysis(product,imageStorage,modelSession?geminiVideoProvider({readKey:()=>readGeminiKey(instance.checkout),reserve:()=>modelSession.reserve()}):deterministicVideoProvider);
 await ensureVideoInstructions(product);
 const attachments=new Attachments(product,imageStorage,model,true,video);
-const threads = new Threads(product,model,true,imageStorage,composeToolRuntimes(topicRuntime(new TopicRetrieval(product)),filesystemRuntime(()=>loadFilesystemConfig(instance.profile === 'preview' ? instance.checkout : instance.root)),videoRuntime(video)));
+const decisions=new Decisions(product);
+const jevKey=modelSessionId?await readJevKey(instance.checkout):undefined;
+const permissions=new Permissions(product,decisions,modelSessionId?(jevKey?new JevEvaluator(jevKey):unavailableEvaluator):offlineEvaluator,model);
+let filesystemImport='',filesystemImporting:Promise<void>|undefined;
+const filesystemConfiguration=async()=>{
+  const settings=await loadFilesystemConfig(instance.profile==='preview'?instance.checkout:instance.root,instance.checkout),revision=fingerprint(settings);
+  if(revision!==filesystemImport){
+    await filesystemImporting;
+    if(revision!==filesystemImport){
+      const importing=permissions.seed(settings,instance.checkout).then(()=>{filesystemImport=revision;});filesystemImporting=importing;
+      try{await importing;}finally{if(filesystemImporting===importing)filesystemImporting=undefined;}
+    }
+  }
+  return settings;
+};
+await permissions.seed();await filesystemConfiguration().catch(()=>undefined);
+const threads = new Threads(product,model,true,imageStorage,composeToolRuntimes(decisionRuntime(decisions),topicRuntime(new TopicRetrieval(product)),filesystemRuntime(filesystemConfiguration,modelSessionId?'all':'offline-demo',true),videoRuntime(video)),undefined,decisions,permissions);
 await threads.recover();
 await ensureEngineInstructions(product);
 const incoming=new Incoming(product,threads,model);
@@ -69,6 +91,8 @@ threadRoutes(app, threads);
 incomingRoutes(app,incoming);
 attachmentRoutes(app,attachments);
 organizationRoutes(app,new Organization(product));
+decisionRoutes(app,decisions);permissionRoutes(app,permissions);
+const decisionTimer=setInterval(()=>{void decisions.wake().then(()=>threads.resumeWaiting()).catch(()=>console.error('Decision recovery failed'));},1000);decisionTimer.unref();
 app.get('/health', async () => {
   const [meta] = await db`SELECT instance_id, generation, schema_version FROM dev_meta`;
   if (meta.instance_id !== instance.id || meta.generation !== instance.generation || meta.schema_version !== instance.schemaVersion) {
@@ -100,6 +124,7 @@ app.setErrorHandler((error, _request, reply) => {
   if (error instanceof ZodError) return reply.code(400).send({error:'Invalid thread request.'});
   if (error instanceof ThreadError) return reply.code(error.status).send({error:error.message});
   if (error instanceof OrganizationError) return reply.code(error.status).send({error:error.message});
+  if (error instanceof DecisionError || error instanceof PermissionError) return reply.code(error.status).send({error:error.message});
   if (error instanceof AttachmentError) return reply.code(error.status).send({error:error.message});
   if ((error as {statusCode?:number}).statusCode===413)return reply.code(413).send({error:'Each image must be at most 10 MiB.'});
   console.error(JSON.stringify({ event: 'request-error', message: (error instanceof Error ? error.message : 'Unknown error').replaceAll(token, '[redacted]') }));
@@ -112,7 +137,7 @@ process.send?.({ type: 'listening', url: `http://127.0.0.1:${address.port}` });
 async function stop() {
   if (stopping) return;
   stopping = true;
-  clearInterval(cleanupTimer);clearInterval(incomingTimer);await app.close();await incoming.stop(); await threads.stop();await attachments.stop(); await product.$disconnect(); ownership.release(); await ownerDb.end(); await db.end(); process.exit(0);
+  clearInterval(cleanupTimer);clearInterval(incomingTimer);clearInterval(decisionTimer);await app.close();await incoming.stop(); await threads.stop();await attachments.stop(); await product.$disconnect(); ownership.release(); await ownerDb.end(); await db.end(); process.exit(0);
 }
 process.on('SIGINT', stop); process.on('SIGTERM', stop);
 process.on('disconnect', stop);

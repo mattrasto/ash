@@ -42,13 +42,15 @@ Deletion may mean hiding or erasing content from live data, captured requests, s
 
 ### G07 — Interrupted work and retries
 
-Durable continuation lacks rules for cancellation, disconnection, crashes, duplicate delivery and concurrent inputs. Mistakes can duplicate output, actions and cost.
+Work can outlive a process or device connection. Recovery must avoid duplicated output, actions and cost.
 
 **Accepted first-phase design:** concurrency, outcomes, recovery and cancellation follow [CONV-R07–11](features/threads.md#requirements). Checkpoints and explicit retries follow the [execution contract](../docs/data-model.md#execution-and-transactions).
 
 **Initial OpenAI policy:** explicit retries preserve the original model/options; cancellation aborts the local stream without promising reversal of provider work.
 
-**Remaining:** changing models on retry and broader deployment ownership. General continuation and waits need a separate execution design.
+**Implemented:** durable Decision waits, automatic resumption and scheduling alongside newer Thread work follow the [execution design](../docs/features/decisions.md#execution-integration) under [DEC-R05 and R10](features/decisions.md#rules).
+
+**Remaining:** changing models on retry, broader deployment ownership and a contract for general background execution.
 
 ### G09 — Privacy, observation and cost
 
@@ -68,11 +70,19 @@ Before observation/dreamtime: set capture scope, exclusions, pause controls, sto
 
 ### G08 — Identity, permissions and Decisions
 
-**Accepted, 2026-10-12:** [permission rules](features/permissions.md#rules), including configurable defaults, explicit requests as permission, fixed UI-only categories, mixed matchers, faithful formalization and discovery of sensitive actions that existing permissions have not addressed.
+**Accepted, 2026-10-12:** [permission rules](features/permissions.md#permission-behavior), including configurable defaults, fixed UI-only categories, faithful formalization and discovery of sensitive actions that existing permissions have not addressed. Later accepted rules below supersede earlier matcher and direct-request authorization behavior.
 
-The [starting evaluator and implementation guidance](../docs/features/permissions.md#selected-evaluator) are accepted following the isolated experiments; app integration remains pending.
+The [starting evaluator and implementation guidance](../docs/features/permissions.md#selected-evaluator) are accepted following the isolated experiments; integration for current tool adapters is implemented.
 
-**Remaining:** [PERM-Q01–06](features/permissions.md#open-decisions) cover defaults, conflicts, authorization lifetime, self-modification, delivery and sensitivity discovery. Decisions also cover ordinary questions; their full interaction and durable waiting/resumption contract remains undesigned.
+**Direction, 2026-10-14:** specify [Permissions](features/permissions.md) and [Decisions](features/decisions.md) as separate general features with a shared request/response handoff. Self-modification workflows are deferred consumers.
+
+**Accepted refinements, 2026-10-14:** [Decision rules and panel entry](features/decisions.md#rules); [permission rules](features/permissions.md#permission-behavior) now specify explicit deny exceptions, editable connection scopes, optional wording improvements and mandatory Decision-control confirmation for Ask under PERM-R11.
+
+**Scope decision, 2026-10-14:** private-data handling, evaluator disclosure and retention/erasure policy are deferred to separate security/privacy work under G06/G09. They are outside the current Permissions/Decisions review; sensitive-action discovery remains in Permissions.
+
+**Accepted simplification, 2026-10-14:** [immutable answers](features/decisions.md#rules) replace amendment and approval-withdrawal behavior. The [data model extension](../docs/data-model.md#permissions-and-decisions-extension) uses two simplified tables, with no answer/rule versioning or separate authorization records. Implementation is authorized and routine defaults are adopted; current-tool delivery follows the [implementation/test plan](../docs/plans/permissions-decisions-tests.md).
+
+**Single-rule redesign implemented, 2026-10-14:** one Permission is an explicit verb/resource rule or a complete semantic condition, with a derived name and reviewed semantic override relationships. [PERM-R05–07/R15/R21/R26](features/permissions.md#permission-behavior) own the behavior; the [policy contract](../docs/features/permissions.md#permissions) and [DBML](data/model.dbml) record the model. Decisions and immutable approval behavior remain unchanged.
 
 ### G10 — Custom apps and self-modification
 

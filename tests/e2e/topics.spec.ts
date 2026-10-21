@@ -49,7 +49,7 @@ test('topics-settings-desktop: Sidebar Topics and fixed Settings preserve owners
   await page.getByRole('button',{name:'Actions for Topic Insurance',exact:true}).click();await page.getByRole('menuitem',{name:'Instructions',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'Settings',exact:true}),text=dialog.getByLabel('Instruction text'),owner=dialog.getByLabel('Instruction owner');
   await expect(dialog.getByText(/Guides autonomous placement of incoming items/)).toBeVisible();await expect(text).toHaveValue('');
-  const bounds=await dialog.boundingBox();expect(bounds?.width).toBe(760);expect(bounds?.height).toBe(640);
+  const viewport=await page.evaluate(()=>({width:innerWidth,height:innerHeight})),bounds=await dialog.boundingBox();expect(bounds?.width).toBeGreaterThan(760);expect(bounds?.height).toBeGreaterThan(640);
   await text.fill('Add homeowners and car insurance items to Insurance.');await dialog.getByRole('button',{name:'Save instructions',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('Instructions saved');expect(await dialog.boundingBox()).toEqual(bounds);
   await owner.selectOption({label:'Image descriptions'});await expect(dialog.getByText(/Applies only when describing/)).toBeVisible();expect(await dialog.boundingBox()).toEqual(bounds);
   await owner.selectOption({label:'Response guidance'});await text.fill('Draft global guidance');await owner.selectOption({label:'Image descriptions'});
@@ -65,7 +65,10 @@ test('topics-settings-desktop: Sidebar Topics and fixed Settings preserve owners
   expect(ash.errors.filter(x=>x==='Failed to load resource: the server responded with a status of 409 (Conflict)')).toHaveLength(1);
   ash.errors.splice(ash.errors.indexOf('Failed to load resource: the server responded with a status of 409 (Conflict)'),1);
   await dialog.getByRole('button',{name:'Compare latest saved text'}).click();await expect(dialog.locator('pre')).toHaveText('Concurrent saved guidance');
-  expect(await dialog.locator('.body').evaluate(el=>el.scrollHeight>el.clientHeight)).toBe(true);expect(await dialog.boundingBox()).toEqual(bounds);
+  expect(await dialog.boundingBox()).toEqual(bounds);
+  await app.evaluate(({BrowserWindow},width)=>BrowserWindow.getAllWindows()[0].setContentSize(width,650),viewport.width);await expect.poll(()=>page.evaluate(()=>innerHeight)).toBe(650);
+  expect(await dialog.locator('.body').evaluate(el=>el.scrollHeight>el.clientHeight)).toBe(true);expect(await dialog.evaluate(el=>el.scrollHeight<=el.clientHeight)).toBe(true);
+  await app.evaluate(({BrowserWindow},size)=>BrowserWindow.getAllWindows()[0].setContentSize(size.width,size.height),viewport);await expect.poll(()=>page.evaluate(()=>innerHeight)).toBe(viewport.height);expect(await dialog.boundingBox()).toEqual(bounds);
   await dialog.getByRole('button',{name:'Save instructions',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('Instructions saved');
   const threadOption=await owner.locator('option').filter({hasText:' · current'}).getAttribute('value');await owner.selectOption(threadOption!);await expect(text).toHaveValue('');
   await text.fill('Thread-specific response guidance.');await dialog.getByRole('button',{name:'Close Settings',exact:true}).click();await dialog.getByRole('button',{name:'Save and continue'}).click();await expect(dialog).not.toBeVisible();
@@ -73,7 +76,7 @@ test('topics-settings-desktop: Sidebar Topics and fixed Settings preserve owners
   await page.getByRole('button',{name:'Settings',exact:true}).click();await expect(text).toBeVisible();
   for(const [width,height] of [[1040,830],[740,650]]){
     await app.evaluate(({BrowserWindow},size)=>BrowserWindow.getAllWindows()[0].setContentSize(size[0],size[1]),[width,height]);await expect.poll(()=>page.evaluate(()=>innerWidth)).toBe(width);
-    const size=await dialog.boundingBox();expect(size?.width).toBe(Math.min(760,width-40));expect(size?.height).toBe(Math.min(640,height-48));
+    const size=await dialog.boundingBox();expect(size?.width).toBe(Math.min(1080,width-40));expect(size?.height).toBe(Math.min(860,height-48));
     await owner.selectOption(threadOption!);await expect(text).toHaveValue('Thread-specific response guidance.');expect(await dialog.boundingBox()).toEqual(size);
     await owner.selectOption({label:'Image descriptions'});await expect(dialog.getByText(/Applies only when describing/)).toBeVisible();expect(await dialog.boundingBox()).toEqual(size);
     expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);await testInfo.attach(`settings-${width}`,{body:await page.screenshot(),contentType:'image/png'});

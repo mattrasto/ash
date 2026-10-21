@@ -15,6 +15,7 @@ export class ThreadScroll {
   private move(top:number){this.programmatic=true;this.viewport.scrollTop=top;cancelAnimationFrame(this.frame);this.frame=requestAnimationFrame(()=>{this.programmatic=false;});}
   private jump(){this.onJump(this.end()>this.viewport.scrollTop+this.viewport.clientHeight-24);}
   layout(){
+    if(!this.viewport.clientHeight)return;
     const users=this.content.querySelectorAll('.user');const last=users[users.length-1];
     const anchor=last?Math.max(0,this.offset(last)-this.viewport.clientHeight*.2):0;
     this.spacer.style.height=`${Math.max(this.viewport.clientHeight*.2,anchor+this.viewport.clientHeight-this.end())}px`;

@@ -13,6 +13,9 @@ import {Attachments} from '../../packages/server/src/modules/attachments/service
 import {VideoAnalysis} from '../../packages/server/src/modules/video/service.ts';
 import {videoRuntime} from '../../packages/server/src/modules/video/tools.ts';
 import {Threads} from '../../packages/server/src/modules/threads/service.ts';
+import {Decisions} from '../../packages/server/src/modules/decisions/service.ts';
+import {Permissions} from '../../packages/server/src/modules/permissions/service.ts';
+import {offlineEvaluator} from '../../packages/server/src/modules/permissions/evaluator.ts';
 import {deterministicModel} from '../../packages/server/src/platform/models/deterministic.ts';
 import {ModelFailure,type ModelAdapter} from '../../packages/server/src/platform/models/adapter.ts';
 import {type VideoProvider} from '../../packages/server/src/platform/models/gemini-video.ts';
@@ -53,7 +56,8 @@ test('video understanding persists background context, shared tools and inspecta
   }};
   const video=new VideoAnalysis(db,storage,provider),attachments=new Attachments(db,storage,deterministicModel,true,video);
   const services:Threads[]=[];
-  const threads=(model:ModelAdapter=deterministicModel,auto=false)=>{const value=new Threads(db,model,auto,storage,videoRuntime(video));services.push(value);return value;};
+  const decisions=new Decisions(db),permissions=new Permissions(db,decisions,offlineEvaluator);
+  const threads=(model:ModelAdapter=deterministicModel,auto=false,managed=false)=>{const value=new Threads(db,model,auto,storage,videoRuntime(video),undefined,managed?decisions:undefined,managed?permissions:undefined);services.push(value);return value;};
   const plain=threads();let asset!:Awaited<ReturnType<Attachments['get']>>,thread='',answerRun!:RunView;
   const done=(id:string)=>until(()=>db.run.findUniqueOrThrow({where:{id}}),r=>!['queued','running'].includes(r.status));
   let browser:Awaited<ReturnType<typeof desktop>>|undefined;
@@ -86,10 +90,12 @@ test('video understanding persists background context, shared tools and inspecta
         if(!request.tools?.previousOutputIds.length)yield {kind:'output' as const,calls:[ask(),ask(),call('describe_video',{attachmentId:asset.id,startSeconds:.4,endSeconds:1.2,fps:5})]};
         else yield 'Mock video answer [recorded evidence](ash-source:'+request.tools.results[0].result.references[0].citationId+').';
       }};
-      const engine=threads(model,true);
+      await permissions.seed();const engine=threads(model,true,true);
       answerRun=await engine.submit(thread,randomUUID(),'Describe this video and find its final color.','normal',[asset.id]);
       const finished=await done(answerRun.id);assert.equal(finished.status,'completed',JSON.stringify(finished.error));
       const calls=RunState.parse(finished.state).tools!.calls;assert.equal(calls.length,3);
+      assert.equal(await db.artifact.count({where:{runId:finished.id,payload:{path:['type'],equals:'permission_evaluation'}}}),3);
+      assert.ok(calls.every(c=>!c.decisionId));
       const results=await Promise.all(calls.map(c=>db.artifact.findUniqueOrThrow({where:{id:c.resultArtifactId!}})));
       const data=results.map(r=>(r.payload as any).result);assert.ok(data.every(r=>r.status==='success'));
       assert.equal(data[0].content[1].value.analysisArtifactId,data[1].content[1].value.analysisArtifactId);

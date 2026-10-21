@@ -24,11 +24,13 @@ export type ToolDefinition = z.infer<typeof ToolDefinition>;
 export const ToolAction = z.object({
   operation: z.string().min(1).max(100), resources: z.array(ToolResource).max(256),
   effects: z.array(z.string().min(1).max(80)).max(32),
+  facts: z.record(ToolJson).optional(),
 }).strict();
 export type ToolAction = z.infer<typeof ToolAction>;
 export const ToolAuthorization = z.object({
   outcome: z.enum(['allowed', 'denied']), code: z.string().max(100), message: z.string().max(1000),
   configurationRevision: z.string().max(256), evaluator: z.literal('not-performed'),
+  resourceAccess:z.enum(['established','capability-only']).optional(),
 }).strict();
 export type ToolAuthorization = z.infer<typeof ToolAuthorization>;
 export const ToolCitationId = z.string().max(100).regex(/^cite:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]*$/);
@@ -51,7 +53,7 @@ const resultBody = {
 export const ToolResult = z.discriminatedUnion('status', [
   z.object({ status: z.literal('success'), ...resultBody }).strict(),
   z.object({ status: z.literal('error'), ...resultBody,
-    error: z.object({ code: z.string().max(100), message: z.string().max(1000), retryable: z.boolean() }).strict(),
+    error: z.object({ code: z.string().max(100), message: z.string().max(1000), retryable: z.boolean(), effect:z.enum(['none','unknown']).optional() }).strict(),
   }).strict(),
   z.object({ status: z.literal('denied'), ...resultBody,
     error: z.object({ code: z.string().max(100), message: z.string().max(1000), retryable: z.literal(false) }).strict(),
@@ -79,7 +81,8 @@ export const DEFAULT_TOOL_LIMITS: Readonly<ToolLimits> = Object.freeze({
 const ToolId = z.string().uuid();
 export const ToolCallState = z.object({
   id: ToolId, requestId: ToolId, callArtifactId: ToolId, call: ToolCall,
-  status: z.enum(['queued', 'preparing', 'running', 'completed', 'error', 'denied', 'not-started', 'cancelled', 'interrupted', 'unknown']),
+  status: z.enum(['queued', 'preparing', 'waiting', 'running', 'completed', 'error', 'denied', 'not-started', 'cancelled', 'interrupted', 'unknown']),
+  decisionId: ToolId.optional(),
   action: ToolAction.optional(), authorization: ToolAuthorization.optional(),
   checks: z.array(z.object({ action: ToolAction, authorization: ToolAuthorization }).strict()).max(512).optional(),
   resultArtifactId: ToolId.optional(), startedAt: z.string().datetime().optional(), endedAt: z.string().datetime().optional(),

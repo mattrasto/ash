@@ -22,3 +22,9 @@ async function readProviderKey(checkout:string,name:'OPENAI_API_KEY'|'GEMINI_API
     return key;
   } finally { await file.close(); }
 }
+
+export async function readJevKey(checkout:string):Promise<string|undefined>{
+  const file=await open(join(checkout,'.env.local'),constants.O_RDONLY|constants.O_NOFOLLOW).catch(()=>undefined);
+  if(!file)return undefined;
+  try{const stat=await file.stat();if(!stat.isFile()||(stat.mode&0o077))return undefined;const key=parseEnv(await file.readFile('utf8')).JEV_API_KEY?.trim();return key&&!/[\r\n]/.test(key)?key:undefined;}catch{return undefined;}finally{await file.close();}
+}

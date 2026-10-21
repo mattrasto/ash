@@ -1,9 +1,11 @@
-// Schema implemented in packages/server/prisma; constraints verified against migrated PostgreSQL.
-// Product rules: ../features/artifacts.md and ../features/instructions.md
+// Core tables implemented in packages/server/prisma, 2026-10-14.
+// Permissions uses the single-rule policy and reviewed semantic overrides; legacy live JSON is converted at startup.
+// Physical columns and SQL constraints are unchanged; policy conversion and JSON references are application-enforced.
+// Product rules: ../features/permissions.md, ../features/decisions.md and other feature specs.
 // Transactions, JSON contracts and SQL-only constraints: ../../docs/data-model.md
 Project ash {
   database_type: 'PostgreSQL'
-  Note: 'Core state plus image attachments. Recovery uses physical backups and archived WAL; application audit history is deferred.'
+  Note: 'Core state, Permissions and Decisions. Recovery uses physical backups and archived WAL; application audit history is deferred.'
 }
 
 Table topics {
@@ -49,7 +51,7 @@ Table artifacts {
   thread_id uuid [note: 'Surface: required current owner. Other layers: original processing association, or null if unknown.']
   run_id uuid [note: 'Producing Run; null for user Input/Surface and pre-Act processing.']
   actor text [not null, check: `actor IN ('user', 'ash', 'system')`, note: 'Attribution: user input/messages, Ash actions/replies, or system ingestion.']
-  payload jsonb [not null, note: 'Validated content with a type tag. Surface: speaker/content. Model request: messages/provider/model/options. Only active response content may grow.']
+  payload jsonb [not null, note: 'Validated content with a type tag. Surface: speaker/content. Model request: messages/provider/model/options. Act type: permission_evaluation, containing action, rule snapshots, evidence and outcome. Only active response content may grow.']
   created_at timestamptz [not null, note: 'When first saved; immutable. Used with id for thread ordering.']
   updated_at timestamptz [not null, note: 'When content or thread ownership last changed; initially created_at.']
 
@@ -82,14 +84,14 @@ Table runs {
   input_artifact_id uuid [not null, note: 'Input that triggered the Run; reused by retries.']
   thread_id uuid [note: 'Thread target; null for standalone image description Runs. Unchanged by Surface moves.']
   retry_of_id uuid [note: 'Previous settled Run for an explicit retry; null for the initial execution.']
-  status text [not null, check: `status IN ('queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted')`, note: 'Current execution state; starts queued.']
-  state jsonb [not null, note: 'Latest workflow checkpoint, including request/output references. Contract: docs/data-model.md#run-state-and-errors.']
+  status text [not null, check: `status IN ('queued', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'interrupted')`, note: 'Current execution state; starts queued. Waiting is nonterminal and releases the Thread execution slot.']
+  state jsonb [not null, note: 'Latest workflow checkpoint. Decision dependencies by ID, per-step consumption and action/attempt progress. JSON references are application-validated, not foreign keys. Contracts: docs/data-model.md and docs/features/decisions.md.']
   error jsonb [note: 'Failure code, message and optional details; null when no failure is recorded.']
   request_key uuid [unique, not null, note: 'Used to prevent duplicate run submissions. Reuse on delivery retry; replace on execution retry.']
   request_hash text [not null, note: 'Detects reuse of request_key with different command content or target.']
   created_at timestamptz [not null, note: 'When accepted and saved; immutable.']
   started_at timestamptz [note: 'When execution starts; null while queued or if stopped before starting.']
-  ended_at timestamptz [note: 'Null while queued/running; set when settled.']
+  ended_at timestamptz [note: 'Null while queued/running or in the waiting state; set when settled.']
 
   indexes {
     input_artifact_id
@@ -98,12 +100,12 @@ Table runs {
   }
   checks {
     `retry_of_id IS NULL OR retry_of_id <> id`
-    `(status IN ('queued', 'running') AND ended_at IS NULL) OR (status IN ('completed', 'failed', 'cancelled', 'interrupted') AND ended_at IS NOT NULL)`
-    `status NOT IN ('running', 'completed') OR started_at IS NOT NULL`
+    `(status IN ('queued', 'running', 'waiting') AND ended_at IS NULL) OR (status IN ('completed', 'failed', 'cancelled', 'interrupted') AND ended_at IS NOT NULL)`
+    `status NOT IN ('running', 'waiting', 'completed') OR started_at IS NOT NULL`
     `jsonb_typeof(state) = 'object'`
     `error IS NULL OR jsonb_typeof(error) = 'object'`
   }
-  Note: 'Act workflow. First phase: one active response per Thread; interruption requires explicit retry.'
+  Note: 'Act workflow. Queued/running execution is serialized per Thread; waiting releases that slot. Eligible steps resume from saved progress after current checks. Dependencies remain in state; no run_decisions table.'
 }
 
 Ref: instructions.id - topics.instruction_id [delete: restrict]
@@ -165,3 +167,49 @@ Table incoming_items {
  indexes { (status, created_at) }
 }
 Ref: incoming_items.id > artifacts.id [delete: restrict]
+
+// Permissions and Decisions: docs/features/permissions.md and docs/features/decisions.md.
+Table permissions {
+  id uuid [pk, not null, note: 'Stable permission identity; immutable.']
+  category text [not null, check: `category IN ('filesystem', 'computer_use', 'interaction', 'self_modification')`, note: 'Fixed UI category assigned on creation; excluded from evaluation and permission selection.']
+  effect text [not null, check: `effect IN ('allow', 'ask', 'deny')`, note: 'Editable policy effect; Never in the UI means deny, not deletion.']
+  policy jsonb [not null, check: `jsonb_typeof(policy) = 'object'`, note: 'Exactly one permission. kind explicit stores verb and one typed resource matcher; kind semantic stores complete accepted condition, optional examples and overrides (UUIDs of reviewed overridden Permissions; priority applies only to shared actions/targets and does not assert containment). Names derive from verb/resource or condition; no separate name, wording copy, original text, resource/activity flag or permission versions. JSON reference validity and review are application-enforced. Contract: docs/features/permissions.md#permissions.']
+  created_at timestamptz [not null, note: 'When created; immutable.']
+  updated_at timestamptz [not null, note: 'Initially created_at; changes with a saved edit or retirement.']
+  deleted_at timestamptz [note: 'Null while active; set when a permission is retired. Earlier evaluations preserve their permission snapshots.']
+
+  indexes {
+    (category, deleted_at)
+  }
+  Note: 'Standing policy only. Semantic override links stay in policy JSON; no relationship table or SQL FK for those references. Review scope/effect changes and clean incoming references on retirement. One-time exceptions/approvals stay on Decisions; evaluated permission and override snapshots use Act Artifacts. Connection capabilities and mappings belong to future connection records.'
+}
+
+Table decisions {
+  id uuid [pk, not null, note: 'Stable identity allocated before creation and reused on delivery retries. Conflicting reuse is rejected. Independent of Thread or Run; immutable.']
+  thread_id uuid [note: 'Optional primary Thread association; null for standalone Decisions. Other views reference this same record.']
+  source_artifact_id uuid [note: 'Originating Artifact; null for requests without one. Preserve the original source.']
+  status text [not null, default: 'pending', check: `status IN ('pending', 'snoozed', 'resolved', 'cancelled')`, note: 'Request lifecycle, separate from execution. Resolved and cancelled are terminal; answered Decisions never reopen.']
+  request jsonb [not null, check: `jsonb_typeof(request) = 'object'`, note: 'Immutable typed question, context and response definition. Permission requests include action binding, scope, findings and any explicit deny exceptions. Material changes cancel an unanswered request with a reason; create an independent Decision only if input is still needed.']
+  resolution jsonb [note: 'Single immutable terminal result: answer with submissionId, value, optional comment, trusted source/sourceArtifactId and resolvedAt; or cancellation with reason and resolvedAt. Null while pending or snoozed. Permission approval requires explicit controls. JSON references are application-validated.']
+  snoozed_until timestamptz [note: 'Set while snoozed; clear on wake, response or cancellation. Changes attention only.']
+  due_at timestamptz [note: 'Optional substantive request deadline, set from reviewed terms; not an automatic approval expiry. Material changes follow the changed-request rule.']
+  created_at timestamptz [not null, note: 'When created; immutable.']
+  updated_at timestamptz [not null, note: 'Initially created_at; changes with lifecycle transitions, including the single resolution.']
+
+  indexes {
+    (status, created_at, id)
+    (status, snoozed_until)
+    (status, due_at)
+    thread_id
+    source_artifact_id
+  }
+  checks {
+    `(status = 'snoozed' AND snoozed_until IS NOT NULL) OR (status <> 'snoozed' AND snoozed_until IS NULL)`
+    `(status IN ('pending', 'snoozed') AND resolution IS NULL) OR (status IN ('resolved', 'cancelled') AND resolution IS NOT NULL)`
+    `resolution IS NULL OR jsonb_typeof(resolution) = 'object'`
+  }
+  Note: 'Reviewed request and immutable resolution share one record. Dependencies, consumption and work cancellation live in runs.state. No answer versions, withdrawal records or permission_authorizations table. Payload shapes are application-validated; SQL protects request/resolution immutability.'
+}
+
+Ref: decisions.thread_id > threads.id [delete: restrict]
+Ref: decisions.source_artifact_id > artifacts.id [delete: restrict]

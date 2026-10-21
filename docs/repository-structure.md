@@ -56,7 +56,8 @@ ash/
 │   │   │   │   ├── runs/             # Execution and linked retries
 │   │   │   │   ├── tools/            # Handler contract and common dispatch
 │   │   │   │   ├── filesystem/       # Scoped filesystem operations
-│   │   │   │   ├── permissions/      # Planned: action authorization
+│   │   │   │   ├── permissions/      # Rules, evaluation and action authorization
+│   │   │   │   ├── decisions/        # Required input, resolution and durable dependencies
 │   │   │   │   ├── context/          # Selection and inspection
 │   │   │   │   └── instructions/     # Editable documents owned by scopes
 │   │   │   └── platform/

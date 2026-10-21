@@ -68,9 +68,9 @@ The runner experiment is the first uncertainty to resolve. Defer broader tools, 
 
 ### Permissions and Decisions together
 
-Implement these as one end-to-end slice with separate responsibilities: [Permissions](../../specs/features/permissions.md) evaluates authority; Decisions records and presents requests for user input, including requests unrelated to permissions. Reuse the [selected evaluator](../features/permissions.md#selected-evaluator); settle the relevant defaults, conflict and authorization-lifetime questions before wiring execution.
+Scope clarified, 2026-10-14: specify [Permissions](../../specs/features/permissions.md) and [Decisions](../../specs/features/decisions.md) as separate general features with a shared handoff. Reuse the [selected evaluator](../features/permissions.md#selected-evaluator); settle their open behavior and continuation questions before implementation.
 
-Start with an Ash-proposed instruction edit: prepare the exact diff, evaluate permission, persist a Decision when required, wait through a restart, then recheck authority and the instruction revision before applying once. Exercise denial, cancellation, duplicate answers and changed targets. Explicit authorization must satisfy an ask rule without another question; approving one edit must not create a standing rule. Add the minimal rule editor and independent Decision list needed to operate this flow before expanding to more tools.
+An Ash-proposed instruction edit remains a later demonstration for this self-modification plan. It will consume the general contracts; its authority, review and application workflow are outside the current specification work.
 
 ### Recording feedback
 
@@ -94,7 +94,7 @@ Before committing to the transport, verify the installed version with a disposab
 
 - Introduce a minimal durable Decision entity independent of threads, linked to the Run/workspace. Support pending, approved, denied and cancelled outcomes; show the action, scope and target. Reuse it for Ash-proposed instruction changes.
 - Enforce scoped permissions in backend/tool dispatch, outside prompts. Routine edits/tests within a granted workspace proceed without per-file approval; broader access and applying a candidate require the appropriate Decision. Denial/revocation must prevent execution.
-- Add waiting as a deliberate Run state with transactional Decision resolution, duplicate-response protection and restart behavior. Waiting still owns the thread's active-work slot. Never resume a stale harness permission request by treating an old approval as fresh authority.
+- Use the general [Decision execution design](../features/decisions.md#execution-integration) for durable waiting and resumption. Never resume a stale harness permission request by treating an old approval as fresh authority.
 - Provide progress/Stop, diff, test evidence, preview and Decision controls. Bind approval to the exact candidate revision, target revision and action; changes invalidate it. Completion and requests for input get an in-app indicator; a general notification system can follow.
 
 ### Apply and revert

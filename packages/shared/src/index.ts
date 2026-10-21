@@ -38,6 +38,8 @@ export * from './contracts/recording.ts';
 export * from './contracts/organization.ts';
 export * from './contracts/tools.ts';
 export * from './contracts/video-understanding.ts';
+export * from './contracts/permissions.ts';
+export * from './contracts/decisions.ts';
 
 export { ZodError } from 'zod';
 

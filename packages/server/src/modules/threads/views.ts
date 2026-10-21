@@ -1,10 +1,11 @@
 import type { Artifact, Run } from '@prisma/client';
-import { InputPayload, MessagePayload, RequestPayload, DescriptionPayload, ToolArtifact, VideoArtifact, EngineArtifact, RunState, RunError, RunStatus, type ArtifactView, type RunView } from '@ash/shared';
+import { InputPayload, MessagePayload, RequestPayload, DescriptionPayload, ToolArtifact, VideoArtifact, EngineArtifact, PermissionEvaluation, RunState, RunError, RunStatus, type ArtifactView, type RunView } from '@ash/shared';
 
 export function artifactView(row:Artifact):ArtifactView {
   const payload = row.layer === 'input' ? InputPayload.parse(row.payload) : row.layer === 'surface' ? MessagePayload.parse(row.payload)
     : ['engine_request','engine_response','filter_result','route_result','act_plan','engine_error'].includes((row.payload as {type:string}).type) ? EngineArtifact.parse(row.payload)
     : (row.payload as {type?:string}).type === 'image_description' ? DescriptionPayload.parse(row.payload)
+    : (row.payload as {type?:string}).type === 'permission_evaluation' ? PermissionEvaluation.parse(row.payload)
     : (row.payload as {type?:string}).type === 'model_request' ? RequestPayload.parse(row.payload)
     : (row.payload as {type?:string}).type?.startsWith('video_') ? VideoArtifact.parse(row.payload) : ToolArtifact.parse(row.payload);
   return {...row,payload,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};

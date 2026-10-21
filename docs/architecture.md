@@ -30,7 +30,7 @@ The [data model](data-model.md) defines ownership, causal links, context capture
 
 `specs/data/model.dbml` is the design diagram before implementation. Column notes must state purpose, population/null conditions and any allowed mutations. Keep JSON payload contracts in the [data model](data-model.md#artifact-payloads).
 
-Keep its schema, committed migrations and the UML/DBML diagram synchronized in the same change. The Prisma schema describes intended application structure; migrations establish the database, including constraints that require additional SQL. Do not update one representation and leave the others stale.
+When implementing schema changes, keep Prisma, committed migrations and the DBML diagram synchronized in the same change. The Prisma schema describes intended application structure; migrations establish the database, including constraints that require additional SQL. Remove proposal markers only after migration and verification.
 
 1. Update and validate the Prisma schema using the pinned version's tooling; generate and review the migration, including SQL-only constraints.
 2. Apply migrations to a clean, isolated development database.

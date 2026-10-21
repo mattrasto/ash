@@ -6,7 +6,7 @@ Source: [HUMAN_SPEC.md](HUMAN_SPEC.md) and the user’s development agreement.
 
 Ash is a private personal agent: part companion, helper and second brain. It should be capable, concise, helpful and honest, with deep personal context and a carefully crafted, simple architecture.
 
-- **Distinct identity:** Ash is not the user. Drafting and sending/publishing follow the configurable defaults in [PERM-R02](features/permissions.md#rules), which supersede the overview's original prohibition.
+- **Distinct identity:** Ash is not the user. Drafting and sending/publishing follow the configurable defaults in [PERM-R02](features/permissions.md#permission-behavior), which supersede the overview's original prohibition.
 - **Cross-device presence:** desktop, mobile and suitable wearables; input/output and behavior adapt to the device. Desktop is described as voice-first and the main work surface.
 - **Background capability:** Ash can continue work in the background. The overview also requests computer/browser work while the user's computer is off; deployment and local-device limitations remain open (G02).
 - **User control:** topic/thread guidance is editable and initial incoming-item placement is autonomous under [ART-R12](features/artifacts.md#incoming-item-slice); later reorganization is suggested by default.
@@ -28,10 +28,10 @@ Ash is a private personal agent: part companion, helper and second brain. It sho
 | Artifact Chain | Source relationships from an input through processing to resulting artifacts; see ART-R07 for the single-source rule. This is not thread order. |
 | Artifact Log | Recorded Artifact Engine activity, stored as Artifacts. |
 | Instruction | An editable document owned by one Topic, Thread or global engine slot, using a common shape for the editor; see the accepted [instruction rules](features/instructions.md). |
-| Run | An Act workflow execution with inputs, status, a persisted checkpoint and resulting Artifacts; initially one response. See the [Run boundary](../docs/data-model.md#run-boundary). A retry is a new Run linked to the previous one. Durable waiting/resumption remains future scope. Not a task-list item. |
+| Run | An Act workflow execution with inputs, status, a persisted checkpoint and resulting Artifacts; initially one response. See the [Run boundary](../docs/data-model.md#run-boundary). A retry is a new Run linked to the previous one. Decision waits resume from saved tool progress; broader background scheduling remains future scope. Not a task-list item. |
 | Task | A user-visible item of work, assigned to the user, Ash or neither. Exists independently of threads and can link to them. |
 | Decision | A request for user input, including but not limited to permission. The overview's candidate table “Approvals” does not establish a separate product concept. |
-| Permission | A rule controlling access or action; [permission rules](features/permissions.md#rules) define effects, matchers and authorization. A Decision can request permission; the two are not interchangeable. |
+| Permission | A standing policy controlling access or action; [permissions](features/permissions.md#permission-behavior) define effects, matchers and authorization. A Decision can request permission; the two are not interchangeable. |
 | Notification | An Ash-created item drawing attention to information or work; distinct from its eventual delivery on a device. |
 | Live Thread | A special thread recording a Live Mode interaction; cannot be typed into or converted into a normal thread. Can be resumed and referenced from other threads. |
 | Context | Information supplied to Ash for a particular action, from instructions, thread and relevant other sources. |

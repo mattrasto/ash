@@ -3,8 +3,9 @@ import { open, opendir, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { ToolAction, ToolAuthorization, ToolReference, ToolResult, ToolJson } from '@ash/shared';
-import { registerTool, toolCitationId, ToolActionFailure, type ToolAvailability, type ToolContext, type ToolRuntime } from '../tools/contract.ts';
+import { modelContentText, type RequestPayload, type ToolAction, type ToolAuthorization, type ToolReference, type ToolResult, type ToolJson } from '@ash/shared';
+import { registerTool, toolCitationId, ToolActionFailure, ToolSuspension, type ToolAvailability, type ToolContext, type ToolRuntime } from '../tools/contract.ts';
+import { codeFilesystemScope } from '../permissions/defaults.ts';
 
 export const FilesystemOperation = z.enum(['list', 'read', 'glob', 'search']);
 type Operation = z.infer<typeof FilesystemOperation>;
@@ -22,45 +23,27 @@ const hash = (value: string | Buffer) => createHash('sha256').update(value).dige
 const inside = (root: string, path: string) => path === root || path.startsWith(root + (root.endsWith(sep) ? '' : sep));
 const operations: Operation[] = ['list', 'read', 'glob', 'search'];
 
-// Bounded wildcard matching: no regex engine or nested expansion. ** crosses directories.
-export function globMatch(pattern: string, value: string): boolean {
-  let previous = new Uint8Array(value.length + 1); previous[0] = 1;
-  for (let p = 0; p < pattern.length; p++) {
-    const character = pattern[p], double = character === '*' && pattern[p + 1] === '*';
-    if (double) p++;
-    if (double && pattern[p + 1] === '/') {
-      // **/ consumes zero or more complete directories, including in the middle of a pattern.
-      const current = previous.slice();
-      let reachable = false;
-      for (let i = 1; i <= value.length; i++) {
-        reachable ||= !!previous[i - 1];
-        if (reachable && value[i - 1] === '/') current[i] = 1;
-      }
-      previous = current; p++; continue;
-    }
-    const current = new Uint8Array(value.length + 1);
-    if (character === '*') current[0] = previous[0];
-    for (let i = 1; i <= value.length; i++) {
-      const allowed = double || value[i - 1] !== '/';
-      current[i] = character === '*' ? Number(!!previous[i] || (!!current[i - 1] && allowed))
-        : Number(!!previous[i - 1] && (character === '?' ? allowed : character === value[i - 1]));
-    }
-    previous = current;
-  }
-  return !!previous[value.length];
-}
+export { globMatch } from './pattern.ts';
+import { globMatch } from './pattern.ts';
 
-export async function loadFilesystemConfig(checkout: string): Promise<FilesystemConfig> {
+export async function loadFilesystemConfig(checkout: string, codeDirectory?:string): Promise<FilesystemConfig> {
+  let configuration:FilesystemConfig;
   try {
     const file = await open(join(checkout, '.ash-tools.json'), constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       if ((await file.stat()).size > 32768) throw new Error('Oversized configuration');
-      return FilesystemConfig.parse(JSON.parse(await file.readFile('utf8')));
+      configuration=FilesystemConfig.parse(JSON.parse(await file.readFile('utf8')));
     } finally { await file.close(); }
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, scopes: [] };
-    throw new FilesystemFailure('scope_configuration', 'Filesystem configuration is invalid; access is disabled.');
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT')configuration={ version: 1, scopes: [] };
+    else throw new FilesystemFailure('scope_configuration', 'Filesystem configuration is invalid; access is disabled.');
   }
+  if(codeDirectory){
+    const root=await realpath(codeDirectory);
+    // Explicit ancestors or an exact scope own their complete operation set.
+    if(!configuration.scopes.some(scope=>inside(resolve(scope.path),root)))configuration.scopes.push(codeFilesystemScope(root));
+  }
+  return configuration;
 }
 
 function validatePath(path: string) {
@@ -70,16 +53,16 @@ function validatePath(path: string) {
 function action(operation: Operation, path: string): ToolAction {
   return { operation: `filesystem.${operation}`, effects: ['read'], resources: [{ kind: 'filesystem', id: path, label: path }] };
 }
-async function allowed(context: ToolContext, operation: Operation, path: string) {
+async function allowed(context: ToolContext, operation: Operation, path: string, optional=false) {
   context.signal.throwIfAborted();
-  const decision = await context.authorize(action(operation, path));
+  const decision = await context.authorize(action(operation, path),{optional});
   if (decision.outcome !== 'allowed') throw new FilesystemFailure('access_denied', decision.message);
 }
 
-export function filesystemRuntime(configuration: () => Promise<FilesystemConfig>): ToolRuntime {
+export function filesystemRuntime(configuration: () => Promise<FilesystemConfig>,selection:'all'|'offline-demo'='all', policyManaged=false): ToolRuntime {
   const configurationIssue = { code: 'scope_configuration', message: 'Filesystem tools are unavailable. Fix .ash-tools.json: use valid operations and existing canonical scope paths.' };
   async function config() {
-    const parsed = FilesystemConfig.parse(await configuration());
+    const parsed = FilesystemConfig.extend({scopes:FilesystemConfig.shape.scopes.max(65)}).parse(await configuration());
     const seen = new Set<string>();
     for (const scope of parsed.scopes) {
       validatePath(scope.path); scope.path = resolve(scope.path);
@@ -106,14 +89,14 @@ export function filesystemRuntime(configuration: () => Promise<FilesystemConfig>
       const check = (path: string) => {
         const scopes = settings.scopes.filter(scope => inside(scope.path, path)).sort((a, b) => b.path.length - a.path.length);
         if (!scopes[0]?.operations.includes(operation)) return false;
-        return !scopes.some(scope => relative(scope.path, path).split(sep).some(name => scope.excludedNames.some(pattern => globMatch(pattern, name))));
+        return policyManaged || !scopes.some(scope => relative(scope.path, path).split(sep).some(name => scope.excludedNames.some(pattern => globMatch(pattern, name))));
       };
       if (!check(lexical)) return deny();
       // The lexical check prevents probing outside paths before canonical resolution.
       const canonical = await realpath(lexical);
       if (!check(canonical)) return deny();
     }
-    return { outcome: 'allowed', code: 'configured_scope', message: 'Covered by configured filesystem access.', configurationRevision, evaluator: 'not-performed' };
+    return { outcome: 'allowed', code: 'configured_scope', message: 'Covered by configured filesystem access.', configurationRevision, evaluator: 'not-performed',resourceAccess:'capability-only' };
   }
   const definitions = operations.map(operation => {
     const shape: z.ZodRawShape = operation === 'read' ? { path: z.string().max(4096), startLine: z.number().int().min(1).max(1000000), maxLines: z.number().int().min(1).max(500) }
@@ -142,8 +125,8 @@ export function filesystemRuntime(configuration: () => Promise<FilesystemConfig>
           if (resultBytes + bytes > 29000) { omissions.add('Result byte limit reached. Narrow the request.'); return false; }
           rows.push(text); if (reference) references.push(reference); resultBytes += bytes; return true;
         };
-        const read = async (target: string) => {
-          await allowed(context, operation, target);
+        const read = async (target: string, optional=false) => {
+          await allowed(context, operation, target, optional);
           const canonical = await realpath(target), before = await stat(canonical);
           if (!before.isFile()) throw new FilesystemFailure('unsupported_file', 'Only ordinary text files are readable.');
           // No final symlink, and compare descriptor/target identities before exposing any bytes.
@@ -152,7 +135,7 @@ export function filesystemRuntime(configuration: () => Promise<FilesystemConfig>
             const opened = await file.stat();
             if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino)
               throw new FilesystemFailure('source_changed', 'The file changed while opening. Retry the read.');
-            await allowed(context, operation, target);
+            await allowed(context, operation, target, optional);
             if (await realpath(target) !== canonical) throw new FilesystemFailure('source_changed', 'The file target changed.');
             const buffer = Buffer.alloc(Math.min(opened.size, 1048576, 33554432 - scanned));
             let offset = 0;
@@ -162,7 +145,7 @@ export function filesystemRuntime(configuration: () => Promise<FilesystemConfig>
               if (!count) break; offset += count;
             }
             const after = await file.stat(), current = await stat(canonical);
-            await allowed(context, operation, target);
+            await allowed(context, operation, target, optional);
             if (await realpath(target) !== canonical || current.ino !== opened.ino || current.dev !== opened.dev || after.size !== opened.size || after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs)
               throw new FilesystemFailure('source_changed', 'The file changed during reading. No content was returned.');
             scanned += offset;
@@ -193,9 +176,9 @@ export function filesystemRuntime(configuration: () => Promise<FilesystemConfig>
           if (args.startLine - 1 + selected.length < lines.length) omissions.add('Excerpt returned; later lines omitted.');
         } else {
           const visited = new Set<string>();
-          const walk = async (directory: string, root?: string): Promise<void> => {
+          const walk = async (directory: string, root?: string, optional=false): Promise<void> => {
             context.signal.throwIfAborted();
-            await allowed(context, operation, directory);
+            await allowed(context, operation, directory, optional);
             const canonical = await realpath(directory);
             const traversalRoot = root ?? canonical;
             if (visited.has(canonical)) return; visited.add(canonical);
@@ -207,27 +190,28 @@ export function filesystemRuntime(configuration: () => Promise<FilesystemConfig>
                 const current = await stat(canonical);
                 if (await realpath(directory) !== canonical || current.ino !== directoryIdentity.ino || current.dev !== directoryIdentity.dev)
                   throw new FilesystemFailure('source_changed', 'A directory changed during traversal.');
-                await allowed(context, operation, directory);
+                await allowed(context, operation, directory, optional);
                 if (++entries > 5000 || scanned >= 33554432 || rows.length >= (operation === 'search' ? 200 : 500) || resultBytes >= 28000) { omissions.add('Traversal or result limit reached. Narrow the request.'); return; }
                 const target = join(canonical, entry.name);
                 try {
-                  await allowed(context, operation, target);
+                  await allowed(context, operation, target, true);
                   const info = await stat(target), relativePath = relative(traversalRoot, target).split(sep).join('/');
                   if (operation === 'list') { if (!add(`${info.isDirectory() ? 'directory' : info.isFile() ? 'file' : 'unsupported'} ${target}`)) return; continue; }
-                  if (info.isDirectory()) { await walk(target, traversalRoot); continue; }
+                  if (info.isDirectory()) { await walk(target, traversalRoot, true); continue; }
                   const args = prepared.args as { pattern?: string | null; query?: string };
                   if (args.pattern && !globMatch(args.pattern, relativePath)) continue;
                   if (operation === 'glob') { if (!add(target)) return; continue; }
                   if (!info.isFile()) { omissions.add('Non-regular files were skipped.'); continue; }
-                  const file = await read(target);
+                  const file = await read(target,true);
                   const lines = file.text.split('\n');
                   for (let i = 0; i < lines.length; i++) if (lines[i].includes(args.query!)) {
                     if (rows.length >= 200 || !add(`${file.canonical}:${i + 1}: ${lines[i]}`, ref(file, lines[i], i + 1, i + 1))) { omissions.add('Match limit reached.'); return; }
                   }
                 } catch (error) {
                   context.signal.throwIfAborted();
+                  if(error instanceof ToolSuspension)throw error;
                   if ((error as {code?:string}).code === 'access_evidence_limit') throw error;
-                  omissions.add(error instanceof FilesystemFailure && error.code === 'access_denied' ? 'Entries outside configured access were omitted.' : 'Unreadable, changed or unsupported entries were omitted.');
+                  omissions.add(error instanceof FilesystemFailure && error.code === 'access_denied' ? 'Entries outside permitted access were omitted.' : 'Unreadable, changed or unsupported entries were omitted.');
                 }
               }
             } finally { await handle.close().catch(() => {}); }
@@ -238,9 +222,12 @@ export function filesystemRuntime(configuration: () => Promise<FilesystemConfig>
       },
     });
   });
-  async function availability(): Promise<ToolAvailability> {
+  async function availability(_runId?:string,_threadId?:string,request?:RequestPayload): Promise<ToolAvailability> {
     try {
       const resources = (await config()).scopes.filter(scope => scope.operations.length).map(scope => ({ kind: 'filesystem', id: scope.path, label: `${scope.path} (${scope.operations.join(', ')})` }));
+      // Canned filesystem demonstrations are for direct synthetic chat, not incoming sources.
+      // Ordinary synthetic chat keeps its streaming/cancellation path; live models see all available scopes.
+      if(selection==='offline-demo'&&request?.provider==='deterministic'&&(request.incoming||!/where|implement|source|file|search|code|\b(?:read|list|glob)\b/i.test(modelContentText(request.messages.filter(message=>message.role==='user').at(-1)?.content??''))))return {definitions:[],resources:[],issues:[]};
       return { definitions: resources.length ? definitions.map(tool => tool.definition) : [], resources, issues: [] };
     } catch { return { definitions: [], resources: [], issues: [configurationIssue] }; }
   }
