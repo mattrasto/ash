@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ThreadChange, type ApplicationChangeView, type ThreadLifecycle } from './visibility.ts';
 import { IncomingPayload, IncomingSource, EngineOutcome, EngineStage } from './artifacts.ts';
 import { ImageBlock, VideoBlock, VideoFile, TextBlock, ModelContent, type AttachmentView } from './attachments.ts';
 import { ToolRequest, ToolWorkflow, type ToolArtifact } from './tools.ts';
@@ -10,8 +11,7 @@ export const Uuid = z.string().uuid();
 export const ModelMode = z.enum(['normal', 'slow', 'fail', 'fail-before', 'empty']);
 export type ModelMode = z.infer<typeof ModelMode>;
 export const CreateThread = z.object({ id: Uuid, title: z.string().trim().min(1).max(160), topicId:Uuid.optional() }).strict();
-export const UpdateThread = z.object({title:z.string().trim().min(1).max(160).optional(),isArchived:z.boolean().optional()}).strict()
-  .refine(value=>Object.keys(value).length>0,'Choose a thread change.');
+export const UpdateThread = ThreadChange;
 export const SendMessage = z.object({ requestKey: Uuid, text: z.string().trim().max(4000), mode: ModelMode.default('normal'), attachmentIds:z.array(Uuid).default([]) }).strict()
   .refine(value=>value.text.length>0 || value.attachmentIds.length>0,'A message needs text or an attachment.')
   .refine(value=>new Set(value.attachmentIds).size===value.attachmentIds.length,'Duplicate attachment references.');
@@ -48,7 +48,7 @@ export const OpenAIOptions = z.object({
 const requestContent = {
   type: z.literal('model_request'),
   tools: ToolRequest.optional(),
-  purpose:z.enum(['image_summary','engine_filter','engine_route','engine_assess']).optional(),
+  purpose:z.enum(['image_summary','engine_filter','engine_route','engine_assess','thread_visibility','thread_naming']).optional(),
   incoming:z.object({inputArtifactId:Uuid,showResponse:z.boolean()}).strict().optional(),
   messages: z.array(z.object({ role: z.enum(['system', 'user', 'assistant']), content: ModelContent }).strict()),
   selection: z.object({
@@ -57,8 +57,10 @@ const requestContent = {
     composition:z.object({version:z.literal('response-v1'),messageIndex:z.number().int().nonnegative()}).strict().optional(),
     omissions:z.object({history:z.number().int().nonnegative(),notCompleted:z.number().int().nonnegative(),superseded:z.number().int().nonnegative()}).strict().optional(),
     artifacts: z.array(z.object({ id: Uuid, messageIndex: z.number().int() }).strict()),
+    changes:z.array(z.object({id:Uuid,messageIndex:z.number().int()}).strict()).optional(),
     omitted: z.array(z.object({ id: Uuid, reason: z.enum(['not-completed', 'superseded', 'context-limit']) }).strict()),
-    maxCharacters: z.number().int().positive(),
+    maxCharacters: z.number().int().positive().optional(),
+    itemWindow:z.number().int().positive().optional(), omittedItems:z.number().int().nonnegative().optional(),
     images:z.array(z.object({id:Uuid,artifactId:Uuid,representation:z.enum(['image','description']),reason:z.enum(['recent','history-window','image-budget','text-only']),summaryRunId:Uuid.nullable()}).strict()).optional(),
     videos:z.array(z.object({id:Uuid,artifactId:Uuid,original:VideoFile,representation:z.enum(['metadata','caption-transcript']),reason:z.enum(['understanding-unavailable','generated-evidence']),summaryRunId:Uuid.nullable().optional(),resultArtifactId:Uuid.optional()}).strict()).optional(),
   }).strict(),
@@ -74,7 +76,7 @@ export const EngineRequest=z.object({type:z.literal('engine_request'),stage:Engi
 export const EngineArtifact=z.union([EngineRequest,EngineOutcome,z.object({type:z.literal('engine_response'),text:z.string().max(16000),model:ModelExecution.optional()}).strict()]);
 export type ArtifactPayload =  z.infer<typeof EngineArtifact> | z.infer<typeof InputPayload> | MessagePayload | RequestPayload | z.infer<typeof DescriptionPayload> | ToolArtifact | PermissionEvaluation | z.infer<typeof VideoArtifact>;
 export interface ThreadView {
-  id: string; title: string; createdAt: string; updatedAt: string; isArchived:boolean;
+  id: string; title: string; createdAt: string; updatedAt: string; isArchived:boolean; isPinned?:boolean; lifecycle?:ThreadLifecycle; activeWork?:boolean; waitingWork?:boolean; unread?:boolean;
   latestRun?: {id:string;status:RunStatus;endedAt:string|null}|null;
 }
 export interface ArtifactView {
@@ -86,7 +88,7 @@ export interface RunView {
   status: RunStatus; state: z.infer<typeof RunState>; error: z.infer<typeof RunError> | null;
   createdAt: string; startedAt: string | null; endedAt: string | null;
 }
-export interface ThreadDetail { thread: ThreadView; artifacts: ArtifactView[]; runs: RunView[]; attachments?:AttachmentView[]; membership?:import('./organization.ts').MembershipView; decisions?:DecisionView[] }
+export interface ThreadDetail { thread: ThreadView; artifacts: ArtifactView[]; changes: ApplicationChangeView[]; runs: RunView[]; attachments?:AttachmentView[]; membership?:import('./organization.ts').MembershipView; decisions?:DecisionView[] }
 export interface InspectionView { selectedId: string; input: ArtifactView; artifacts: ArtifactView[]; runs: RunView[]; attachments?:AttachmentView[] }
 export interface ModelInfo {
   provider: 'deterministic' | 'openai'; model: string;

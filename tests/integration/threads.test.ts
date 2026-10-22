@@ -57,13 +57,14 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
         const indexes=await admin`SELECT indexname FROM pg_indexes WHERE tablename='runs'`;
         for (const index of ['one_active_run_per_thread','one_initial_run_per_input']) assert.ok(indexes.some(row=>row.indexname===index));
         const checks=await admin`SELECT conname FROM pg_constraint WHERE contype='c' AND conrelid IN ('runs'::regclass,'artifacts'::regclass)`;
-        assert.equal(checks.length,11);
+        assert.equal(checks.length,12);
+        assert.ok(checks.some(check=>check.conname==='artifacts_exclude_thread_management'));
         const columns=await admin`SELECT table_name,column_name,data_type,is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name IN ('topics','threads','thread_topics','artifacts','instructions','runs')`;
-        assert.equal(columns.length,44);
+        assert.equal(columns.length,46);
         await checkDiagram(admin,evidence);
       } finally {await admin.end();}
       await assert.rejects(db.$executeRawUnsafe('CREATE TABLE forbidden (id integer)'),/permission denied/);
-      assert.equal(await db.instruction.count(),7);
+      assert.equal(await db.instruction.count(),9);
       const serverRequire=createRequire(join(instance.checkout,'packages/server/package.json'));
       const difference=await exec(process.execPath,[serverRequire.resolve('prisma/build/index.js'),'migrate','diff','--from-url',cfg.databaseUrl,'--to-schema-datamodel','prisma/schema.prisma','--exit-code'],{cwd:join(instance.checkout,'packages/server')});
       assert.match(difference.stdout,/No difference detected/);
@@ -71,20 +72,20 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
     await scenarioStep(t, 'chat-organization',async()=>{
       const target=await newThread('New Thread');
       const run=await send(target,'A first message\nwith a useful title','slow');
-      assert.equal((await view(target)).thread.title,'A first message with a useful title');
-      const unicode=await newThread('New Thread');const named=await send(unicode,'🙂'.repeat(90),'empty');await settled(unicode,named.id);assert.equal((await view(unicode)).thread.title,'🙂'.repeat(79)+'…');
+      assert.equal((await view(target)).thread.title,'Untitled','Input text is never used as the placeholder title');
+      const unicode=await newThread('Untitled');const named=await send(unicode,'🙂'.repeat(90),'slow');assert.equal((await view(unicode)).thread.title,'Untitled');await settled(unicode,named.id);
       const before=(await view(target)).thread;
-      await api(`threads/${target}`,{title:'Renamed thread',isArchived:true});
+      await api(`threads/${target}`,{title:'Renamed thread',isArchived:true,requestId:randomUUID(),expectedVersion:before.lifecycle!.version});
       const archived=(await api<ThreadView[]>('threads')).find(thread=>thread.id===target)!;
       assert.equal(archived.isArchived,true);assert.equal(archived.title,'Renamed thread');
       assert.equal(archived.updatedAt,before.updatedAt);assert.equal(archived.latestRun?.id,run.id);
       assert.ok(['queued','running'].includes(archived.latestRun!.status));
-      await settled(target,run.id);assert.equal((await view(target)).artifacts.length,2);
-      await api(`threads/${target}`,{isArchived:false});
+      await settled(target,run.id);assert.equal((await view(target)).artifacts.filter(a=>a.payload.type==='message').length,2);
+      await api(`threads/${target}`,{isArchived:false,requestId:randomUUID(),expectedVersion:(await view(target)).thread.lifecycle!.version});
       const followup=await send(target,'Keep the manual title','normal');await settled(target,followup.id);
       assert.equal((await view(target)).thread.title,'Renamed thread');
       for(const body of [{title:' '},{isArchived:'yes'},{isPinned:true},{}])assert.equal((await request(`threads/${target}`,body)).status,400);
-      await assert.rejects(db.thread.update({where:{id:target},data:{isPinned:true}}),/permission denied/);
+      await db.thread.update({where:{id:target},data:{isPinned:true}});assert.equal((await view(target)).thread.isPinned,true);
     });
     await scenarioStep(t, 'chat-delivery',async()=>{
       threadId=await newThread('Persisted repair checklist');
@@ -166,7 +167,7 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
       const current=await send(target,'Latest '+ 'y'.repeat(3990),'empty');await settled(target,current.id);
       const captured=(await db.artifact.findUniqueOrThrow({where:{id:current.state.request_artifact_id}})).payload as RequestPayload;
       assert.ok(captured.selection.omissions!.history>0);
-      assert.ok(captured.messages.reduce((sum,message)=>sum+message.content.length,0)<=captured.selection.maxCharacters);
+      assert.ok(captured.messages.reduce((sum,message)=>sum+message.content.length,0)<=captured.selection.maxCharacters!);
       assert.ok(modelContentText(captured.messages.at(-1)!.content).startsWith('Latest'));
       assert.equal((await requestOversized()).status,400);
       async function requestOversized() {return request(`threads/${target}/messages`,{requestKey:randomUUID(),text:'z'.repeat(4001),mode:'empty'});}
@@ -211,7 +212,7 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
       const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
       await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
       await page.getByRole('button',{name:'New Thread',exact:true}).first().click();
-      await page.getByRole('button',{name:'Actions for New Thread',exact:true}).first().click();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
+      await page.getByRole('button',{name:'Actions for Untitled',exact:true}).first().click();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
       await page.getByLabel('Thread title').fill('Desktop thread');await page.getByRole('button',{name:'Save title',exact:true}).click();
       await page.getByRole('heading',{name:'Desktop thread',exact:true}).waitFor();
       await page.getByLabel('Message',{exact:true}).fill('Hello from Electron');await page.getByRole('button',{name:'Send message',exact:true}).click();
@@ -253,10 +254,10 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
       await page.locator('.transcript').hover();await page.mouse.wheel(0,-10000);
       await until(()=>page.locator('.transcript').evaluate(el=>el.scrollTop),top=>top<5);
       await page.getByRole('button',{name:'New Thread',exact:true}).first().click();
-      await page.getByRole('heading',{name:'New Thread',exact:true}).waitFor();
+      await page.getByRole('heading',{name:'Untitled',exact:true}).waitFor();
       await until(()=>page.getByLabel('Message',{exact:true}).evaluate(el=>el===document.activeElement),v=>v,1500);
       await page.getByLabel('Message',{exact:true}).fill('Automatically named thread');await page.getByLabel('Message',{exact:true}).press('Enter');
-      await page.getByRole('heading',{name:'Automatically named thread',exact:true}).waitFor();
+      await page.getByRole('article',{name:'User message',exact:true}).waitFor();
       await page.getByRole('button',{name:'Desktop thread',exact:true}).click();
       assert.equal(await page.getByLabel('Message',{exact:true}).inputValue(),'Line one\nL');
       // Draft selection is synchronous; history and its saved scroll position load afterward.

@@ -19,7 +19,7 @@ Ash is a private personal agent: part companion, helper and second brain. It sho
 | Term | Meaning / boundary |
 | --- | --- |
 | Topic | A semantic category used for both organization and context. A thread may link to zero or more topics. |
-| Thread | A continuing matter containing an ordered presentation of artifacts. Its UI sequence is not the processing history of a single input. |
+| Thread | A continuing matter containing an ordered presentation of Artifacts and selected application-history annotations. Its UI sequence is not the processing history of a single input. |
 | Artifact | An input or record produced by an Artifact Engine layer. See the accepted [artifact rules](features/artifacts.md); manual application edits do not require Artifacts. |
 | Input Artifact | The recorded origin of an input, including a user message or an external event. |
 | Act Artifact | A record of an action taken by Ash, such as generating a response or calling a tool. |
@@ -27,6 +27,7 @@ Ash is a private personal agent: part companion, helper and second brain. It sho
 | Reference Artifact | An entry pointing to another artifact so it can be visible in a different thread without duplicating ownership. |
 | Artifact Chain | Source relationships from an input through processing to resulting artifacts; see ART-R07 for the single-source rule. This is not thread order. |
 | Artifact Log | Recorded Artifact Engine activity, stored as Artifacts. |
+| Application change | A recorded control or state transition, separate from Artifact processing. Selected changes may appear as Thread annotations under [VIS-R13](features/thread-visibility.md#rules). |
 | Instruction | An editable document owned by one Topic, Thread or global engine slot, using a common shape for the editor; see the accepted [instruction rules](features/instructions.md). |
 | Run | An Act workflow execution with inputs, status, a persisted checkpoint and resulting Artifacts; initially one response. See the [Run boundary](../docs/data-model.md#run-boundary). A retry is a new Run linked to the previous one. Decision waits resume from saved tool progress; broader background scheduling remains future scope. Not a task-list item. |
 | Task | A user-visible item of work, assigned to the user, Ash or neither. Exists independently of threads and can link to them. |

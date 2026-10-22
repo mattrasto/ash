@@ -111,7 +111,7 @@ export class Incoming {
    if(choice.destination==='existing'){
     if(!input.targetThreadId){const capture=EngineRequest.parse((await tx.artifact.findUniqueOrThrow({where:{id:state.currentRequestId!}})).payload);const packet=JSON.parse(String(capture.request.messages.at(-1)!.content));if(!packet.candidates.some((c:{id:string})=>c.id===choice.threadId))throw new ModelFailure('invalid_target','Route selected a Thread outside the captured candidates.');}
     if(!await tx.thread.findUnique({where:{id:choice.threadId!}}))throw new ModelFailure('target_unavailable','The chosen Thread is no longer available.');state.threadId=choice.threadId;
-   }else{const now=new Date();state.threadId=randomUUID();await tx.thread.create({data:{id:state.threadId,title:choice.title,createdAt:now,updatedAt:now}});}
+   }else{const now=new Date();state.threadId=randomUUID();await tx.thread.create({data:{id:state.threadId,title:choice.title,initialTitle:choice.title,lifecycle:{titleMode:'automatic'},createdAt:now,updatedAt:now}});}
    parent=(await this.record(tx,parent,'route',RouteResult.parse({type:'route_result',choice,threadId:state.threadId,explicit:!!input.targetThreadId}),state.threadId)).id;state.stage='assess';
   }else{const plan=ActPlan.parse(value);parent=(await this.record(tx,parent,'act',plan,state.threadId)).id;state.planId=parent;state.stage='dispatch';}
   state.parentId=parent;state.currentRequestId=null;

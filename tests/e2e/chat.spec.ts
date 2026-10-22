@@ -50,6 +50,8 @@ test('chat-layout: Thread layout at normal and minimum window sizes', async ({ a
   await expect(page.getByTestId('run-status')).toHaveText('completed');
   await expect(page.getByTestId('message')).toHaveCount(2);
   await page.getByLabel('Message', { exact: true }).fill('A saved draft');
+  await expect(page.getByRole('heading',{name:'Hello Ash.',exact:true})).toBeVisible();
+  await expect(page.getByTestId('thread-event')).toHaveCount(1);
   await page.mouse.move(1, 1);
   for (const [width, height] of [[1040, 830], [740, 650]]) {
     await app.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setContentSize(size[0], size[1]), [width, height]);

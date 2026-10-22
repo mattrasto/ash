@@ -26,8 +26,10 @@ test('engine-desktop',async({ash})=>{
 
 test('engine-internal-desktop',async({ash})=>{
  const {page}=ash;
+ await page.evaluate(()=>{Object.defineProperty(document,'hasFocus',{value:()=>true});Object.defineProperty(document,'visibilityState',{get:()=> 'visible'});});
  await page.getByLabel('Message',{exact:true}).fill('Internal work tracking');await page.getByRole('button',{name:'Send message',exact:true}).click();
  await expect(page.getByRole('article',{name:'Ash response'})).toHaveCount(1);await expect(page.getByLabel('Stop response',{exact:true})).toHaveCount(0);
+ await expect.poll(()=>page.evaluate(()=>Object.keys(JSON.parse(localStorage.getItem('ash-read-runs')??'{}')).length)).toBe(1);
  const original=await page.evaluate(()=>JSON.parse(localStorage.getItem('ash-read-runs')??'{}'));
  await page.getByRole('button',{name:'Processing',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Incoming processing'});
  await dialog.getByRole('button',{name:'Add synthetic item'}).click();await page.getByLabel('Synthetic source text').fill('Internal work: summarize an incoming update');await dialog.getByRole('button',{name:'Process item',exact:true}).click();

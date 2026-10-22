@@ -140,7 +140,8 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
     await scenarioStep(t, 'openai-budget',async()=>{
       const before=await api<ThreadDetail>(`threads/${target}`);
       await stopInstance(ws,instance.id);await startInstance(ws,instance.id,{headless:true,modelSessionId:session.id});
-      assert.deepEqual(await api<ThreadDetail>(`threads/${target}`),before);
+      const after=await api<ThreadDetail>(`threads/${target}`);
+      assert.deepEqual(after,{...before,thread:{...before.thread,lifecycle:{...before.thread.lifecycle!,namedCount:before.thread.lifecycle!.messages,pendingAt:null,kind:before.thread.lifecycle!.kind==='pending'?'failed':before.thread.lifecycle!.kind}}});
       const info=await api<object>('info');assert.ok(!JSON.stringify(info).includes('synthetic-private-key'));
       const spent={...session,id:id(),expiresAt:new Date(Date.now()+60000).toISOString(),maxCalls:1};
       await createSession(instance,spent);

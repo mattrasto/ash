@@ -16,7 +16,7 @@ Asha's data model does not establish Ash's topic membership or recovery contract
 
 - Treat Listen/Input/Filter/Route/Act/Surface as logical stages within the backend.
 - Explicitly targeted user text bypasses Filter/Route; its Input retains the selected Thread. Incoming source items follow [ART-R11–16](../specs/features/artifacts.md#incoming-item-slice). Intake checkpoints are separate from Act Runs; action work reuses the existing executor.
-- Store current state directly; application audit history is deferred. Manual edits do not require engine Artifacts.
+- Store current state directly. [Thread visibility/naming](../specs/features/thread-visibility.md#rules) keeps assessment captures and application changes outside Artifacts; its timeline annotations do not enter conversational context. Broader application history is deferred.
 - Capture model inputs before dispatch and retain Artifact source links for inspection.
 - Give commands stable identities to prevent duplicates on transport retry. A deliberate execution retry creates a linked Run.
 - Start with one backend owning database-backed execution; record interruptions instead of automatically repeating work. Broader scheduling and worker takeover require separate design.

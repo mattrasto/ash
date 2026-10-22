@@ -69,6 +69,6 @@ The editor distinguishes routing guidance from response guidance. Applicability 
 
 ## Deferred
 
-Explicit references to prior messages/images (CTX-R01 and TC04–05 reserved), organization operations and inferred membership, generated titles, embeddings, semantic memory, automatic summaries, instruction edit history and Ash-authored instruction changes. No artifact moves/split/merge, general permissions UI, Codex integration or self-modification. Existing thread naming behavior remains unchanged; further title work belongs to visibility.
+Explicit references to prior messages/images (CTX-R01 and TC04–05 reserved), organization operations and inferred membership, embeddings, semantic memory, automatic summaries, instruction edit history and Ash-authored instruction changes. No artifact moves/split/merge, general permissions UI, Codex integration or self-modification. Automatic titles are specified in [Thread visibility and naming](thread-visibility.md).
 
 Incoming-item routing uses [ART-R12–13](artifacts.md#incoming-item-slice); its bounded candidate discovery is separate from the response retrieval rules above.

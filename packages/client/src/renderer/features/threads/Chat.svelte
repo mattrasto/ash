@@ -1,9 +1,15 @@
 <script lang="ts">
+  import ThreadEvent from './ThreadEvent.svelte';
+  import { DraftPresenceSync } from './drafts';
   import { onMount, tick } from 'svelte';
-  import { isActive, isVideoAttachment,formatVideoDuration, modelContentText, IMAGE_LIMITS, VIDEO_LIMITS, type RecordingState,type RecordingFile, type AttachmentView, type ArtifactView, type ThreadDetail, type InspectionView, type MessagePayload, type ModelMode, type PreviewInfo, type RequestPayload, type RunView, type ThreadView } from '@ash/shared';
+  import { isActive, isVideoAttachment,formatVideoDuration, modelContentText, IMAGE_LIMITS, VIDEO_LIMITS, type AssessmentDetail,type ApplicationChangeView,type ThreadChange,type RecordingState,type RecordingFile, type AttachmentView, type ArtifactView, type ThreadDetail, type InspectionView, type MessagePayload, type ModelMode, type PreviewInfo, type RequestPayload, type RunView, type ThreadView } from '@ash/shared';
   import Processing from '../artifacts/Processing.svelte';
   let processing=$state(false);
   import Sidebar from './Sidebar.svelte';
+  import Visibility from './Visibility.svelte';
+  let visibilityId=$state('');
+  let lastEdit=$state<{id:string;version:number}|null>(null);
+  type Change=Omit<ThreadChange,'requestId'|'expectedVersion'>;
   import PreviewBar from '../../app/PreviewBar.svelte';
   import Message from './Message.svelte';
   import ToolInspection from './ToolInspection.svelte';
@@ -34,6 +40,8 @@
   let selected = $state('');
   let detail = $state<ThreadDetail | null>(null);
   let drafts = $state<Record<string,string>>({});
+  let draftPresence:DraftPresenceSync|undefined;
+  let draftsRestored=false;
   let draftImages=$state<Record<string,DraftImage[]>>({});
   let viewer=$state<{images:AttachmentView[];index:number;startSeconds?:number}|null>(null);
   let fileInput=$state<HTMLInputElement>(),textarea=$state<HTMLTextAreaElement>();
@@ -65,17 +73,17 @@
   let recording=$state<RecordingState|null>(null),recordBusy=$state(false),recordingNotice=$state(''),recordingAvailable=$state(false);
   let recordingThread='',captureMic=$state(true),hoveredDraft=$state<string|null>(null),reducedMotion=$state(false);
   async function startRecording(){
-    if(recorder||recordBusy||!selected)return;recordBusy=true;recordingNotice='';recordingThread=selected;
+    if(recorder||recordBusy||!selected)return;recordBusy=true;recordingNotice='';recordingThread=selected;saveLocal();
     const handle=recordScreen(recordingThread,captureMic,()=>void stopRecording());recorder=handle;
     try{await handle.ready;}catch(e){if(recorder===handle){recorder=undefined;recordBusy=false;recordingNotice=`Could not start recording: ${(e as Error).message}`;}}
-    if(recorder===handle)recordBusy=false;
+    if(recorder===handle)recordBusy=false;saveLocal();
   }
   async function stopRecording(discard=false){
     if(!recorder)return;const handle=recorder;recorder=undefined;recordBusy=true;
     const automatic=recording?.remainingMs===0;
     try{if(discard){await handle.discard();recordingNotice='Recording discarded.';}else{const file=await handle.stop();if(file){addRecording(file);recordingNotice=file.incomplete?'Recording interrupted. An incomplete clip was saved to the draft.':automatic?'Recording stopped at its deadline and was saved to the draft.':'Recording saved to the draft.';}else recordingNotice='Recording cancelled.';}}
     catch(e){recordingNotice=`Recording could not finish: ${(e as Error).message}. Recoverable media will be offered when Ash reopens.`;}
-    finally{recording=null;recordBusy=false;}
+    finally{recording=null;recordBusy=false;saveLocal();}
   }
   function addRecording(file:RecordingFile){
     const existing=Object.values(draftImages).flat().some(item=>item.id===file.id);if(existing)return;
@@ -83,6 +91,10 @@
   }
   let inspection = $state<InspectionView | null>(null);
   let inspectedId = $state('');
+  let inspectionKind=$state<'artifact'|'assessment'|'change'>('artifact');
+  let assessmentInspection=$state<AssessmentDetail|null>(null),changeInspection=$state<ApplicationChangeView|null>(null);
+  const timeline=$derived([...(detail?.artifacts??[]).map(artifact=>({kind:'artifact' as const,id:artifact.id,createdAt:artifact.createdAt,artifact})),...(detail?.changes??[]).flatMap(change=>change.events.flatMap((event,index)=>['archived','unarchived','renamed'].includes(event.event)?[{kind:'change' as const,id:change.id+':'+index,createdAt:change.createdAt,change,event}]:[]))].sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||a.id.localeCompare(b.id)));
+  const firstName=$derived(timeline.find(entry=>entry.kind==='change'&&entry.event.event==='renamed')?.id);
   let transcript: HTMLElement;
 
   let requestSequence = 0,threadRevision=0;
@@ -91,6 +103,8 @@
   const inspected = $derived(inspection?.artifacts.find(artifact => artifact.id === inspectedId));
   const inspectionRun = $derived(inspection?.runs.find(run => run.id === inspected?.runId));
   const captured = $derived.by(()=>{
+    if(inspectionKind==='assessment')return assessmentInspection?.request;
+    if(inspectionKind!=='artifact')return undefined;
     if(inspected?.payload.type==='model_request')return inspected.payload;
     if(inspected?.payload.type==='engine_request')return inspected.payload.request;
     let requestId=inspectionRun?.state.tools?.rounds.at(-1)?.requestId??inspectionRun?.state.request_artifact_id;
@@ -114,6 +128,15 @@
     localStorage.setItem('ash-chat-retries',JSON.stringify(retryCommands));
     localStorage.setItem('ash-chat-selected',selected);
     localStorage.setItem('ash-chat-images',JSON.stringify(Object.fromEntries(Object.entries(draftImages).map(([id,items])=>[id,items.map(({preview,...item})=>item)]))));
+    void syncDrafts().catch(()=>{}); // Reconnect polling retries the persisted presence command.
+  }
+  function syncDrafts(){
+    const present=new Set(Object.keys(drafts).filter(id=>drafts[id].trim()));
+    for(const [id,items] of Object.entries(draftImages))if(items.length)present.add(id);
+    for(const id of Object.keys(pending))present.add(id);
+    if(recording)present.add(recording.threadId);
+    if(recordBusy&&recordingThread)present.add(recordingThread);
+    return draftPresence?.sync(present,threads,draftsRestored)??Promise.resolve();
   }
   function openImages(images:AttachmentView[],index:number){viewer={images,index};}
   async function openVideo(id:string,startSeconds:number){
@@ -213,30 +236,47 @@
     if(phase==='leave'){dragDepth=Math.max(0,dragDepth-1);isDragOver=dragDepth>0;}
     if(phase==='drop'){dragDepth=0;isDragOver=false;if(event.dataTransfer.files.length)addFiles(event.dataTransfer.files);}
   }
-  function scroll(){if(decisionsOpen)return;scrolling?.scroll();clearTimeout(scrollTimer);scrollTimer=setTimeout(rememberScroll,200);}
+  function scroll(){if(decisionsOpen)return;scrolling?.scroll();void acknowledge();clearTimeout(scrollTimer);scrollTimer=setTimeout(rememberScroll,200);}
   function rememberScroll(){if(selected&&!restoring&&scrolling&&!decisionsOpen){scrollPositions[selected]=scrolling.position();localStorage.setItem('ash-chat-scroll',JSON.stringify(scrollPositions));}}
   function latest(){scrolling?.latest();rememberScroll();}
   function autosize(){if(textarea){textarea.style.height='auto';textarea.style.height=`${Math.min(240,window.innerHeight*.3,Math.max(30,textarea.scrollHeight))}px`;}}
   $effect(()=>{drafts[selected];selected;textarea;let current=true;void tick().then(()=>{if(current)autosize();});return()=>{current=false;};});
   $effect(()=>{if(!textarea)return;let width=0;const observer=new ResizeObserver(entries=>{const next=entries[0].contentRect.width;if(next!==width){width=next;autosize();}});observer.observe(textarea);return()=>observer.disconnect();});
   function toggleSidebar(){sidebarOpen=!sidebarOpen;localStorage.setItem('ash-sidebar-open',String(sidebarOpen));}
-  function closeInspector(){inspectedId='';inspection=null;inspectionFocus?.focus({preventScroll:true});}
+  function closeInspector(){inspectedId='';inspection=null;assessmentInspection=null;changeInspection=null;inspectionFocus?.focus({preventScroll:true});}
   function key(event:KeyboardEvent){
     if(viewer||document.querySelector('dialog[open]'))return;
+    if(event.key==='Escape'&&visibilityId){event.preventDefault();visibilityId='';return;}
     if(event.key==='Escape'&&decisionsOpen){event.preventDefault();closeDecisions();return;}
     if(event.key==='Escape'&&inspectedId){event.preventDefault();closeInspector();}
     if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='n'){event.preventDefault();if(connected)void createThread();}
     if((event.metaKey||event.ctrlKey)&&event.key==='\\'){event.preventDefault();toggleSidebar();}
   }
-  async function updateThread(id:string,change:{title?:string;isArchived?:boolean}){
+  async function updateThread(id:string,change:Change,expectedVersion?:number){
+    const listed=threads.find(t=>t.id===id),opened=detail?.thread.id===id?detail.thread:undefined;
+    const before=opened&&(!listed||(opened.lifecycle?.version??0)>=(listed.lifecycle?.version??0))?opened:listed;if(!before)return false;
     threadRevision++;
     try{
-      await api(`threads/${id}`,change);
-      threads=threads.map(thread=>thread.id===id?{...thread,...change}:thread);
-      if(detail?.thread.id===id)detail={...detail,thread:{...detail.thread,...change}};
+      const saved=await api<ThreadView>(`threads/${id}`,{...change,requestId:crypto.randomUUID(),expectedVersion:expectedVersion??before.lifecycle?.version??0});
+      threads=threads.map(thread=>thread.id===id?{...thread,...saved}:thread);
+      if(detail?.thread.id===id)detail={...detail,thread:{...detail.thread,...saved}};
+      lastEdit=change.undo?null:{id,version:saved.lifecycle!.version};
       if(change.isArchived&&selected===id){const next=threads.find(thread=>!thread.isArchived);if(next)await selectThread(next.id);else await createThread();}
       await refresh();return true;
     }catch(e){error=(e as Error).message;return false;}finally{threadRevision++;}
+  }
+  const seenPending=new Set<string>();
+  async function acknowledge(){
+    const value=detail,cursor=value?.thread.lifecycle?.unread;
+    if(!value||!cursor||cursor<=(value.thread.lifecycle?.seen??0)||selected!==value.thread.id||!document.hasFocus()||document.visibilityState!=='visible'||restoring||decisionsOpen||settings||visibilityId||inspectedId||processing||viewer)return;
+    const messages=content?.querySelectorAll('[data-testid="message"]');
+    const last=messages?.item(messages.length-1)?.getBoundingClientRect(),viewport=transcript?.getBoundingClientRect();
+    if(!last||!viewport||last.bottom>viewport.bottom+2||last.bottom<viewport.top)return;
+    const key=value.thread.id+':'+cursor;if(seenPending.has(key))return;seenPending.add(key);
+    try{await api(`threads/${value.thread.id}/seen`,{cursor});
+      const last=value.runs.filter(run=>!isActive(run.status)&&!(value.artifacts.every(a=>a.runId!==run.id))).at(-1);
+      if(last){readRuns[value.thread.id]=last.id;localStorage.setItem('ash-read-runs',JSON.stringify(readRuns));}
+    }catch{}finally{seenPending.delete(key);}
   }
   async function loadThread(id:string) {
     const sequence = ++requestSequence;
@@ -245,7 +285,6 @@
     if (selected !== id || sequence !== requestSequence || revision!==threadRevision) return;
     const initial=detail===null;
     detail = value;
-    const last=threads.find(thread=>thread.id===id)?.latestRun;if(last&&!isActive(last.status)&&readRuns[id]!==last.id){readRuns[id]=last.id;localStorage.setItem('ash-read-runs',JSON.stringify(readRuns));}
     if(initial){await tick();autosize();scrolling?.restore(scrollPositions[id]);restoring=false;}
     const delivery = pending[id];
     if (delivery && (value.runs.some(run => run.requestKey === delivery.requestKey)||value.artifacts.some(artifact=>artifact.sourceId===delivery.requestKey))) {
@@ -256,10 +295,10 @@
     for (const [runId,command] of Object.entries(retryCommands)) {
       if (value.runs.some(run=>run.requestKey===command.requestKey)) { delete retryCommands[runId]; saveLocal(); }
     }
-    await tick();scrolling?.layout();
+    await tick();scrolling?.layout();if(selected===id&&sequence===requestSequence&&revision===threadRevision)void acknowledge();
   }
   async function selectThread(id:string) {
-    rememberScroll();decisionsOpen=false;restoring=true;selected = id; detail = null; inspection = null; inspectedId = ''; error = '';jumpVisible=false; saveLocal();
+    rememberScroll();decisionsOpen=false;restoring=true;selected = id; detail = null; inspection = null; assessmentInspection=null;changeInspection=null;inspectedId = ''; error = '';jumpVisible=false; saveLocal();
     try { await loadThread(id);await tick();autosize(); } catch (e) { error = (e as Error).message; }
   }
   async function refresh() {
@@ -270,6 +309,7 @@
       const listed=await api<ThreadView[]>('threads');
       if(revision!==threadRevision)return;
       threads=listed;
+      await syncDrafts();
       topics=await api<TopicView[]>('topics');
       decisions=await api<DecisionView[]>('decisions');
       if(revision!==threadRevision)return;
@@ -280,7 +320,7 @@
         try{const attachment=await api<AttachmentView>(`attachments/${item.id}`);checkedDrafts.add(item.id);draftImages[thread]=(draftImages[thread]??[]).map(a=>a.id===item.id?{...a,attachment}:a);applyRecordingDraft(thread,item.id,attachment);}
         catch(e){if(e instanceof ApiError&&e.status===404)draftImages[thread]=(draftImages[thread]??[]).map(a=>a.id===item.id?{...a,status:'error',error:'This upload expired. Choose the image again.'}:a);}
       }
-      if (inspectedId && inspection?.runs.some(run=>isActive(run.status))) await inspect(inspectedId);
+      if (inspectedId && (inspection?.runs.some(run=>isActive(run.status))||assessmentInspection?.status==='running')) await inspect(inspectedId,inspectionKind);
       connected = true;
       if(!threads.length&&!creating)await createThread(pendingThread?.topicId);
     } catch { connected = false; }
@@ -289,7 +329,7 @@
     if (creating||!connected) return;
     creating = true; error = '';threadRevision++;
     const command = pendingThread && pendingThread.topicId === topicId
-      ? pendingThread : {id:crypto.randomUUID(),title:'New Thread',...(topicId?{topicId}:{})};
+      ? pendingThread : {id:crypto.randomUUID(),title:'Untitled',...(topicId?{topicId}:{})};
     pendingThread = command; localStorage.setItem('ash-chat-new-thread',JSON.stringify(command));
     try { await api('threads',command); topics=await api<TopicView[]>('topics'); pendingThread = null; localStorage.removeItem('ash-chat-new-thread'); await selectThread(command.id);threads=await api<ThreadView[]>('threads'); }
     catch (e) {
@@ -315,12 +355,22 @@
       error = (e as Error).message;
     } finally { submitting = false; }
   }
-  async function inspect(id:string) {
+  async function inspect(id:string,kind:'artifact'|'assessment'|'change'='artifact') {
     decisionsOpen=false;
     if(!inspectedId)inspectionFocus=document.activeElement as HTMLElement;
-    inspectedId = id;
-    try { const value = await api<InspectionView>(`artifacts/${id}`); if (inspectedId === id) inspection = value; }
-    catch (e) { error = (e as Error).message; }
+    if(inspectionKind!==kind){inspection=null;assessmentInspection=null;changeInspection=null;}
+    else if(kind!=='artifact'&&inspectedId!==id){assessmentInspection=null;changeInspection=null;}
+    inspectedId=id;inspectionKind=kind;
+    try {
+      if(kind==='artifact'){const value=await api<InspectionView>(`artifacts/${id}`);if(inspectedId===id&&inspectionKind===kind)inspection=value;}
+      else if(kind==='assessment'){const value=await api<AssessmentDetail>(`thread-assessments/${id}`);if(inspectedId===id&&inspectionKind===kind)assessmentInspection=value;}
+      else {const value=await api<ApplicationChangeView>(`application-changes/${id}`);if(inspectedId===id&&inspectionKind===kind)changeInspection=value;}
+    }catch(e){error=(e as Error).message;}
+  }
+  async function openAssessmentSource(id:string){
+    // Migrated captures retain historical IDs; former controls/notices now resolve as changes.
+    if(assessmentInspection?.applicationSourceIds.includes(id))await inspect(id,'change');
+    else await openSource(id);
   }
   async function openSource(id:string) {
     try {
@@ -335,50 +385,63 @@
     actionBusy[run.id] = true; error = '';
     const command = action === 'retry' ? (retryCommands[run.id] ?? {requestKey:crypto.randomUUID(),mode}) : {};
     if (action === 'retry') { retryCommands[run.id] = command as {requestKey:string;mode:ModelMode}; saveLocal(); }
-    try { await api(`runs/${run.id}/${action}`,command); delete retryCommands[run.id]; saveLocal(); if (selected === run.threadId) await loadThread(selected); if (inspectedId) await inspect(inspectedId); }
+    try { await api(`runs/${run.id}/${action}`,command); delete retryCommands[run.id]; saveLocal(); if (selected === run.threadId) await loadThread(selected); if (inspectedId) await inspect(inspectedId,inspectionKind); }
     catch (e) { if (e instanceof ApiError && e.status && e.status < 500) { delete retryCommands[run.id]; saveLocal(); } error = (e as Error).message; }
     finally { actionBusy[run.id] = false; }
   }
   function associatedRun(artifact:ArtifactView) { return detail?.runs.find(run => run.id === artifact.runId); }
   function outcomes(inputId:string) { return detail?.runs.filter(run => run.inputArtifactId === inputId && !run.state.response_artifact_id) ?? []; }
   onMount(() => {
+    let disposed = false; let timer: ReturnType<typeof setTimeout>;
+    draftPresence=new DraftPresenceSync((id,command)=>api(`threads/${id}/draft`,command));
     try { pendingThread = JSON.parse(localStorage.getItem('ash-chat-new-thread') ?? 'null'); drafts = JSON.parse(localStorage.getItem('ash-chat-drafts') ?? '{}'); pending = JSON.parse(localStorage.getItem('ash-chat-pending') ?? '{}'); retryCommands = JSON.parse(localStorage.getItem('ash-chat-retries') ?? '{}'); selected = localStorage.getItem('ash-chat-selected') ?? ''; } catch { drafts = {}; pending = {}; }
     try{draftImages=JSON.parse(localStorage.getItem('ash-chat-images')??'{}');for(const thread of Object.keys(draftImages))draftImages[thread]=draftImages[thread].map(image=>image.status==='uploading'?{...image,status:'error',error:'Upload interrupted. Choose the image again.'}:image);}catch{draftImages={};}
     try{readRuns=JSON.parse(localStorage.getItem('ash-read-runs')??'{}');scrollPositions=JSON.parse(localStorage.getItem('ash-chat-scroll')??'{}');sidebarOpen=localStorage.getItem('ash-sidebar-open')!=='false';}catch{}
     captureMic=localStorage.getItem('ash-recording-microphone')!=='false';const motion=matchMedia('(prefers-reduced-motion: reduce)');reducedMotion=motion.matches;const motionChanged=()=>reducedMotion=motion.matches;motion.addEventListener('change',motionChanged);
     recordingAvailable=!!window.ashRecording;
-    const offState=window.ashRecording?.onState(value=>{recording=value;})??(()=>{});
+    let observedRecording!:()=>void;
+    const recordingReady=new Promise<void>(resolve=>observedRecording=resolve);
+    const offState=window.ashRecording?.onState(value=>{recording=value;saveLocal();observedRecording();})??(()=>{});
+    if(!window.ashRecording)observedRecording();
     const offControl=window.ashRecording?.onControl(action=>void stopRecording(action==='discard'))??(()=>{});
-    void window.ashRecording?.recover().then(files=>{for(const file of files){const draft=Object.values(draftImages).flat().find(item=>item.id===file.id);if(!draft)addRecording(file);else if(draft.status!=='ready')queueUpload(file.threadId,file.id);else void window.ashRecording.discard(file.id).catch(()=>{});}}).catch(()=>{});
+    void Promise.all([window.ashRecording?.recover()??Promise.resolve([]),recordingReady]).then(([files])=>{
+      if(disposed)return;
+      for(const file of files){const draft=Object.values(draftImages).flat().find(item=>item.id===file.id);if(!draft)addRecording(file);else if(draft.status!=='ready')queueUpload(file.threadId,file.id);else void window.ashRecording.discard(file.id).catch(()=>{});}
+      draftsRestored=true;void syncDrafts().catch(()=>{});
+    }).catch(()=>{if(!disposed)recordingNotice='Saved recordings could not be recovered. Reload to retry.';});
     scrolling=new ThreadScroll(transcript,content,spacer,visible=>jumpVisible=visible);
-    let disposed = false; let timer: ReturnType<typeof setTimeout>;
     const poll = async () => { await refresh(); if (!disposed) timer = setTimeout(poll,active ? 150 : 800); };
     void poll();
     return () => { disposed = true;motion.removeEventListener('change',motionChanged);offState();offControl();void recorder?.discard(); clearTimeout(timer); requestSequence++;scrolling?.dispose();clearTimeout(scrollTimer);for(const local of localFiles.values()){local.xhr?.abort();if(local.preview)URL.revokeObjectURL(local.preview);} };
   });
 </script>
 
-<svelte:window onkeydown={key} onresize={autosize}/>
+<svelte:window onfocus={()=>void acknowledge()} onkeydown={key} onresize={autosize}/>
 <svelte:head><title>Ash — {info?.source ? info.source.branch ?? `Detached ${info.source.revision}` : 'Preview'} — {decisionsOpen?'Decisions':detail?.thread.title ?? 'Chat'}</title></svelte:head>
 <div class="preview-shell" style={`--accent:hsl(${hue} 29% 37%);--tint:hsl(${hue} 24% 92%)`}>
 <PreviewBar {info}/>
 <div class="shell">
-  {#if sidebarOpen}<Sidebar {threads} {topics} {api} onChanged={refresh} onInstructions={openSettings} onDecisions={openDecisions} decisionsActive={decisionsOpen} pendingDecisions={decisions.filter(d=>d.status==='pending').length} {selected} {connected} {creating} {readRuns} onSelect={selectThread} onCreate={createThread} onUpdate={updateThread} onClose={toggleSidebar}/>{/if}
+  {#if sidebarOpen}<Sidebar {threads} {topics} {api} onChanged={refresh} onInstructions={openSettings} onDecisions={openDecisions} decisionsActive={decisionsOpen} pendingDecisions={decisions.filter(d=>d.status==='pending').length} {selected} {connected} {creating} {readRuns} onSelect={selectThread} onCreate={createThread} onUpdate={updateThread} onVisibility={id=>visibilityId=id} onClose={toggleSidebar}/>{/if}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="main-column" class:covered={decisionsOpen} ondragenter={(e)=>drag(e,'enter')} ondragover={(e)=>drag(e,'over')} ondragleave={(e)=>drag(e,'leave')} ondrop={(e)=>drag(e,'drop')}>
     {#if isDragOver}<div class="drop-overlay"><strong>Drop images or videos here</strong><span>PNG, JPEG, WebP, MP4, MOV or WebM</span></div>{/if}
-    <header>{#if !sidebarOpen}<button class="icon-button" aria-label="Show sidebar" title="Show sidebar" onclick={toggleSidebar}><Icon name="sidebar"/></button>{/if}<div class="heading"><span class="eyebrow">THREAD</span><h1>{detail?.thread.title ?? 'New Thread'}</h1>{#if detail?.thread.isArchived}<span class="archived-label">Archived</span>{/if}</div><div class="header-actions"><div class="header-controls"><button class="settings-button" disabled={!connected} onclick={()=>processing=true}>Processing</button><button class="settings-button" disabled={!connected} onclick={()=>openSettings()}>Settings</button></div><span class="connection" data-testid="connection"><i class:offline={!connected}></i>{connected ? 'Connected' : 'Reconnecting…'}</span></div></header>
+    {#if lastEdit}<div class="recording-notice" role="status">Thread updated. <button onclick={()=>lastEdit&&void updateThread(lastEdit.id,{undo:true},lastEdit.version)}>Undo</button><button aria-label="Dismiss undo" onclick={()=>lastEdit=null}>×</button></div>{/if}
+    <header>{#if !sidebarOpen}<button class="icon-button" aria-label="Show sidebar" title="Show sidebar" onclick={toggleSidebar}><Icon name="sidebar"/></button>{/if}<div class="heading"><span class="eyebrow">THREAD</span><h1>{detail?.thread.title ?? 'Untitled'}</h1>{#if detail?.thread.isArchived}<span class="archived-label">Archived</span>{/if}</div><div class="header-actions"><div class="header-controls"><button class="settings-button" disabled={!connected} onclick={()=>processing=true}>Processing</button><button class="settings-button" disabled={!connected} onclick={()=>openSettings()}>Settings</button></div><span class="connection" data-testid="connection"><i class:offline={!connected}></i>{connected ? 'Connected' : 'Reconnecting…'}</span></div></header>
     {#if detail}<div class="topic-strip" aria-label="Thread Topics">{#each detail.membership?.topics??[] as topic}<span>{topic.name}</span>{:else}<span>No Topics</span>{/each}</div>{/if}
     <div class="model-banner"><span class="model-dot"></span>{#if info?.model?.provider === 'openai'}OpenAI · {info.model.model}{#if info.model.session}<span>· {info.model.session.callsUsed}{#if info.model.session.maxCalls !== null} / {info.model.session.maxCalls}{/if} calls{#if info.model.session.expiresAt !== null} · expires {new Date(info.model.session.expiresAt).toLocaleTimeString()}{/if}</span>{/if}{:else}Deterministic test model <span>· No external calls</span>{/if}</div>
     {#if error}<div class="error" role="alert">{error}</div>{/if}
     <main class="transcript" bind:this={transcript} onscroll={scroll} onwheel={e=>scrolling?.intent(e.deltaY<0)}><div class="messages" bind:this={content}>
       {#if !detail}<div class="empty"><span class="empty-glyph">✳</span><h2>Start a thread.</h2><p>Connecting to your threads…</p></div>
-      {:else if !detail.artifacts.length}<div class="empty"><span class="empty-glyph">✳</span><h2>What’s on your mind?</h2><p>Ask a question, share an image, or start with a thought.</p></div>{/if}
-      {#each detail?.artifacts ?? [] as artifact (artifact.id)}
+      {:else if !timeline.length}<div class="empty"><span class="empty-glyph">✳</span><h2>What’s on your mind?</h2><p>Ask a question, share an image, or start with a thought.</p></div>{/if}
+      {#each timeline as entry (entry.id)}
+        {#if entry.kind==='change'}
+        <ThreadEvent change={entry.change} event={entry.event} initial={entry.id===firstName} onInspect={id=>void inspect(id,'change')}/>
+        {:else}
+        {@const artifact=entry.artifact}
         {@const payload = artifact.payload as MessagePayload}
         {@const run = associatedRun(artifact)}
         <Message {artifact} {run} outcomes={payload.speaker!=='ash'?outcomes(payload.inputArtifactId??artifact.sourceId!):[]} images={messageImages(payload)} blocked={!!active||!!(run&&actionBusy[run.id])} onInspect={inspect} onCitation={(resultId,citationId)=>void openCitation(resultId,citationId)} onRetry={run=>runAction(run,'retry')} onOpen={openImages}/>
-
+        {/if}
       {/each}
       {#each detail?.decisions??[] as decision(decision.id)}<DecisionCard {decision} {api} onChanged={refresh} onRule={reviewRule} runs={detail?.runs??[]}/>{/each}
     </div><div class="bottom-spacer" bind:this={spacer} aria-hidden="true"></div></main>
@@ -398,11 +461,24 @@
       {/if}
     </div>
   </div>
+  {#if visibilityId}<Visibility thread={threads.find(t=>t.id===visibilityId)} {api} onClose={()=>visibilityId=''} onChange={change=>updateThread(visibilityId,change)} onInspect={id=>{visibilityId='';void inspect(id,'assessment');}} onInspectChange={id=>{visibilityId='';void inspect(id,'change');}}/>{/if}
   {#if processing}<Processing {api} onClose={()=>processing=false} onInspect={id=>void tick().then(()=>inspect(id))} onThread={id=>void selectThread(id)}/>{/if}
   {#if decisionsOpen}<DecisionsPage {decisions} {api} onChanged={refresh} onThread={selectThread} onRule={reviewRule} onSettings={()=>openSettings()} onClose={closeDecisions}/>{/if}
   {#if inspectedId}
-    <aside class="inspector" aria-label="Artifact inspector"><div class="inspector-heading"><h2>Artifact inspector</h2><button aria-label="Close inspector" onclick={closeInspector}>×</button></div>
-      {#if inspection}
+    <aside class="inspector" aria-label={inspectionKind==='artifact'?'Artifact inspector':'Thread inspector'}><div class="inspector-heading"><h2>{inspectionKind==='artifact'?'Artifact inspector':'Thread inspector'}</h2><button aria-label="Close inspector" onclick={closeInspector}>×</button></div>
+      {#if inspectionKind!=='artifact'}
+        {#if assessmentInspection}{@const result=assessmentInspection.result}
+          <div class="section"><h3>{assessmentInspection.kind} · {assessmentInspection.status}</h3><p>{new Date(assessmentInspection.createdAt).toLocaleString()}</p>{#if result}<p>{result.reason}</p><details><summary>Assessment output</summary><pre>{result.output}</pre></details>{#if result.model}<details><summary>Provider result</summary><pre>{JSON.stringify(result.model,null,2)}</pre></details>{/if}{/if}</div>
+          <ContextView captured={assessmentInspection.request} onSource={id=>void openAssessmentSource(id)} onChange={id=>void inspect(id,'change')}/>
+          <details class="section"><summary>Capture revisions</summary><pre>{JSON.stringify(assessmentInspection.capture,null,2)}</pre></details>
+        {:else if changeInspection}
+          <div class="section"><h3>Application change · {changeInspection.origin}</h3><p>{new Date(changeInspection.createdAt).toLocaleString()}</p>{#each changeInspection.events as event}<p>{event.event}{event.reason?`: ${event.reason}`:''}</p>{/each}
+          {#if changeInspection.assessmentId}<button class="text-button" onclick={()=>void inspect(changeInspection!.assessmentId!,'assessment')}>Inspect assessment</button>{/if}
+          {#if changeInspection.sourceArtifactId}<button class="text-button" onclick={()=>void openSource(changeInspection!.sourceArtifactId!)}>Inspect activity</button>{/if}
+          <details open><summary>Recorded change</summary><pre>{JSON.stringify(changeInspection,null,2)}</pre></details></div>
+        {:else}<p>Loading history…</p>{/if}
+        <button class="text-button" onclick={()=>void inspect(inspectedId,inspectionKind)}>Refresh inspection</button>
+      {:else if inspection}
         {#if inspectionRun?.state.tools}<ToolInspection run={inspectionRun} artifacts={inspection.artifacts} selectedId={inspectedId} onInspect={inspect} onVideo={(id,seconds)=>void openVideo(id,seconds)}/>{/if}
         <span class="eyebrow">SELECTED ARTIFACT</span><code>{inspectedId}</code><p>{inspected?.layer} · {inspected?.actor}</p>
         <div class="section"><h3>Originating input</h3><p class="inspect-text">{'text' in inspection.input.payload?inspection.input.payload.text:['image_upload','video_upload'].includes(inspection.input.payload.type)&&'filename' in inspection.input.payload?inspection.input.payload.filename:''}</p><code>{inspection.input.id}</code></div>

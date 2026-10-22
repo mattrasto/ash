@@ -158,7 +158,7 @@ Explicit tools place these records beneath the current `tool_call` within its ch
 
 ## Instructions and captured requests
 
-`instructions` stores current name/text for a common editor. `topics.instruction_id` and `threads.instruction_id` are nullable, unique FKs implementing [INST-R02](../specs/features/instructions.md#rules). Null means no custom document. Global documents instead have a unique stable `key`, currently `response`, `image-description`, `video-caption`, `video-understanding`, `engine-filter`, `engine-route` and `engine-assess`; Topic/Thread documents have a null key.
+`instructions` stores current name/text for a common editor. `topics.instruction_id` and `threads.instruction_id` are nullable, unique FKs implementing [INST-R02](../specs/features/instructions.md#rules). Null means no custom document. Global documents instead have a unique stable `key`, currently `response`, `image-description`, `video-caption`, `video-understanding`, `engine-filter`, `engine-route`, `engine-assess`, `thread-visibility` and `thread-naming`; Topic/Thread documents have a null key.
 
 The unique constraints prevent sharing within each owner type, but not across Topics and Threads. For ownership changes, use a `READ COMMITTED` transaction: lock the Instruction row, then check both owner tables in a separate query so the check sees changes committed while waiting for the lock. Reject a different owner or a global key. All attachment/key changes must follow this lock protocol; an owned document cannot become a global prompt. Create/copy and attach a document atomically. Soft-deleting a Topic retains its document; erasure remains G06. See [PostgreSQL snapshot behavior](https://www.postgresql.org/docs/current/transaction-iso.html#XACT-READ-COMMITTED).
 
@@ -208,7 +208,7 @@ Known Decision checkpoints support [durable continuation](features/decisions.md#
 
 ## Thread visibility
 
-[CONV-R14](../specs/features/threads.md#requirements) defines manual archive and pin behavior. `is_archived` and `is_pinned` are independent booleans, defaulting to false. Manual archive and title edits preserve `updated_at`, which orders Threads by content/work activity. Neither flag records when it changed or schedules a future action. Derive ongoing activity from Runs.
+[VIS-R01–13](../specs/features/thread-visibility.md#rules) defines archive, revival, pins and naming. `is_archived` and `is_pinned` remain independent booleans. Manual metadata edits preserve `updated_at`, which orders Threads by meaningful activity. `threads.initial_title`, validated `threads.lifecycle` and `thread_assessments` implement the [checkpoint and conflict contract](features/thread-visibility.md#persistence-and-conflicts). Independent `thread_assessments.request` and `.result` retain evidence; `application_changes` stores controls and actual transitions. Migration preserves archive/pin state and manual title ownership without inference.
 
 ## Execution and transactions
 
@@ -225,7 +225,7 @@ The deployment must enforce one backend owner before startup recovery. After a r
 
 ## Application edits and undo
 
-[ART-R10](../specs/features/artifacts.md#rules) defers application audit history. Ordinary edits update current rows. Desktop session undo may retain the previous value and the value it wrote, then issue a reversing backend command that compares the expected current value before applying. Grouped reversals are transactional. This supports recent manual edits without promising persistent history or undo across devices/restarts.
+[ART-R10](../specs/features/artifacts.md#rules) defers broader application audit history; [VIS-R13](../specs/features/thread-visibility.md#rules) retains Thread controls and transitions in `application_changes`, outside Artifacts. Ordinary edits update current rows. Desktop session undo may retain the previous value and the value it wrote, then issue a reversing backend command that compares the expected current value before applying. Grouped reversals are transactional. This supports recent manual edits without promising persistent history or undo across devices/restarts.
 
 Use stable entity IDs and idempotent organization commands for transport retries. Compare expected prior values before edits so stale retries cannot overwrite newer changes. Run submissions use `request_key` and `request_hash` for their duplicate-delivery guard.
 

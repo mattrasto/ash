@@ -24,6 +24,10 @@ model Thread {
   updatedAt     DateTime     @map("updated_at") @db.Timestamptz(6)
   isArchived    Boolean      @default(false) @map("is_archived")
   isPinned      Boolean      @default(false) @map("is_pinned")
+  initialTitle  String?      @map("initial_title")
+  lifecycle     Json         @default("{}") @db.JsonB
+  assessments   ThreadAssessment[]
+  changes       ApplicationChange[]
   topicsVersion Int          @default(0) @map("topics_version")
   instruction   Instruction? @relation(fields: [instructionId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   memberships   ThreadTopic[]
@@ -71,6 +75,7 @@ model Artifact {
   incomingItem IncomingItem?
   attachmentInput Attachment?
   attachmentReferences ArtifactAttachment[]
+  changes ApplicationChange[]
   continuation ProviderContinuation?
   decisions Decision[]
   @@index([sourceId])
@@ -202,4 +207,39 @@ model IncomingItem {
   input Artifact @relation(fields:[id],references:[id],onDelete:Restrict,onUpdate:NoAction)
   @@index([status,createdAt])
   @@map("incoming_items")
+}
+
+model ThreadAssessment {
+  id String @id @db.Uuid
+  threadId String @map("thread_id") @db.Uuid
+  kind String
+  status String
+  capture Json @db.JsonB
+  createdAt DateTime @map("created_at") @db.Timestamptz(6)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
+  request Json @db.JsonB
+  result Json? @db.JsonB
+  changes ApplicationChange[]
+  thread Thread @relation(fields:[threadId],references:[id],onDelete:Restrict,onUpdate:NoAction)
+  @@index([threadId,createdAt])
+  @@map("thread_assessments")
+}
+
+// Application history is independent of Artifact chains and conversational context.
+model ApplicationChange {
+  id String @id @db.Uuid
+  threadId String @map("thread_id") @db.Uuid
+  origin String
+  command Json? @db.JsonB
+  events Json @db.JsonB
+  sourceArtifactId String? @map("source_artifact_id") @db.Uuid
+  assessmentId String? @map("assessment_id") @db.Uuid
+  createdAt DateTime @map("created_at") @db.Timestamptz(6)
+  thread Thread @relation(fields:[threadId],references:[id],onDelete:Restrict,onUpdate:NoAction)
+  sourceArtifact Artifact? @relation(fields:[sourceArtifactId],references:[id],onDelete:Restrict,onUpdate:NoAction)
+  assessment ThreadAssessment? @relation(fields:[assessmentId],references:[id],onDelete:Restrict,onUpdate:NoAction)
+  @@index([threadId,createdAt,id])
+  @@index([sourceArtifactId])
+  @@index([assessmentId])
+  @@map("application_changes")
 }

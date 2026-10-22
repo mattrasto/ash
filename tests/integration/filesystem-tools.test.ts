@@ -181,7 +181,7 @@ test('Filesystem tools: scoped observations and desktop inspection', { timeout: 
           const before = await value.inspect(done.state.response_artifact_id!);
           await writeFile(configPath, savedConfig);
           assert.deepEqual(await value.inspect(done.state.response_artifact_id!), before);
-          await value.updateThread(thread, { title: 'Unavailable filesystem' });
+          await value.updateThread(thread, { title: 'Unavailable filesystem',requestId:randomUUID(),expectedVersion:(await value.readThread(thread)).thread.lifecycle.version });
         }
         await writeFile(configPath, '{');
         let calls = 0;
@@ -259,7 +259,7 @@ test('Filesystem tools: scoped observations and desktop inspection', { timeout: 
         return `[Later observation](ash-source:${refs[0].citationId}) · [Another later excerpt](ash-source:${refs[1].citationId}) · [Opaque source](ash-source:${encodeURIComponent(refs[2].id)}) · [Ambiguous old source](ash-source:${repeatedSource})`;
       }),runtime);
       const started=await start(value,'Citation identity');citationThread=started.thread;citationRun=started.run.id;
-      const done=await settle(value,citationRun);assert.equal(done.status,'completed');await value.updateThread(citationThread,{title:'Citation identity'});
+      const done=await settle(value,citationRun);assert.equal(done.status,'completed');await value.updateThread(citationThread,{title:'Citation identity',requestId:randomUUID(),expectedVersion:(await value.readThread(citationThread)).thread.lifecycle.version});
       const observed=await results(citationRun),refs=observed.flatMap(result=>result.references);
       assert.equal(new Set(refs.map(ref=>ref.citationId)).size,4);assert.equal(refs.filter(ref=>ref.id===repeatedSource).length,3);
       for(const [index,step] of done.state.tools!.calls.entries()){
@@ -279,7 +279,7 @@ test('Filesystem tools: scoped observations and desktop inspection', { timeout: 
       const page = await app.firstWindow(); const pageErrors:string[]=[];page.on('pageerror',error=>pageErrors.push(error.message));
       await page.getByTestId('connection').filter({ hasText: 'Connected' }).waitFor().catch(async error=>{throw new Error(`${error.message}\n${pageErrors.join('\n')}\n${(await page.locator('body').innerText()).slice(0,2000)}`);});
       await page.getByTitle('New Thread · ⌘N', { exact: true }).click();
-      await page.getByRole('heading', { name: 'New Thread', exact: true }).waitFor();
+      await page.getByRole('heading', { name: 'Untitled', exact: true }).waitFor();
       await page.getByText('Test response settings',{exact:true}).click();
       await page.locator('#mode').selectOption('slow');
       await page.getByLabel('Message', { exact: true }).fill('Where is response cancellation implemented?');

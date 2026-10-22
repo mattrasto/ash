@@ -2,12 +2,12 @@
   import { onMount, tick } from 'svelte';
   import { flip } from 'svelte/animate';
   import { fly } from 'svelte/transition';
-  import { isActive, type MembershipView, type ThreadView, type TopicView } from '@ash/shared';
+  import { isActive, type ThreadChange, type MembershipView, type ThreadView, type TopicView } from '@ash/shared';
   import Icon from './Icon.svelte';
   import Menu from './Menu.svelte';
   import TopicDialog, {type TopicAction} from '../organization/TopicDialog.svelte';
   type Api = <T>(path:string,body?:object)=>Promise<T>;
-  let {threads,topics,api,onChanged,onInstructions,onDecisions,decisionsActive,pendingDecisions,selected,connected,creating,readRuns,onSelect,onCreate,onUpdate,onClose}:{threads:ThreadView[];topics:TopicView[];api:Api;onChanged:()=>Promise<void>;onInstructions:(owner:string)=>void;onDecisions:()=>void;decisionsActive:boolean;pendingDecisions:number;selected:string;connected:boolean;creating:boolean;readRuns:Record<string,string>;onSelect:(id:string)=>void;onCreate:(topicId?:string)=>void;onUpdate:(id:string,change:{title?:string;isArchived?:boolean})=>Promise<boolean>;onClose:()=>void}=$props();
+  let {threads,topics,api,onChanged,onInstructions,onDecisions,decisionsActive,pendingDecisions,selected,connected,creating,readRuns,onSelect,onCreate,onUpdate,onVisibility,onClose}:{threads:ThreadView[];topics:TopicView[];api:Api;onChanged:()=>Promise<void>;onInstructions:(owner:string)=>void;onDecisions:()=>void;decisionsActive:boolean;pendingDecisions:number;selected:string;connected:boolean;creating:boolean;readRuns:Record<string,string>;onSelect:(id:string)=>void;onCreate:(topicId?:string)=>void;onUpdate:(id:string,change:Omit<ThreadChange,'requestId'|'expectedVersion'>)=>Promise<boolean>;onVisibility:(id:string)=>void;onClose:()=>void}=$props();
   let expanded=$state<Record<string,boolean>>({}),topicAction=$state<TopicAction|null>(null);
   let topicMenu=$state<{topic:TopicView;x:number;y:number}|null>(null);
   function expand(id:string,value=true){expanded[id]=value;localStorage.setItem('ash-topics-expanded',JSON.stringify(expanded));}
@@ -105,7 +105,7 @@
     <div class="section-heading"><h2>Threads</h2><button class="icon" aria-label="New Thread" title="New Thread · ⌘N" disabled={creating||!connected} onclick={()=>onCreate()}><Icon name="new"/></button></div>
     {#each visible as thread (thread.id)}<div onintrostart={event=>{event.currentTarget.removeAttribute("aria-hidden");event.currentTarget.inert=false;}} onoutrostart={event=>{event.currentTarget.setAttribute("aria-hidden","true");event.currentTarget.inert=true;}} animate:flip={{duration:reduced?0:240}} transition:fly={{x:-16,duration:reduced?0:180}}>{@render row(thread,'')}</div>{/each}
     {#if !visible.length}<p class="empty">No unlinked Threads</p>{/if}
-    {#if archived.length}<button class="archive-heading" aria-expanded={archivedOpen} onclick={()=>{archivedOpen=!archivedOpen;localStorage.setItem('ash-archive-open',String(archivedOpen));}}>{archivedOpen?'▾':'▸'} Archived ({archived.length})</button>{#if archivedOpen}{#each archived as thread (thread.id)}{@render row(thread,'archived')}{/each}{/if}{/if}
+    {#if archived.length}<button class="archive-heading" aria-expanded={archivedOpen} onclick={()=>{archivedOpen=!archivedOpen;localStorage.setItem('ash-archive-open',String(archivedOpen));}}>{archivedOpen?'▾':'▸'} Archived ({archived.length}){#if archived.some(t=>t.unread)} · {archived.filter(t=>t.unread).length} unread{/if}</button>{#if archivedOpen}{#each archived as thread (thread.id)}{@render row(thread,'archived')}{/each}{/if}{/if}
   </nav>
   {#if !menu&&linkError}<p class="link-error" role="alert">{linkError}</p>{/if}
   {#if linkBusy&&!menu}<p class="link-status" role="status">Saving Topic link…</p>{:else if linkNotice}<p class="link-status" role="status">{linkNotice}</p>{/if}
@@ -115,17 +115,20 @@
   <div class="resize" role="separator" tabindex="0" aria-label="Resize sidebar" aria-orientation="vertical" aria-valuemin="200" aria-valuemax="400" aria-valuenow={width} onpointerdown={resize} ondblclick={()=>setWidth(260)} onkeydown={e=>{if(['ArrowLeft','ArrowRight','Home'].includes(e.key)){e.preventDefault();setWidth(e.key==='Home'?260:width+(e.key==='ArrowRight'?10:-10));}}}></div>
 </aside>
 {#snippet row(thread:ThreadView,group:string)}
-  {@const running=!!thread.latestRun&&isActive(thread.latestRun.status)}
-  {@const unread=!!thread.latestRun&&!running&&readRuns[thread.id]!==thread.latestRun.id}
-  <div class="row" class:selected={!decisionsActive&&selected===thread.id} class:unread={unread&&selected!==thread.id}>
+  {@const running=thread.activeWork??(!!thread.latestRun&&isActive(thread.latestRun.status))}
+  {@const unread=thread.unread??(!!thread.latestRun&&!running&&readRuns[thread.id]!==thread.latestRun.id)}
+  <div class="row" class:selected={!decisionsActive&&selected===thread.id} class:unread={unread&&(decisionsActive||selected!==thread.id)}>
     {#if rename===`${group}:${thread.id}`}<form onsubmit={e=>{e.preventDefault();void saveTitle();}}><input aria-label="Thread title" bind:this={input} bind:value={title} maxlength="160" disabled={saving} onkeydown={e=>{if(e.key==='Escape'){e.preventDefault();rename='';}}}/><button disabled={saving||!title.trim()} aria-label="Save title">Save</button><button type="button" aria-label="Cancel rename" onclick={()=>rename=''}>×</button></form>
-    {:else}<button class="select" draggable={connected&&!linkBusy} ondragstart={event=>startDrag(event,thread)} ondragend={()=>{dragging='';dropTarget='';}} aria-label={thread.title} aria-current={selected===thread.id?'page':undefined} title={thread.title} oncontextmenu={e=>openMenu(e,thread,group)} onclick={()=>onSelect(thread.id)}><span class="title">{thread.title}</span><span class="activity">{#if running}<span class="dot pulse" role="status" aria-label="Response in progress"></span>{:else if unread&&selected!==thread.id}<span class="dot" aria-label="Unread response"></span>{/if}<time datetime={thread.updatedAt}>{age(thread.updatedAt)}</time></span></button><div class="row-actions"><button class="icon" aria-label={`${thread.isArchived?'Unarchive':'Archive'} ${thread.title}`} title={thread.isArchived?'Unarchive':'Archive'} onclick={()=>onUpdate(thread.id,{isArchived:!thread.isArchived})}><Icon name={thread.isArchived?'restore':'archive'} size={15}/></button><button class="icon" data-thread-actions={thread.id} aria-label={`Actions for ${thread.title}`} title="Thread actions" onclick={e=>openMenu(e,thread,group)}><Icon name="more" size={15}/></button></div>{/if}
+    {:else}<button class="select" draggable={connected&&!linkBusy} ondragstart={event=>startDrag(event,thread)} ondragend={()=>{dragging='';dropTarget='';}} aria-label={thread.title} aria-current={!decisionsActive&&selected===thread.id?'page':undefined} title={thread.title} oncontextmenu={e=>openMenu(e,thread,group)} onclick={()=>onSelect(thread.id)}><span class="title">{thread.isPinned?'⌖ ':''}{thread.title}</span><span class="activity">{#if running}<span class="dot pulse" role="status" aria-label="Response in progress"></span>{:else if unread&&(decisionsActive||selected!==thread.id)}<span class="dot" aria-label="Unread response"></span>{/if}<time datetime={thread.updatedAt}>{age(thread.updatedAt)}</time></span></button><div class="row-actions"><button class="icon" aria-label={`${thread.isArchived?'Unarchive':'Archive'} ${thread.title}`} title={thread.isArchived?'Unarchive':'Archive'} onclick={()=>onUpdate(thread.id,{isArchived:!thread.isArchived})}><Icon name={thread.isArchived?'restore':'archive'} size={15}/></button><button class="icon" data-thread-actions={thread.id} aria-label={`Actions for ${thread.title}`} title="Thread actions" onclick={e=>openMenu(e,thread,group)}><Icon name="more" size={15}/></button></div>{/if}
   </div>
 {/snippet}
 {#if menu}{@const target=menu.thread}{@const group=menu.group}<Menu x={menu.x} y={menu.y} fallbackFocus={()=>document.querySelector<HTMLButtonElement>(`[data-thread-actions="${target.id}"]`)?.focus({preventScroll:true})} onClose={()=>menu=null} items={[
   {label:'Topics',disabled:!connected,submenu:{onOpen:()=>void loadMembership(target.id),status:membershipLoading?'Loading Topics…':!topics.length?'No Topics yet':undefined,error:linkError,items:topics.map(topic=>({label:topic.name,checked:membership?.threadId===target.id&&membership.value.topics.some(item=>item.id===topic.id),disabled:linkBusy||membershipLoading||membership?.threadId!==target.id,action:()=>void setLinked(target.id,topic,!membership?.value.topics.some(item=>item.id===topic.id),membership?.value)}))}},
   {label:'Instructions',disabled:!connected,action:()=>onInstructions(`thread:${target.id}`)},
+  {label:target.isPinned?'Unpin':'Pin',disabled:!connected,action:()=>void onUpdate(target.id,{isPinned:!target.isPinned})},
+  {label:'Visibility and naming',action:()=>onVisibility(target.id)},
   {label:'Rename',action:()=>void beginRename(target,group)},
+  {label:'Automatic name',checked:target.lifecycle?.titleMode==='automatic',disabled:!connected||target.lifecycle?.titleMode==='automatic',action:()=>void onUpdate(target.id,{automaticName:true})},
 ]}/>{/if}
 {#if topicMenu}{@const target=topicMenu.topic}<Menu x={topicMenu.x} y={topicMenu.y} onClose={()=>topicMenu=null} items={[
   {label:'Instructions',action:()=>onInstructions(`topic:${target.id}`)},

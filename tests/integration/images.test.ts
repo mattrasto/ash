@@ -64,7 +64,22 @@ test('persisted images, description Runs and desktop workflow (no external calls
       assert.deepEqual(inspection.artifacts.map(a=>a.payload.type),['image_upload','model_request','image_description']);
       assert.ok(!JSON.stringify(inspection).includes('base64,'));
     });
-    await scenarioStep(t, 'images-boundaries',async()=>{
+    await scenarioStep(t, 'visibility-media-locks',async()=>{
+      const attached=await images.upload(randomUUID(),'visibility-lock.png',bytes),threadId=randomUUID();
+      await threads.createThread(threadId,'Description lock ordering');const run=await threads.submit(threadId,randomUUID(),'Use this saved image','empty',[attached.id]);
+      const before=(await threads.readThread(threadId)).thread.lifecycle.activity;
+      await db.$transaction(async tx=>{
+        await tx.$queryRaw`SELECT id FROM threads WHERE id=${threadId}::uuid FOR UPDATE`;
+        images.dispatch(attached.summaryRun!.id);
+        await until(()=>db.$queryRaw<{blocked:boolean}[]>`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock' AND query LIKE '%record_thread_activity%') AS blocked`,rows=>rows[0].blocked,3000);
+        // A concurrent submission already holds Thread and next retains its Attachment.
+        // Description completion must not hold the Attachment while waiting for that Thread.
+        await tx.$executeRawUnsafe("SET LOCAL lock_timeout='1s'");
+        await tx.$queryRaw`SELECT id FROM attachments WHERE id=${attached.id}::uuid FOR UPDATE`;
+      },{timeout:5000});
+      await captionDone(attached.id);assert.ok((await threads.readThread(threadId)).thread.lifecycle.activity>before);await threads.cancel(run.id);
+    });
+    await scenarioStep(t, 'images-boundaries' ,async()=>{
       const count=await db.attachment.count();
       assert.equal((await upload('fake.png',Buffer.from('<svg>not a PNG</svg>'))).status,400);
       assert.equal((await upload('too-large.png',Buffer.alloc(10*1024*1024+1))).status,413);
@@ -125,7 +140,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       app=await launch();let page=await app.firstWindow();const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
       await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
       await page.getByRole('button',{name:'New Thread',exact:true}).first().click();
-      await page.getByRole('button',{name:'Actions for New Thread',exact:true}).first().click();assert.equal(await page.getByRole('menuitem').count(),3);for(const name of ['Topics','Instructions','Rename'])await page.getByRole('menuitem',{name,exact:true}).waitFor();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
+      await page.getByRole('button',{name:'Actions for Untitled',exact:true}).first().click();assert.equal(await page.getByRole('menuitem').count(),6);for(const name of ['Topics','Instructions','Rename'])await page.getByRole('menuitem',{name,exact:true}).waitFor();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
       await page.getByLabel('Thread title').fill('Image workspace');await page.getByRole('button',{name:'Save title',exact:true}).click();
       await page.getByRole('heading',{name:'Image workspace',exact:true}).waitFor();
       const uploads=[{name:'screenshot.png',mimeType:'image/png',buffer:bytes},{name:'portrait.jpg',mimeType:'image/jpeg',buffer:await orientedFixture()},{name:'second.png',mimeType:'image/png',buffer:await screenshotFixture('SECOND IMAGE')}];
@@ -225,7 +240,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       }finally{continueStream();await streaming.stop();}
       // More than both former count caps survives composition, request capture and reload.
       await page.getByRole('button',{name:'New Thread',exact:true}).click();
-      await page.getByRole('heading',{name:'New Thread',exact:true}).waitFor();
+      await page.getByRole('heading',{name:'Untitled',exact:true}).waitFor();
       await page.getByLabel('Choose images or videos',{exact:true}).setInputFiles(Array.from({length:9},(_,i)=>({name:`batch-${i+1}.png`,mimeType:'image/png',buffer:bytes})));
       await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),v=>v);
       assert.equal(await page.getByTestId('draft-image').count(),9);
@@ -242,7 +257,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       await until(()=>page.locator('.gallery .tile').count(),n=>n===9);
       await page.screenshot({path:join(evidence,'images-many.png')});
       await app.close();app=undefined;
-      const before=await api<ThreadDetail>(`threads/${current.id}`);await stopInstance(ws,instance.id);await startInstance(ws,instance.id,{headless:true});assert.deepEqual(await api<ThreadDetail>(`threads/${current.id}`),before);
+      const before=await api<ThreadDetail>(`threads/${current.id}`);await stopInstance(ws,instance.id);await startInstance(ws,instance.id,{headless:true});assert.deepEqual(await api<ThreadDetail>(`threads/${current.id}`),{...before,thread:{...before.thread,lifecycle:{...before.thread.lifecycle!,namedCount:before.thread.lifecycle!.messages,pendingAt:null,kind:before.thread.lifecycle!.kind==='pending'?'failed':before.thread.lifecycle!.kind}}});
     });
   }finally{
     await app?.close();await threads.stop().catch(()=>{});await images.stop().catch(()=>{});await db.$disconnect();await disposeInstance(ws,instance.id);

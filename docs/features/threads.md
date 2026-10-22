@@ -38,9 +38,9 @@ Initial context follows the [capture design](topics-context.md#capture-and-retri
 
 The [UX review](thread-ux.md) records the Asha comparison and test plan. `Sidebar.svelte`, `Message.svelte`, `Menu.svelte`, `scroll.ts` and `streaming.ts` own the interaction behavior; `Chat.svelte` owns API/draft state and inspection.
 
-`GET /api/threads` includes archived rows and each thread's latest Run identity/outcome. `POST /api/threads/:id` accepts only a nonempty title and/or archive flag. Metadata changes preserve activity order and do not alter Runs. The first-message title is committed in the same transaction as accepted input and only replaces an empty thread's “New thread” placeholder (80-character display bound).
+`GET /api/threads` includes archived rows, current lifecycle state and each Thread's latest Run identity/outcome. `POST /api/threads/:id` accepts revision-checked metadata commands under the [visibility implementation](thread-visibility.md). Metadata edits preserve activity order and do not alter Runs. New composers remain “Untitled” until a naming assessment or manual rename assigns a title under VIS-R09. Archive/name system history follows VIS-R13.
 
-No product migration is needed: the existing `threads.is_archived` field is used. Restart an existing development instance once to apply its additive runtime column grant. Preserve the current live session ID when restarting.
+Apply pending product migrations when restarting an existing development instance; preserve its current live session ID.
 
 ## Schema operations
 
@@ -52,7 +52,7 @@ The schema test compares DBML-exported tables with the migrated database and che
 
 ## Limits
 
-[Topic management, instruction editing and scoped context](topics-context.md) extend this journey. Pin controls, Artifact moves, image generation and generalized background execution remain deferred. [Image input and descriptions](images.md) are implemented separately from chat response Runs. A persisted checkpoint does not imply automatic continuation. PITR operation and restore drills remain pending; restart tests establish persistence, not recovery from lost database storage.
+[Topic management, instruction editing and scoped context](topics-context.md) extend this journey. [Thread visibility and naming](thread-visibility.md) adds pin controls and background metadata assessments. Artifact moves, image generation and generalized background execution remain deferred. [Image input and descriptions](images.md) are implemented separately from chat response Runs. A persisted checkpoint does not imply automatic continuation. PITR operation and restore drills remain pending; restart tests establish persistence, not recovery from lost database storage.
 
 ## OpenAI mode
 

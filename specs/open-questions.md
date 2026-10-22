@@ -18,6 +18,8 @@ Laptop-off work needs an always-on runtime; local-only applications still need a
 
 ### G04 — Organization automation
 
+Thread visibility/naming behavior is accepted in [VIS-R01–13](features/thread-visibility.md#rules); broader organization remains below.
+
 **Accepted, 2026-10-14:** autonomous initial placement under [ART-R12–13](features/artifacts.md#incoming-item-slice), preserving explicit targeting and recording assumptions. No routing clarification or Decision. Topic membership and later reorganization remain manual/suggestion-based. Optional review of ambiguous placements is a follow-on.
 
 ### G05 — Context selection
@@ -97,7 +99,7 @@ Isolated per-app stores/runtimes must coexist with one core backend/database. Sa
 - Recording feedback: [capture defaults](features/recording-feedback.md#before-screen-recording) and [video understanding defaults](features/recording-feedback.md#before-video-understanding) are implemented; [Live Mode integration](features/recording-feedback.md#live-mode-integration) remains future work.
 - Causality: [ART-R07](features/artifacts.md#rules) settles single-source chains initially; revisit merging only for a concrete workflow.
 - Moves/references: see [remaining artifact scope](features/artifacts.md#remaining-scope).
-- Visibility: manual archive/pin state is accepted under [CONV-R14](features/threads.md#requirements). Automatic archive timing/revival, automation overrides, read markers, pin ordering and notification effects remain open.
+- Visibility: [VIS-R01–13](features/thread-visibility.md#rules) defines automatic archive/revival, manual overrides, pin ordering and read markers. Notification delivery remains outside this slice.
 - Tasks: assignment does not define scheduling, completion or permission.
 - Live Mode: closing/resuming, interruptions, focus changes and device conflicts.
 - Scale: expected input volume and response/processing latency targets.

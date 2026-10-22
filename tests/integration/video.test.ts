@@ -102,15 +102,16 @@ test('video attachments and synthetic recording lifecycle without provider or de
     });}
     await scenarioStep(t,'recording-lifecycle',async()=>{
       await synthetic();await app!.evaluate(()=>{const original=performance.now.bind(performance);(globalThis as any).__recordingOffset=0;performance.now=()=>original()+(globalThis as any).__recordingOffset;});
-      await page.getByLabel('Message',{exact:true}).fill('Keep this existing draft.');const origin=(await page.locator('h1').innerText());await page.getByRole('button',{name:'Record screen',exact:true}).click();await page.locator('.recording-status strong').filter({hasText:'Recording'}).waitFor();
+      await page.getByLabel('Message',{exact:true}).fill('Keep this existing draft.');const origin=await page.evaluate(()=>localStorage.getItem('ash-chat-selected')!);await page.getByRole('button',{name:'Record screen',exact:true}).click();await page.locator('.recording-status strong').filter({hasText:'Recording'}).waitFor();
       await until(()=>page.locator('.recording-status').innerText(),text=>text.includes('Mic on'));
       await app!.evaluate(()=>{(globalThis as any).__recordingOffset=9*60*1000;});await page.getByRole('button',{name:'Extend by 10 minutes',exact:true}).waitFor();await page.getByRole('button',{name:'Extend by 10 minutes',exact:true}).click();
       await until(()=>page.getByRole('button',{name:'Extend by 10 minutes',exact:true}).count(),n=>n===0);
       await app!.evaluate(()=>{(globalThis as any).__recordingOffset=19*60*1000;});await page.getByRole('button',{name:'Extend by 10 minutes',exact:true}).waitFor();await page.getByRole('button',{name:'Extend by 10 minutes',exact:true}).click();
-      await page.getByRole('button',{name:'New Thread',exact:true}).first().click();await until(()=>page.locator('h1').innerText(),value=>value==='New Thread');
+      await page.getByRole('button',{name:'New Thread',exact:true}).first().click();await until(()=>page.locator('h1').innerText(),value=>value==='Untitled');
       await app!.evaluate(()=>{(globalThis as any).__recordingOffset=30*60*1000;});await page.getByText('Recording stopped at its deadline and was saved to the draft.',{exact:true}).waitFor();
       assert.equal(await page.getByTestId('draft-image').count(),0);
-      await page.getByRole('button',{name:origin,exact:true}).first().click();await until(()=>page.getByTestId('draft-image').count(),n=>n===1);await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),x=>x);
+      // The recording stays bound to its Thread even if automatic naming changes its title.
+      await page.locator('.sidebar .row').filter({has:page.locator(`[data-thread-actions="${origin}"]`)}).locator('button.select').click();await until(()=>page.getByTestId('draft-image').count(),n=>n===1);await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),x=>x);
       await until(()=>readdir(join(instance.root,'files','recordings')),files=>files.length===0);await until(()=>page.getByLabel('Message',{exact:true}).inputValue(),value=>value.includes('- Review this recording.'));
       const generated=await page.getByLabel('Message',{exact:true}).inputValue();assert.match(generated,/^Keep this existing draft\.\n\n- Review this recording\./);assert.ok(!generated.includes('Summarize the action items'));
       assert.ok(await page.getByLabel('Message',{exact:true}).evaluate((el:HTMLTextAreaElement)=>el.clientHeight>35&&el.scrollHeight<=el.clientHeight+2));

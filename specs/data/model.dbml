@@ -1,11 +1,11 @@
-// Core tables implemented in packages/server/prisma, 2026-10-14.
+// Core tables implemented in packages/server/prisma, 2026-10-21.
 // Permissions uses the single-rule policy and reviewed semantic overrides; legacy live JSON is converted at startup.
 // Physical columns and SQL constraints are unchanged; policy conversion and JSON references are application-enforced.
 // Product rules: ../features/permissions.md, ../features/decisions.md and other feature specs.
 // Transactions, JSON contracts and SQL-only constraints: ../../docs/data-model.md
 Project ash {
   database_type: 'PostgreSQL'
-  Note: 'Core state, Permissions and Decisions. Recovery uses physical backups and archived WAL; application audit history is deferred.'
+  Note: 'Core state, Permissions and Decisions. Recovery uses physical backups and archived WAL; Thread application history is stored separately from Artifacts.'
 }
 
 Table topics {
@@ -27,6 +27,8 @@ Table threads {
   updated_at timestamptz [not null]
   is_archived boolean [not null, default: false, note: 'Hidden from the ordinary thread list; accessible in the archive.']
   is_pinned boolean [not null, default: false, note: 'Pinned in the thread list. Does not override is_archived.']
+  initial_title text [note: 'Creation identity, independent of subsequent naming.']
+  lifecycle jsonb [not null, default: `'{}'::jsonb`, note: 'Validated ThreadLifecycle checkpoint; see visibility implementation.']
   topics_version integer [not null, default: 0, check: `topics_version >= 0`, note: 'Rejects stale membership edits without changing thread activity.']
 
   Note: 'Normal threads; Topic membership is optional.'
@@ -213,3 +215,40 @@ Table decisions {
 
 Ref: decisions.thread_id > threads.id [delete: restrict]
 Ref: decisions.source_artifact_id > artifacts.id [delete: restrict]
+
+Table thread_assessments {
+  id uuid [pk, not null]
+  thread_id uuid [not null]
+  kind text [not null]
+  status text [not null]
+  capture jsonb [not null, note: 'Immutable activity/control/context revisions and trigger references.']
+  request jsonb [not null, note: 'Exact model request saved before dispatch; immutable.']
+  result jsonb [note: 'Null while running; one terminal outcome, public output and provider metadata, then immutable.']
+  created_at timestamptz [not null]
+  finished_at timestamptz
+  indexes {
+    (thread_id, created_at)
+  }
+  Note: 'One running assessment per Thread and kind (partial unique SQL index). Captures are immutable; one terminal update stores the result/status/time. No Artifact is created.'
+}
+Ref: thread_assessments.thread_id > threads.id [delete: restrict, update: no action]
+
+Table application_changes {
+ id uuid [pk, not null, note: 'Manual command identity or generated automatic change identity; immutable.']
+ thread_id uuid [not null, note: 'Affected Thread; immutable.']
+ origin text [not null, note: 'manual, automatic, activity or undo; immutable.']
+ command jsonb [note: 'Accepted manual command; null for automatic changes. Immutable.']
+ events jsonb [not null, note: 'Actual archive, title, pin and naming-mode transitions; empty for commands with no transition. Immutable.']
+ source_artifact_id uuid [note: 'Existing meaningful activity causing revival; null for manual or assessed changes. Read-only provenance.']
+ assessment_id uuid [note: 'Applied assessment causing the change; otherwise null.']
+ created_at timestamptz(6) [not null, note: 'Time accepted/applied; immutable.']
+ indexes {
+  (thread_id, created_at, id)
+  source_artifact_id
+  assessment_id
+ }
+ Note: 'Application history, separate from Artifact chains. Never dispatches work or enters ordinary response context by itself.'
+}
+Ref: application_changes.thread_id > threads.id [delete: restrict, update: no action]
+Ref: application_changes.source_artifact_id > artifacts.id [delete: restrict, update: no action]
+Ref: application_changes.assessment_id > thread_assessments.id [delete: restrict, update: no action]

@@ -1,3 +1,4 @@
+import { mediaActivity } from '../visibility/state.ts';
 import {randomUUID,createHash} from 'node:crypto';
 import {Prisma,type PrismaClient,type Attachment,type Run} from '@prisma/client';
 import {VideoPlan,VideoModelRequest,VideoModelResponse,VideoUnderstandingPayload,VideoMetadata,RunState,VIDEO_ANALYSIS_LIMITS,
@@ -143,6 +144,7 @@ export class VideoAnalysis {
       if(responseId){
         const payload=VideoUnderstandingPayload.parse({type:'video_understanding',attachmentId:plan.attachmentId,result,coverage,requestIds,timing:'estimated',complete:!failure&&!truncated&&coverage.at(-1)?.end===plan.range.end});
         await tx.artifact.create({data:{id:responseId,layer:'act',sourceId:root.id,runId:id,actor:'ash',payload:json(payload),createdAt:endedAt,updatedAt:endedAt}});
+        if(plan.operation==='caption')await mediaActivity(tx,plan.attachmentId,responseId);
         await referenceImages(tx,responseId,[plan.attachmentId]);
         if(plan.operation==='caption')await tx.attachment.updateMany({where:{id:plan.attachmentId,summaryRunId:id},data:{summary:result.caption}});
       }

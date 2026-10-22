@@ -1,3 +1,4 @@
+import { mediaActivity } from '../visibility/state.ts';
 import { randomUUID, createHash } from 'node:crypto';
 import { Prisma, type PrismaClient, type Attachment, type Run } from '@prisma/client';
 import { mkdir,mkdtemp,open,rm } from 'node:fs/promises';
@@ -195,6 +196,7 @@ export class Attachments {
         const attachment=await tx.attachment.findUniqueOrThrow({where:{summaryRunId:id}});
         const now=new Date(),responseId=randomUUID();
         await tx.artifact.create({data:{id:responseId,layer:'act',sourceId:state.request_artifact_id,runId:id,actor:'ash',payload:DescriptionPayload.parse({type:'image_description',attachmentId:attachment.id,text:text.trim()}),createdAt:now,updatedAt:now}});
+        await mediaActivity(tx,attachment.id,responseId);
         await referenceImages(tx,responseId,[attachment.id]);
         await tx.run.update({where:{id},data:{status:'completed',endedAt:now,state:{...state,response_artifact_id:responseId,...(metadata?{model:metadata}:{})}}});
         await tx.attachment.update({where:{id:attachment.id},data:{summary:text.trim()}});

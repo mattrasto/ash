@@ -26,6 +26,19 @@ export const deterministicModel: ModelAdapter = {
       const internal=/internal work/.test(text),silent=/no presentation/.test(text),respond=/respond|summari[sz]e|\?/.test(text);
       yield JSON.stringify({type:'act_plan',action:internal||respond,showSource:!internal&&!silent&&!/respond only/.test(text),showResponse:respond&&!internal,reason:'Deterministic synthetic action and presentation assessment.'});return;
     }
+    if(request.purpose==='thread_visibility'){
+      const packet=JSON.parse(String(request.messages.at(-1)!.content));
+      const latest=packet.items.filter((item:any)=>item.payload.type==='message'&&item.payload.speaker==='user').at(-1);
+      const text=latest?.payload.content.filter((block:any)=>block.type==='text').map((block:any)=>block.text).join(' ')??'';
+      yield JSON.stringify(/\bVIS_TEST_DUE\b/.test(text)?{kind:'until',deadline:new Date(Date.parse(packet.now)+10000).toISOString(),reason:'Synthetic ten-second archive target.'}:/\bVIS_TEST_DONE\b/.test(text)?{kind:'immediate',reason:'Synthetic completed matter.'}:{kind:'indefinite',reason:'Offline deterministic assessment keeps Threads visible.'});return;
+    }
+    if(request.purpose==='thread_naming'){
+      const packet=JSON.parse(String(request.messages.at(-1)!.content));
+      const first=packet.items.find((item:any)=>item.payload.type==='message'&&item.payload.speaker==='user');
+      const text=first?.payload.content.filter((block:any)=>block.type==='text').map((block:any)=>block.text).join(' ').replace(/\s+/g,' ').trim();
+      const title=packet.title==='Untitled'?(text?Array.from(text).slice(0,79).join('')+(Array.from(text).length>79?'…':''):'Media Thread'):packet.title;
+      yield JSON.stringify({title,reason:'Offline deterministic naming fixture; no external model was called.'});return;
+    }
     if(request.purpose==='image_summary') {
       const content=request.messages.at(-1)?.content;
       const image=Array.isArray(content)?content.find(block=>block.type==='image'):undefined;

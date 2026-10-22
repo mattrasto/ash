@@ -54,7 +54,7 @@ test('Topics, independently owned instructions and frozen working context', {tim
       home=(await org.list()).find(x=>x.id===home.id)!;
       assert.equal((await api('topics',{id:randomUUID(),name:'  '})).status,400);
       assert.equal((await api(`threads/${thread}/topics`,{expectedVersion:membership.version,topicIds:[home.id,home.id]})).status,400);
-      await chat.updateThread(source,{isArchived:true});
+      await chat.updateThread(source,{isArchived:true,requestId:randomUUID(),expectedVersion:(await chat.readThread(source)).thread.lifecycle.version});
       assert.ok((await org.list()).find(x=>x.id===insurance.id)!.threadIds.includes(source));
       const scopedId=randomUUID(),create={id:scopedId,title:'Created inside Insurance',topicId:insurance.id};
       assert.equal((await api('threads',create)).status,200);
@@ -121,7 +121,7 @@ test('Topics, independently owned instructions and frozen working context', {tim
       pending=(await send(thread,'Search previously discussed deductible')).id;
       assert.match(modelContentText((await captured(pending)).messages[0].content),/New global/);
       assert.equal((await captured(pending)).selection.topics!.length,1);
-      assert.equal((await chat.readThread(source)).artifacts.length,0);
+      assert.equal((await chat.readThread(source)).artifacts.filter(a=>a.payload.type==='message').length,0);
       await assert.rejects(link(outside,[home.id]),/deleted/);
     });
     await scenarioStep(t,'topic-retrieval',async()=>{

@@ -14,6 +14,9 @@ import { Decisions } from '../decisions/service.ts';
 import { Permissions } from '../permissions/service.ts';
 export { artifactView, runView } from './views.ts';
 
+import { ThreadLifecycle,ThreadChange,AssessmentResult,DraftPresence } from '@ash/shared';
+import { activeWork,waitingWork,json,lockThread,threadView } from '../visibility/state.ts';
+import { recordThreadChange,changeView } from '../visibility/events.ts';
 type Tx = Prisma.TransactionClient;
 export class ThreadError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -55,7 +58,9 @@ export class Threads {
         if(this.jobs.has(run.id))continue;
         const ready=await this.db.$transaction(async tx=>{
           await tx.$queryRaw`SELECT id FROM threads WHERE id=${run.threadId}::uuid FOR UPDATE`;
-          await tx.$queryRaw`SELECT id FROM runs WHERE id=${run.id}::uuid FOR UPDATE`;
+          // Settlement holds the Run before updating Thread activity. Do not wait for that
+          // Run while holding its Thread; the next scheduler pass can retry the claim.
+          if(!(await tx.$queryRaw<{id:string}[]>`SELECT id FROM runs WHERE id=${run.id}::uuid FOR UPDATE SKIP LOCKED`).length)return false;
           const current=await tx.run.findUniqueOrThrow({where:{id:run.id}});if(current.status!=='waiting')return false;
           if(await tx.run.findFirst({where:{threadId:run.threadId,status:{in:['queued','running']}}}))return false;
           const state=RunState.parse(current.state),dependencies=state.decisions?.filter(d=>d.status==='waiting')??[];
@@ -71,34 +76,94 @@ export class Threads {
   }
   async createThread(id: string, title: string, topicId?:string) {
     const existing = await this.db.thread.findUnique({where:{id}});
-    if (existing) { if (existing.title !== title) throw new ThreadError(409, 'This thread ID already belongs to a different title.'); return existing; }
+    if (existing) { if ((existing.initialTitle??existing.title) !== title) throw new ThreadError(409, 'This thread ID already belongs to a different title.'); return existing; }
     const now = new Date();
     try { return await this.db.$transaction(async tx=>{
       if(topicId){
         await tx.$queryRaw`SELECT id FROM topics WHERE id=${topicId}::uuid FOR UPDATE`;
         if(!await tx.topic.findFirst({where:{id:topicId,deletedAt:null}}))throw new ThreadError(409,'This Topic is no longer available. Choose another Topic.');
       }
-      const thread=await tx.thread.create({data:{id,title,createdAt:now,updatedAt:now,topicsVersion:topicId?1:0}});
+      const automatic=['New Thread','Untitled'].includes(title);
+      const thread=await tx.thread.create({data:{id,title:automatic?'Untitled':title,initialTitle:title,lifecycle:{titleMode:automatic?'automatic':'manual'},createdAt:now,updatedAt:now,topicsVersion:topicId?1:0}});
       if(topicId)await tx.threadTopic.create({data:{threadId:id,topicId,linkedAt:now}});
       return thread;
     }); }
     catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const saved = await this.db.thread.findUniqueOrThrow({where:{id}});
-        if (saved.title === title) return saved;
+        if ((saved.initialTitle??saved.title) === title) return saved;
         throw new ThreadError(409, 'This thread ID already belongs to a different title.');
       }
       throw error;
     }
   }
   async listThreads() {
-    const rows=await this.db.thread.findMany({orderBy:[{updatedAt:'desc'},{id:'asc'}],include:{runs:{where:{artifacts:{none:{payload:{path:['incoming','showResponse'],equals:false}}}},orderBy:[{createdAt:'desc'},{id:'desc'}],take:1,select:{id:true,status:true,endedAt:true}}}});
-    return rows.map(({runs,...thread})=>({...thread,latestRun:runs[0]??null}));
+    const rows=await this.db.thread.findMany({orderBy:[{isPinned:'desc'},{updatedAt:'desc'},{id:'asc'}],include:{runs:{where:{artifacts:{none:{payload:{path:['incoming','showResponse'],equals:false}}}},orderBy:[{createdAt:'desc'},{id:'desc'}],take:1,select:{id:true,status:true,endedAt:true}}}});
+    const busy=new Set((await this.db.run.findMany({where:{threadId:{not:null},status:{in:['queued','running']}},select:{threadId:true}})).map(r=>r.threadId));
+    for(const intake of await this.db.incomingItem.findMany({where:{status:{in:['queued','processing','waiting_capacity']}},select:{state:true}})){const id=(intake.state as {threadId?:string}).threadId;if(id)busy.add(id);}
+    const waiting=new Set((await this.db.run.findMany({where:{threadId:{not:null},status:'waiting'},select:{threadId:true}})).map(r=>r.threadId));
+    for(const decision of await this.db.decision.findMany({where:{threadId:{not:null},status:{in:['pending','snoozed']}},select:{threadId:true}}))waiting.add(decision.threadId);
+    return rows.map(({runs,...thread})=>({...threadView(thread),activeWork:busy.has(thread.id),waitingWork:waiting.has(thread.id),latestRun:runs[0]??null}));
   }
-  async updateThread(id:string,change:{title?:string;isArchived?:boolean}) {
-    // Metadata changes preserve the thread's activity order and never stop a Run.
-    if (!(await this.db.thread.updateMany({where:{id},data:change})).count) throw new ThreadError(404,'Thread not found.');
-    return this.db.thread.findUniqueOrThrow({where:{id}});
+  async updateThread(id:string,input:unknown) {
+    const command=ThreadChange.parse(input),fingerprint=createHash('sha256').update(JSON.stringify(command)).digest('hex');
+    return this.db.$transaction(async tx=>{
+      if(!await tx.thread.findUnique({where:{id}}))throw new ThreadError(404,'Thread not found.');
+      const row=await lockThread(tx,id),v=ThreadLifecycle.parse(row.lifecycle);
+      if(v.lastCommand?.id===command.requestId){if(v.lastCommand.hash!==fingerprint)throw new ThreadError(409,'This edit identity was used for a different change.');return threadView(row);}
+      if(v.version!==command.expectedVersion)throw new ThreadError(409,'This Thread changed. Refresh before editing or undoing.');
+      if(await tx.applicationChange.findUnique({where:{id:command.requestId}}))throw new ThreadError(409,'This edit identity was already used; the Thread changed.');
+      const now=new Date();
+      const assessable=(command.automaticName||command.recalculate)&&(v.sourceId||v.changeId||v.messages>0||await tx.artifact.findFirst({where:{threadId:id},select:{id:true}}));
+      const before={title:row.title,titleMode:v.titleMode,isArchived:row.isArchived,isPinned:row.isPinned,origin:v.origin};
+      const data:Prisma.ThreadUpdateInput={};
+      if(command.undo){
+        if(!v.undo)throw new ThreadError(409,'This change can no longer be undone.');
+        const previous=v.undo;data.title=previous.title;data.isArchived=previous.isArchived;data.isPinned=previous.isPinned;
+        v.titleMode=previous.titleMode;v.origin=previous.origin;v.undo=null;
+        if(v.titleMode==='automatic'&&before.titleMode!=='automatic')v.namedCount=-1;
+      }else{
+        v.undo=before;
+        if(command.title!==undefined){data.title=command.title;v.titleMode='manual';}
+        if(command.automaticName){v.titleMode='automatic';v.namedCount=-1;if(assessable)v.changeId=command.requestId;}
+        if(command.isPinned!==undefined)data.isPinned=command.isPinned;
+        if(command.isArchived!==undefined){data.isArchived=command.isArchived;v.origin=command.isArchived?'manual':null;}
+        if(command.recalculate&&assessable){v.changeId=command.requestId;v.kind='pending';v.deadline=null;v.pendingAt??=now.toISOString();v.changedAt=now.toISOString();}
+      }
+      if(data.isArchived===false&&row.isArchived){v.kind='pending';v.deadline=null;v.changeId=command.requestId;v.pendingAt??=now.toISOString();v.changedAt=now.toISOString();}
+      v.version++;v.controls++;v.lastCommand={id:command.requestId,hash:fingerprint};
+      const saved=await tx.thread.update({where:{id},data:{...data,lifecycle:json(v)}});
+      await recordThreadChange(tx,row,saved,{id:command.requestId,origin:command.undo?'undo':'manual',command},now);
+      return threadView(saved);
+    });
+  }
+  async markSeen(id:string,cursor:number){return this.db.$transaction(async tx=>{
+    const row=await lockThread(tx,id),v=ThreadLifecycle.parse(row.lifecycle);
+    if(cursor>v.unread)throw new ThreadError(409,'The read cursor is newer than saved activity.');
+    if(cursor>v.seen){v.seen=cursor;await tx.thread.update({where:{id},data:{lifecycle:json(v)}});}return {seen:v.seen};
+  });}
+  async saveDraftPresence(id:string,input:unknown){
+    const command=DraftPresence.parse(input);
+    return this.db.$transaction(async tx=>{
+      if(!await tx.thread.findUnique({where:{id}}))throw new ThreadError(404,'Thread not found.');
+      const row=await lockThread(tx,id),v=ThreadLifecycle.parse(row.lifecycle),saved=v.drafts[command.clientId];
+      if(saved&&command.revision<=saved.revision)return saved;
+      const draft={revision:command.revision,present:command.present};v.drafts[command.clientId]=draft;
+      // Presence is a durable archive guard, not conversational activity or an assessment trigger.
+      await tx.thread.update({where:{id},data:{lifecycle:json(v)}});return draft;
+    });
+  }
+  async assessments(id:string){return this.db.threadAssessment.findMany({where:{threadId:id},orderBy:[{createdAt:'desc'},{id:'desc'}],take:20,select:{id:true,kind:true,status:true,createdAt:true,finishedAt:true}});}
+  async inspectAssessment(id:string){
+    const row=await this.db.threadAssessment.findUnique({where:{id}});if(!row)throw new ThreadError(404,'Assessment not found.');
+    const request=RequestPayload.parse(row.request);
+    // Old captures retain original selection IDs; resolve migrated controls without failed Artifact lookups.
+    const applicationSourceIds=request.selection.changes?.map(c=>c.id)??(await this.db.applicationChange.findMany({where:{id:{in:request.selection.artifacts.map(a=>a.id)}},select:{id:true}})).map(c=>c.id);
+    return {...row,request,applicationSourceIds,result:row.result===null?null:AssessmentResult.parse(row.result)};
+  }
+  async changes(id:string){return (await this.db.applicationChange.findMany({where:{threadId:id},orderBy:[{createdAt:'desc'},{id:'desc'}],take:20})).map(changeView);}
+  async inspectChange(id:string){
+    const row=await this.db.applicationChange.findUnique({where:{id}});if(!row)throw new ThreadError(404,'Application change not found.');return changeView(row);
   }
   async readThread(threadId: string) {
     return this.db.$transaction(async tx => {
@@ -107,7 +172,7 @@ export class Threads {
       const artifacts = await tx.artifact.findMany({where:{threadId,layer:'surface'},orderBy:order});
       const runs = await tx.run.findMany({where:{threadId},orderBy:order});
       const decisionIds=runs.flatMap(run=>RunState.parse(run.state).decisions?.map(dependency=>dependency.decisionId)??[]);
-      return {thread, artifacts:artifacts.map(artifactView), runs:runs.map(runView),attachments:await attachmentViews(tx,artifacts.map(a=>a.id)),membership:await memberships(tx,threadId),...(this.decisions?{decisions:(await tx.decision.findMany({where:{OR:[{threadId},{id:{in:decisionIds}}]},orderBy:order})).map(row=>({ ...row,request:row.request,resolution:row.resolution,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString(),dueAt:row.dueAt?.toISOString()??null,snoozedUntil:row.snoozedUntil?.toISOString()??null}))}:{})};
+      return {thread:{...threadView(thread),activeWork:await activeWork(tx,threadId),waitingWork:await waitingWork(tx,threadId)}, changes:(await tx.applicationChange.findMany({where:{threadId},orderBy:order})).map(changeView), artifacts:artifacts.map(artifactView), runs:runs.map(runView),attachments:await attachmentViews(tx,artifacts.map(a=>a.id)),membership:await memberships(tx,threadId),...(this.decisions?{decisions:(await tx.decision.findMany({where:{OR:[{threadId},{id:{in:decisionIds}}]},orderBy:order})).map(row=>({ ...row,request:row.request,resolution:row.resolution,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString(),dueAt:row.dueAt?.toISOString()??null,snoozedUntil:row.snoozedUntil?.toISOString()??null}))}:{})};
     }, {isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead});
   }
   async inspect(id: string) {
@@ -158,8 +223,7 @@ export class Threads {
       await tx.artifact.create({data:{id:requestKey,layer:'input',threadId,actor:'user',payload:InputPayload.parse({type:'message_input',text,attachmentIds,submissionHash:hash}),createdAt:now,updatedAt:now}});
       await tx.artifact.create({data:{id:surfaceId,layer:'surface',sourceId:requestKey,threadId,actor:'user',payload:MessagePayload.parse({type:'message',initial_thread_id:threadId,speaker:'user',content:attachmentIds.map(attachmentId=>({type:'video',attachmentId}))}),createdAt:now,updatedAt:now}});
       await referenceImages(tx,requestKey,attachmentIds);await referenceImages(tx,surfaceId,attachmentIds);
-      const first=await tx.artifact.count({where:{threadId,layer:'input'}});
-      await tx.thread.update({where:{id:threadId},data:{updatedAt:now,...(thread.title==='New Thread'&&first===1?{title:'Video Thread'}:{})}});
+      await tx.thread.update({where:{id:threadId},data:{updatedAt:now}});
       return {id:requestKey,requestKey,status:'stored',inputArtifactId:requestKey,threadId};
     });
   }
@@ -190,10 +254,6 @@ export class Threads {
           let inputId: string;
           let request: RequestPayload;
           if (command.kind === 'send') {
-            if (thread.title==='New Thread' && !await tx.artifact.findFirst({where:{threadId,layer:'input'}})) {
-              const title=command.text.replace(/\s+/g,' ').trim() || 'Image Thread';
-              await tx.thread.update({where:{id:threadId},data:{title:Array.from(title).length>80?Array.from(title).slice(0,79).join('')+'…':title}});
-            }
             const attachmentIds=command.attachmentIds??[];
             const attachments=await retainImages(tx,attachmentIds);
             inputId = randomUUID();

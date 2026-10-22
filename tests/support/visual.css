@@ -2,6 +2,7 @@
 .preview-shell { --accent: #467451 !important; --tint: #eaf0e9 !important; }
 /* Elapsed response time and relative thread age vary across deterministic runs. */
 .metadata, .sidebar time { visibility: hidden !important; }
+.thread-event time { visibility: hidden !important; }
 
 /* Identity text is checked against the live API separately. */
 .preview-bar .branch, .preview-bar .worktree, .preview-bar .instance { font-size: 0 !important; }

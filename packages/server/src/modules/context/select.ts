@@ -10,7 +10,7 @@ export function selectContext(artifacts: Artifact[], runs: Run[], instruction: I
   const scoped = Array.isArray(instruction);
   const instructions:ScopedInstruction[] = scoped ? instruction.filter(item=>item.document.text.trim()) : [{document:instruction,scope:'global',ownerId:instruction.key!}];
   const composition = [instructions.some(item=>item.scope==='thread') ? COMPOSITION : null,attachments.some(isVideoAttachment) ? VIDEO_COMPOSITION : null].filter(Boolean).join('\n\n') || null;
-  const ordered = [...artifacts].sort((a,b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+  const ordered = artifacts.filter(a=>(a.payload as {type:string}).type==='message').sort((a,b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
   const byRun = new Map(runs.map(run => [run.id, run]));
   const completed = new Map<string, Run>();
   for (const run of runs) {
