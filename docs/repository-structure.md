@@ -40,7 +40,7 @@ ash/
 │   │       └── renderer/
 │   │           ├── app/              # Shell, navigation, connection
 │   │           ├── features/         # Feature UI and local state
-│   │           └── ui/               # Reused visual components
+│   │           └── ui/               # Design tokens, local assets, surfaces, controls and motion
 │   ├── server/
 │   │   ├── package.json
 │   │   ├── prisma/                   # Product schema and committed migrations

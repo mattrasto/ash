@@ -14,7 +14,7 @@
 </div>
 
 <style>
-  .preview-bar{height:44px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:0 18px 0 96px;background:var(--accent);color:white;-webkit-app-region:drag;font-size:12px}
+  .preview-bar{height:44px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:0 18px 0 96px;background:#405a68;color:#fffff8;-webkit-app-region:drag;font-size:12px}
   .profile{font-size:10px;font-weight:650;letter-spacing:.6px;text-transform:uppercase;padding:4px 7px;border:1px solid #ffffff66;border-radius:4px;flex-shrink:0}
   .branch{font-weight:550;min-width:80px;flex:1}.worktree{max-width:35%;opacity:.85}.branch,.worktree{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;-webkit-app-region:no-drag}.instance{font:10px ui-monospace,monospace;opacity:.8}
 </style>

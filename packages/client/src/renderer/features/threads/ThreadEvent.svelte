@@ -7,13 +7,12 @@
   :`${who} ${event.event} this Thread`);
 </script>
 <div class="thread-event" data-testid="thread-event" data-change-id={change.id}>
- <button onclick={()=>onInspect(change.id)} aria-label={`Inspect: ${label}`}>
+ <button onclick={()=>onInspect(change.id)} aria-label={`Inspect: ${label}`} class="ash-button">
   <span>{label}{event.origin==='undo'?' · Undo':''}</span>
   <time datetime={change.createdAt} title={new Date(change.createdAt).toLocaleString()}>{new Date(change.createdAt).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</time>
  </button>
 </div>
 <style>
- .thread-event{margin:12px 0;text-align:center;color:#7b8775;font-size:12px;line-height:1.5}
- button{border:0;background:transparent;color:inherit;padding:4px 8px;max-width:100%;overflow-wrap:anywhere}
- button:hover{color:#526749}time{display:block;font-size:10px;color:#929b8d;margin-top:3px}
+ .thread-event{margin:12px 0;text-align:center;color:var(--muted);font-size:.9rem;line-height:1.5}
+ button{border:0;background:transparent;color:inherit;padding:4px 8px;max-width:100%;overflow-wrap:anywhere}time{display:block;font-size:.8rem;color:var(--muted);margin-top:3px}
 </style>

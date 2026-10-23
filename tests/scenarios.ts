@@ -9,6 +9,12 @@ export interface Scenario {
 
 // Product rules stay in specs/. These IDs identify executable checks, not new requirements.
 export const scenarios: Scenario[] = [
+ {id:'design-reading',title:'Readable links and native nested editor scrolling at minimum window size',suite:'desktop',requirements:['DS-R01','DS-R03','DS-R11','DS-R12','DS-V07','DS-V10','DS-V11'],fixture:'scratchpad'},
+ {id:'design-dismissal',title:'Outside dismissal preserves layer ownership and guarded drafts; close controls align',suite:'desktop',requirements:['DS-R03','DS-R04','DS-R10','DS-V04','DS-V05'],fixture:'scratchpad'},
+ {id:'design-rails',title:'Sidebars animate layout while real overflow and live editing remain intact',suite:'desktop',requirements:['DS-R09','DS-R11','DS-R12','DS-R13','DS-V07','DS-V08'],fixture:'scratchpad'},
+ {id:'design-controls',title:'Shared field states, grouped popups and dialog focus',suite:'desktop',requirements:['DS-R01','DS-R02','DS-R03','DS-R04','DS-R06','DS-R08','DS-R10','DS-V02','DS-V03','DS-V04'],fixture:'scratchpad'},
+ {id:'design-presence',title:'Surface reversal, layout continuity and native fallbacks',suite:'desktop',requirements:['DS-R05','DS-R09','DS-R13','DS-V05','DS-V07','DS-V08','DS-V09','DS-V12'],fixture:'scratchpad'},
+ {id:'design-replacement',title:'Replacement preserves live values, scrolling and accessible ownership',suite:'desktop',requirements:['DS-R09','DS-R11','DS-R12','DS-V06','DS-V07'],fixture:'scratchpad'},
  {id:'engine-permission-decisions',title:'Incoming content cannot answer Decisions or bypass Ask; approved internal work resumes once',suite:'workflow',requirements:['AE10','PERM-R11','DEC-R10'],fixture:'scratchpad / empty'},
  {id:'engine-filter-route',title:'Retained incoming sources, autonomous placement and captured guidance',suite:'workflow',requirements:['AE01','AE02','AE03','AE04','AE06','AE07'],fixture:'scratchpad / empty'},
  {id:'engine-context-bounds',title:'Dense routing history fits the captured context budget with recorded omissions',suite:'workflow',requirements:['AE03','AE06'],fixture:'scratchpad / empty'},
@@ -146,7 +152,7 @@ export const scenarios: Scenario[] = [
   { id: 'workflow-port', title: 'Saved frontend port conflicts preserve browser storage', suite: 'workflow', requirements: ['DEV-03', 'DEV-04'], fixture: 'scratchpad' },
   { id: 'chat-persistence', title: 'Keyboard messages and drafts survive desktop reopening', suite: 'desktop', requirements: ['DEV-04'], fixture: 'scratchpad' },
   { id: 'desktop-background', title: 'Hidden windows support interaction without native focus', suite: 'desktop', requirements: ['DEV-11'], fixture: 'scratchpad' },
-  { id: 'chat-layout', title: 'Thread layout at normal and minimum window sizes', suite: 'desktop', requirements: ['DEV-11'], fixture: 'scratchpad' },
+  { id: 'chat-layout', title: 'Thread layout at normal and minimum window sizes', suite: 'desktop', requirements: ['DEV-11','DS-R03','DS-R04','DS-R05','DS-R07','DS-R12','DS-V10'], fixture: 'scratchpad' },
 ];
 
 export function scenario(id: string) {

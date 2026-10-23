@@ -43,7 +43,7 @@ test('topics-settings-desktop: Sidebar Topics and fixed Settings preserve owners
   await membership.getByRole('menuitemcheckbox',{name:'Home',exact:true}).press('Escape');await topicsItem.press('Escape');
   membershipFailure={status:503,error:'Could not save Topic link. Try again.'};
   await topic('Insurance').getByRole('button',{name:'Insurance thread',exact:true}).dragTo(topic('Home').getByRole('button',{name:'Topic Home',exact:true}));
-  await expect(page.getByRole('alert')).toHaveText('Could not save Topic link. Try again.');await expect(topic('Home').getByRole('button',{name:'Insurance thread',exact:true})).toHaveCount(0);await expect(message).toHaveValue('Draft survives organization');
+  await expect(page.getByRole('alert')).toContainText('Could not save Topic link. Try again.');await expect(topic('Home').getByRole('button',{name:'Insurance thread',exact:true})).toHaveCount(0);await expect(message).toHaveValue('Draft survives organization');
   membershipFailure=null;expect(ash.errors).toContain('Failed to load resource: the server responded with a status of 503 (Service Unavailable)');ash.errors.splice(ash.errors.indexOf('Failed to load resource: the server responded with a status of 503 (Service Unavailable)'),1);
   await topic('Insurance').getByRole('button',{name:'Insurance thread',exact:true}).dragTo(topic('Home').getByRole('button',{name:'Topic Home',exact:true}));await expect(topic('Home').getByRole('button',{name:'Insurance thread',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Actions for Topic Insurance',exact:true}).click();await page.getByRole('menuitem',{name:'Instructions',exact:true}).click();
@@ -132,7 +132,7 @@ test('topics-settings-desktop: Sidebar Topics and fixed Settings preserve owners
       else await route.continue();
     });
     try{
-      await createIn('Insurance');await expect(page.getByRole('alert')).toHaveText('Creation response unavailable. Try again.');
+      await createIn('Insurance');await expect(page.getByRole('alert')).toContainText('Creation response unavailable. Try again.');
       await createIn(destination);await expect(page.getByLabel('Thread Topics',{exact:true})).toHaveText(destination??'No Topics');
       await expect(page.getByRole('alert')).toHaveCount(0);expect(attempts).toHaveLength(2);
       expect(attempts[1].id===attempts[0].id).toBe(destination==='Insurance');
@@ -150,7 +150,7 @@ test('context-inspection-desktop: Captured instructions and scope survive later 
   const {page}=ash;
   await page.getByLabel('Message',{exact:true}).fill('First context inspection answer');await page.getByLabel('Message',{exact:true}).press('Enter');await expect(page.getByTestId('run-status')).toHaveText('completed');
   await page.getByRole('button',{name:'Settings',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Settings'});
-  await dialog.getByLabel('Instruction text').fill('Frozen global instructions');await dialog.getByRole('button',{name:'Save instructions',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('Instructions saved');await dialog.getByRole('button',{name:'Close Settings',exact:true}).click();
+  await dialog.getByLabel('Instruction text').fill('Frozen global instructions');await dialog.getByRole('button',{name:'Save instructions',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('Instructions saved');await dialog.getByRole('button',{name:'Close Settings',exact:true}).click();await expect(dialog).toHaveCount(0);
   await page.getByLabel('Message',{exact:true}).fill('Second answer');await page.getByLabel('Message',{exact:true}).press('Enter');await expect(page.getByTestId('message')).toHaveCount(4);await expect(page.getByTestId('run-status').last()).toHaveText('completed');
   await page.getByRole('button',{name:'Inspect Ash response',exact:true}).last().click();
   const context=page.getByRole('region',{name:'Captured context'});await expect(context.getByText('Frozen global instructions',{exact:true})).toHaveCount(2);

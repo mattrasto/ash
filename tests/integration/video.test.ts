@@ -216,7 +216,7 @@ test('video attachments and synthetic recording lifecycle without provider or de
       await page.locator('.draft-thumb').click();const dialog=page.getByRole('dialog');
       await dialog.locator('.transcript-details summary').click();
       await dialog.getByRole('button',{name:'Retry video analysis',exact:true}).click();
-      await dialog.press('Escape');
+      await dialog.press('Escape');await dialog.waitFor({state:'detached'});
       await until(()=>page.getByLabel('Message',{exact:true}).inputValue(),value=>value.includes('- Review this recording.'));
       await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),Boolean);
       const generated=await page.getByLabel('Message',{exact:true}).inputValue();assert.match(generated,/^Keep this recovery draft\.\n\n- Review this recording\./);

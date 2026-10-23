@@ -33,7 +33,7 @@ test('decisions-response-retry-desktop: Failed responses retry the current choic
     else await route.continue();
   });
   const failed = async () => {
-    await expect(panel.getByRole('alert')).toHaveText('Synthetic response failure.');
+    await expect(panel.getByRole('alert')).toContainText('Synthetic response failure.');
     await expect.poll(() => ash.errors.some(error => error.includes('status of 503'))).toBe(true);
     ash.errors.splice(ash.errors.findIndex(error => error.includes('status of 503')), 1);
   };
@@ -101,7 +101,7 @@ test('permissions-save-navigation-desktop: In-flight saves block leaving or disc
   const locked = async () => {
     await expect(settings.getByRole('button', { name: 'Close Settings' })).toBeDisabled();
     await expect(settings.getByRole('tab', { name: 'Instructions', exact: true })).toBeDisabled();
-    await page.keyboard.press('Escape'); await expect(settings).toBeVisible();
+    await page.keyboard.press('Escape'); await expect(settings).toBeVisible();await page.mouse.click(4,100);await expect(settings).toBeVisible();
     await expect(settings.getByRole('tab', { name: 'Permissions', exact: true })).toHaveAttribute('aria-selected', 'true');
   };
   try {
@@ -121,7 +121,7 @@ test('permissions-save-navigation-desktop: In-flight saves block leaving or disc
     await settings.getByRole('button', { name: 'Save and continue', exact: true }).click();
     await reviews[1].started.promise; await locked();
     for (const name of ['Save and continue', 'Discard changes', 'Keep editing']) await expect(settings.getByRole('button', { name, exact: true })).toBeDisabled();
-    reviews[1].release.resolve(); await expect(permissions.getByRole('alert')).toHaveText('Synthetic permission review failure.');
+    reviews[1].release.resolve(); await expect(permissions.getByRole('alert')).toContainText('Synthetic permission review failure.');
     await expect.poll(() => ash.errors.some(error => error.includes('status of 503'))).toBe(true);
     ash.errors.splice(ash.errors.findIndex(error => error.includes('status of 503')), 1);
     await expect(permissions.getByLabel('Resource', { exact: true })).toHaveValue('/example/failed-navigation/');

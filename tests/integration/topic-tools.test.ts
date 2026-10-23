@@ -73,7 +73,7 @@ test('Topic search and read through the shared dispatcher, provider and desktop'
       await page.getByRole('button',{name:'Insurance follow-up',exact:true}).click();
       await page.getByRole('link',{name:'Earlier discussion',exact:true}).click();
       const readResult=observed[2].tools!.results.at(-1)!.artifactId;
-      await page.locator('.inspector > code').filter({hasText:readResult}).waitFor();
+      await page.getByTestId('inspected-identity').filter({hasText:readResult}).waitFor();
       assert.equal(await page.getByRole('region',{name:'Execution steps'}).locator('details[open] > summary').filter({hasText:'topic.read · completed'}).count(),1);
       await page.getByRole('button',{name:'Close inspector',exact:true}).click();await page.getByRole('button',{name:'Inspect Ash response',exact:true}).click();
       const context=page.getByRole('region',{name:'Retrieved Topic context'});await context.waitFor();
@@ -84,19 +84,19 @@ test('Topic search and read through the shared dispatcher, provider and desktop'
       const firstRequestId=accepted.state.request_artifact_id;
       const finalRound=page.getByRole('region',{name:'Execution steps'}).locator(':scope > details').nth(2);
       const requestPath=`**/api/artifacts/${firstRequestId}`;
-      let resume!:()=>void,arrived!:()=>void;
-      const held=new Promise<void>(resolve=>resume=resolve),ready=new Promise<void>(resolve=>arrived=resolve);
-      await page.route(requestPath,async route=>{const response=await route.fetch();arrived();await held;await route.fulfill({response});});
+      let resume!:()=>void,arrived!:()=>void,heldCompleted!:()=>void,holding=true,started=false;
+      const held=new Promise<void>(resolve=>resume=resolve),ready=new Promise<void>(resolve=>arrived=resolve),handled=new Promise<void>(resolve=>heldCompleted=resolve);
+      await page.route(requestPath,async route=>{if(!holding){await route.continue();return;}started=true;try{const response=await route.fetch();arrived();await held;await route.fulfill({response});}finally{heldCompleted();}});
       try {
-        await page.getByText('Model call 1 · completed',{exact:true}).click();await page.getByRole('button',{name:'Inspect captured request',exact:true}).first().click();
+        await page.getByRole('region',{name:'Execution steps'}).getByText('Model call 1 · completed',{exact:true}).click();await page.getByRole('button',{name:'Inspect captured request',exact:true}).first().click();
         await ready;
         assert.equal(await page.getByRole('region',{name:'Retrieved Topic context'}).count(),0);
-        await page.getByText('Model call 3 · completed',{exact:true}).click();
+        await page.getByRole('region',{name:'Execution steps'}).getByText('Model call 3 · completed',{exact:true}).click();
         const refreshed=page.waitForResponse(response=>response.url().endsWith(`/api/artifacts/${firstRequestId}`));
         resume();await (await refreshed).finished();
         await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
         assert.equal(await finalRound.getAttribute('open'),'','Refresh must preserve the newly opened model call');
-      } finally {resume();await page.unroute(requestPath);}
+      } finally {resume();holding=false;if(started)await handled;}
       await finalRound.getByRole('button',{name:'Inspect captured request',exact:true}).click();await context.waitFor();
       const evidence=process.env.ASH_TEST_EVIDENCE??join(ws.devRoot,'evidence','topic-context');await mkdir(evidence,{recursive:true});await context.scrollIntoViewIfNeeded();await page.screenshot({path:join(evidence,'topic-retrieval.png')});
       assert.equal(await app.app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().some(w=>w.isVisible()||w.isFocusable()||w.isFocused())),false);

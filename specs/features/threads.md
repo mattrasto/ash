@@ -53,7 +53,7 @@ Deferred: voice and Live Threads, automatic Topic organization, artifact moves a
 
 ## Thread UX
 
-Accepted 2026-10-12 · Align interactions with Asha; retain Ash's appearance and Artifact model.
+Accepted 2026-10-12 · Align interactions with Asha; retain the Artifact model. Shared appearance follows the [design system](../design-system.md), accepted 2026-10-22.
 
 - **UX01 — Start and name:** open an empty thread immediately on first use. **New thread** creates and focuses another composer without requiring a title. New composers use “Untitled” until named under VIS-R09. Manual rename persists. Automatic naming and manual title ownership follow [VIS-R09](thread-visibility.md#rules).
 - **UX02 — Sidebar:** show recent activity, active work and unseen selected source/response outcomes. Archive/unarchive uses the row icon; the actions menu contains Rename. Archive access is a collapsible list; archiving the current thread selects another active thread or creates an empty one. Archived Threads remain readable and writable; meaningful new activity revives them under VIS-R04. Collapse, width and archive expansion are local desktop preferences; persistent read cursors and automatic archive behavior follow VIS-R07–08. Pin, automatic naming and assessment inspection are available in the actions menu.

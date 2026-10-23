@@ -1,0 +1,18 @@
+.ash-surface{--surface-alpha:.34;--surface-blur:10px;--content-end:100%;--edge:1;--reveal:none;--frost-falloff:linear-gradient(to bottom,#000 0px,#000 var(--content-end),transparent 100%);border:0!important;border-radius:var(--radius-surface)!important;background:transparent!important;box-shadow:0 1px 6px 1px color-mix(in srgb,var(--shadow) calc(5% * var(--edge)),transparent)!important}
+.ash-surface[data-backing=dense]{--surface-alpha:.44}.ash-surface>.ash-skin,.ash-surface>.ash-frost{position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0}
+.ash-surface>.ash-skin{background:color-mix(in srgb,var(--panel) calc(var(--surface-alpha) * 100%),transparent);mask-image:var(--reveal);mask-size:100% 100%;mask-repeat:no-repeat}
+.ash-surface>.ash-frost{backdrop-filter:blur(var(--surface-blur));mask-image:var(--frost-reveal,linear-gradient(#000,#000)),var(--frost-falloff);mask-size:100% 100%;mask-repeat:no-repeat;mask-composite:intersect}
+.ash-surface>.surface-content{position:relative;z-index:1;min-width:0;border-radius:inherit;mask-image:var(--reveal);mask-size:100% 100%;mask-repeat:no-repeat}
+.ash-surface[data-material=message]>.ash-skin{background:linear-gradient(155deg,color-mix(in srgb,var(--control) 18%,transparent),color-mix(in srgb,var(--message) 21%,transparent));box-shadow:inset 0 1px color-mix(in srgb,var(--control) 33%,transparent)}
+.ash-surface[data-material=popup]{--surface-blur:24px;--frost-falloff:linear-gradient(#000,#000);box-shadow:0 5px 18px color-mix(in srgb,var(--shadow) calc(10% * var(--edge)),transparent)!important}
+.ash-surface[data-material=popup]>.ash-skin{background:color-mix(in srgb,var(--control) 60%,transparent)}
+.ash-surface[data-material=popup]>.surface-content{height:100%;overflow:auto}.ash-popup-trigger[aria-expanded=true]{background:color-mix(in srgb,var(--control) 60%,transparent)!important;backdrop-filter:blur(24px)!important}
+dialog.ash-surface>.surface-content{display:flex;flex-direction:column;min-height:0;max-height:inherit;flex:1}#app dialog.ash-surface::backdrop{background:#405a6833;backdrop-filter:blur(3px);animation:ash-backdrop 140ms ease}
+@keyframes ash-backdrop{from{background:transparent;backdrop-filter:blur(0)}to{background:#405a6833;backdrop-filter:blur(3px)}}
+@supports not (backdrop-filter:blur(1px)){.ash-surface>.ash-skin{background:#f6f7e6f2}.ash-field{background:#fffff8eb}}
+@media(forced-colors:active){.ash-surface{border:1px solid CanvasText!important;box-shadow:none!important;background:Canvas!important}.ash-skin,.ash-frost{display:none}.ash-surface>.surface-content{mask:none!important;filter:none!important;opacity:1!important}}
+
+#app dialog.ash-surface::backdrop{transition:background 140ms ease,backdrop-filter 140ms ease}#app dialog.ash-surface[data-closing=true]::backdrop{background:transparent;backdrop-filter:blur(0);animation:none}
+@media(prefers-reduced-motion:reduce){#app dialog.ash-surface::backdrop{animation:none;transition:none}}
+
+@supports not (backdrop-filter:blur(1px)){body .ash-surface>.ash-skin{background:#f6f7e6f2!important}}

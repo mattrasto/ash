@@ -77,7 +77,7 @@ test('Topic and filesystem context coexist in the running app', {timeout: 120000
       await page.getByRole('region',{name:'Topic Ash development',exact:true}).getByRole('button',{name:'Combined evidence',exact:true}).click();
       for(const [index,label] of ['Prior finding','Source file'].entries()){
         await page.getByRole('link',{name:label,exact:true}).click();
-        await page.locator('.inspector > code').filter({hasText:calls[index].resultArtifactId!}).waitFor();
+        await page.getByTestId('inspected-identity').filter({hasText:calls[index].resultArtifactId!}).waitFor();
         await page.getByRole('button',{name:'Close inspector',exact:true}).click();
       }
       const evidence=process.env.ASH_TEST_EVIDENCE??join(ws.devRoot,'evidence','combined-context');await mkdir(evidence,{recursive:true});

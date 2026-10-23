@@ -1,0 +1,36 @@
+/* Feature layout stays local; this file adapts existing composition to shared materials. */
+#app .preview-shell{padding:0}#app .shell{gap:12px;padding:12px;overflow:hidden}#app .main-column{min-width:300px}
+#app .sidebar{padding:0;max-width:40vw;overflow:visible}#app .sidebar>.surface-content{padding:24px 12px 12px;display:flex;flex-direction:column;min-height:0;height:100%;overflow:hidden}#app .sidebar nav{flex:1;min-height:0;padding-right:6px}
+#app .brand{font-size:28px;font-weight:525}#app .brand small{color:var(--muted);font-size:.8rem;letter-spacing:0}#app .section-heading h2{font-size:.8rem;letter-spacing:0;text-transform:none;font-weight:525}#app .section-heading{border:0;margin-top:8px}
+#app .sidebar .row{background:transparent}#app .sidebar .row.selected{background:#cee3f580}#app .sidebar .row:hover{background:transparent}#app .sidebar .row-actions{background:var(--panel)}#app .sidebar .select{padding-top:10px;padding-bottom:10px}#app .sidebar .topic-row:hover{background:transparent}#app .sidebar .select[aria-current=page]{background:transparent}#app .sidebar .topic-toggle:hover{background:#8ebef04d}
+#app .main-column>header{padding:12px 18px 14px}#app .heading h1{font:525 1.4rem/1.25 var(--font);margin-top:4px}#app .eyebrow{font-size:.8rem;letter-spacing:0}#app .connection,#app .model-banner{font-size:.8rem;color:var(--text)}#app .model-banner{padding:0 18px 12px}#app .topic-strip{padding:0 18px 10px}#app .topic-strip span{font-size:.8rem;color:var(--text);background:#f6f7e670}
+#app .transcript{padding:0 max(12px,calc((100% - 730px)/2));position:relative}#app .messages>article{padding:0;border-radius:10px}#app .messages>article>.surface-content{padding:24px 24px 12px}#app .messages>article.user>.surface-content{padding:14px 18px 8px}#app .message-content{font-size:1rem;line-height:1.6}#app .empty{color:var(--text)}#app .empty h2{font:525 1.4rem/1.25 var(--font);color:var(--text)}#app .empty p{font-size:1rem}
+#app .composer{padding:12px 12px 6px}#app .composer form{padding:0;border:0;border-radius:10px}#app .composer form>.surface-content{padding:12px}#app .composer textarea{border-radius:6px;padding:9px 12px;min-height:42px;font-size:1rem;line-height:1.6}#app .composer-actions{align-items:center}#app .composer-actions button{width:32px;height:32px;padding:6px;border-radius:6px}#app .composer-actions span{font-size:.8rem;color:var(--muted)}
+#app .inspector{padding:0;width:360px;overflow:hidden;align-self:stretch}#app .inspector>.surface-content,#app .visibility>.surface-content{padding:24px;height:100%;overflow:auto}#app .visibility{padding:0;overflow:hidden}#app .inspector h2{font-size:1.2rem;font-weight:525}#app .inspector h3{font-size:1rem;font-weight:525}#app .inspector p{color:var(--text)}
+#app .decision-page{padding:0;overflow:hidden}#app .decision-page>.surface-content{padding:24px 30px;display:flex;flex-direction:column;flex:1;min-height:0}#app .decision-page h1{font:525 1.4rem/1.25 var(--font)}#app .decision-card{padding:0}#app .decision-card>.surface-content{padding:24px}#app .decision-card h2{font-size:1.2rem}
+#app dialog header h2{font:525 1.4rem/1.25 var(--font);margin:0}#app dialog header .close{padding:0;min-width:30px;min-height:30px}#app dialog footer{background:transparent;border-top-color:var(--divider)}#app dialog .body{scrollbar-gutter:auto}#app dialog .tabs{border-bottom:0}#app .tabs .ash-button[aria-selected=true]{background:#cee3f580;font-weight:525}#app .tabs .ash-button{border-radius:6px;padding:8px 12px}
+#app .viewer{color:var(--text)}#app .viewer>.surface-content{height:100%;overflow:hidden}#app .viewer .stage{background:#34464d0d}#app .viewer footer{max-height:35%;padding-top:18px}#app .viewer :is(.muted,summary,.feedback,header span){color:var(--muted)}#app .viewer .filmstrip .selected{outline:2px solid var(--accent);outline-offset:1px}
+#app .failure,#app .error,#app .link-error{color:var(--danger);background:#fffff87a}#app .proposed{--operation-ink:var(--text);--operation-fill:#fffff859}#app .proposed.modification{--operation-ink:var(--warning);--operation-fill:#fffff859}#app .proposed.removal{--operation-ink:var(--danger);--operation-fill:#fffff859}#app .proposal-title{color:var(--text)}
+#app .markdown .code-block{border:0;border-radius:6px;background:#fffff87a}#app .markdown :is(code,pre){font-family:var(--font-code)}#app .markdown button{border:0;border-radius:6px;color:var(--text);background:transparent;min-height:30px}#app .markdown button:is(:hover,:focus-visible){background:#fffff82e}#app .markdown :is(td,th){border-color:var(--divider)}#app .markdown .code-heading{border-bottom-color:var(--divider);font-size:.8rem}
+@media(max-width:1050px){#app .inspector{top:56px;right:12px;bottom:12px;z-index:4}}@media(max-width:800px){#app .shell{padding:8px;gap:8px}#app .sidebar>.surface-content{padding:18px 8px 8px}#app .composer-actions span{max-width:170px}#app .messages>article>.surface-content{padding:18px 18px 10px}#app .decision-page>.surface-content{padding:24px 18px}}
+
+#app .status{color:var(--muted)}#app .status.ash-danger{color:var(--danger)}#app .ash-button.primary{--rest:color-mix(in srgb,var(--accent) 39%,transparent)}#app .ash-button.ash-danger{color:var(--danger)}#app .ash-button[aria-disabled=true]{opacity:.4;cursor:default}#app .call span.ash-danger{color:var(--danger)}#app .call span.ash-warning{color:var(--warning)}#app .call span svg{vertical-align:-2px;margin-right:4px}#app .menu .ash-menu-row{min-width:100%}
+
+#app .chosen-overrides th:nth-child(2){width:90px;white-space:nowrap}#app .chosen-overrides th:last-child{width:42px}#app .chosen-overrides .remove-override{width:30px;min-width:30px;max-width:30px;min-height:30px;padding:0;display:grid;place-items:center}#app .chosen-overrides :is(th,td){overflow-wrap:anywhere}
+#app .thread-event .ash-button,#app .tool-trace .summary{--rest:transparent}
+
+#app .ash-button.metadata{font-size:.8rem}
+
+#app .transcript-frame{position:relative;display:flex;flex:1;min-height:0;min-width:0}#app .transcript-frame .jump-latest{bottom:12px;z-index:3;max-width:calc(100% - 24px)}
+
+/* Close controls keep glyph geometry independent of feature heading/font styles. */
+#app .ash-button.ash-close{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;min-width:30px;min-height:30px;padding:0;line-height:1;flex-shrink:0;vertical-align:middle}
+#app .ash-close>svg{display:block;flex-shrink:0;width:16px;height:16px}
+.ash-rail{position:relative;flex-shrink:0;min-height:0;align-self:stretch}
+#app .ash-rail>.ash-surface{position:absolute;top:0;bottom:0;height:100%}
+#app .ash-rail[data-side=left]>.sidebar{right:0}
+#app .ash-rail[data-side=right]>.ash-surface{left:0;right:auto}
+#app .visibility-rail{position:fixed;right:0;top:44px;bottom:0;z-index:4}
+@media(max-width:1050px){#app .inspector-rail{position:fixed;top:56px;right:12px;bottom:12px;z-index:4}}
+
+#app dialog header{align-items:center}#app .draft-image>.ash-close{align-self:center}

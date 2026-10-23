@@ -258,13 +258,13 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
       await until(()=>page.getByLabel('Message',{exact:true}).evaluate(el=>el===document.activeElement),v=>v,1500);
       await page.getByLabel('Message',{exact:true}).fill('Automatically named thread');await page.getByLabel('Message',{exact:true}).press('Enter');
       await page.getByRole('article',{name:'User message',exact:true}).waitFor();
-      await page.getByRole('button',{name:'Desktop thread',exact:true}).click();
+      await page.getByRole('button',{name:'Desktop thread',exact:true}).click();await page.getByRole('heading',{name:'Desktop thread',exact:true}).waitFor();
       assert.equal(await page.getByLabel('Message',{exact:true}).inputValue(),'Line one\nL');
-      // Draft selection is synchronous; history and its saved scroll position load afterward.
+      // The destination draft and reading position restore after the outgoing composition exits.
       await until(()=>page.getByTestId('message').count(),count=>count===9);
       await until(()=>page.locator('.transcript').evaluate(el=>el.scrollTop),top=>top<5,1500);
       await page.locator('.row').filter({has:page.getByRole('button',{name:'Automatically named thread',exact:true})}).getByLabel('Unread response',{exact:true}).waitFor();
-      await page.getByRole('button',{name:'Automatically named thread',exact:true}).click();
+      await page.getByRole('button',{name:'Automatically named thread',exact:true}).click();await page.getByRole('heading',{name:'Automatically named thread',exact:true}).waitFor();
       await page.getByRole('button',{name:'Archive Automatically named thread',exact:true}).click();
       await page.getByRole('button',{name:/Archived \(1\)/}).click();
       await page.getByRole('button',{name:'Automatically named thread',exact:true}).click();
@@ -281,7 +281,7 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
       await page.getByRole('heading',{name:'Renamed in sidebar',exact:true}).waitFor();
       await page.getByRole('button',{name:'Response details',exact:true}).click();await page.getByText('Outcome: completed',{exact:true}).waitFor();
       await page.getByRole('button',{name:'Inspect Ash response',exact:true}).click();await page.getByRole('heading',{name:'Artifact inspector',exact:true}).waitFor();
-      await page.keyboard.press('Escape');assert.equal(await page.getByLabel('Artifact inspector').count(),0);
+      await page.keyboard.press('Escape');assert.equal(await page.getByRole('complementary',{name:'Artifact inspector',exact:true}).count(),0);
       await page.screenshot({path:join(evidence,'chat-reconnected.png')});
       assert.deepEqual(errors,[]);
     });

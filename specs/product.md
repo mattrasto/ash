@@ -43,6 +43,10 @@ Ash is a private personal agent: part companion, helper and second brain. It sho
 
 Use “task” for product work items and “run” for execution. Use “Decision” for required user input; reserve “approval” for an affirmative permission response unless the product model is refined.
 
+## Interface design
+
+The [design system](design-system.md) owns shared visual and interaction requirements. Feature specs own workflow consequences. Follow its requirement classes and [verification scenarios](design-system.md#verification) for frontend changes.
+
 ## Confirmed engineering agreement
 
 The user owns intent, priorities, experience and consequential tradeoffs. Codex recommends technical choices and handles routine reversible implementation and testing. Surface changes to scope, behavior, privacy, recurring costs or production risk.

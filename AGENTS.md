@@ -1,6 +1,6 @@
 # Ash
 
-Start with `specs/README.md`, `specs/product.md` and the relevant feature spec. Follow engineering links as needed.
+Start with `specs/README.md`, `specs/product.md` and the relevant feature spec. For frontend work, also read [design requirements](specs/design-system.md) and [integration/code guidance](docs/features/design-system.md); verify the affected DS-R requirements and DS-V scenarios. Follow engineering links as needed.
 
 ## Documentation
 

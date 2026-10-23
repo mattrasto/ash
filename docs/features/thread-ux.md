@@ -18,7 +18,7 @@ Reviewed Asha commit `0b0593c` in an isolated checkout and database, with local 
 | Expandable model/time/token pills | Compact recorded response metadata; full Artifact inspector remains available, with the causal chain collapsed initially. No private reasoning is displayed. |
 | Image accordion, captions and native context actions | Existing viewer/filmstrip plus hover/focus descriptions, thumbnail/viewer context menus, copyable descriptions and reduced-motion-aware transitions. |
 
-Ash retains its existing appearance, safe Markdown policy, immutable request capture and failure/retry semantics. Naming and metadata edits make no model calls. [Backend contracts and runtime grant](threads.md#thread-controls).
+Appearance in this historical pass predates the [design system](../../specs/design-system.md). Safe Markdown, immutable request capture and failure/retry semantics remain feature requirements. Naming and metadata edits make no model calls. [Backend contracts and runtime grant](threads.md#thread-controls).
 
 ## Test plan
 

@@ -1,0 +1,53 @@
+{
+  "reference": "Fieldnotes Final 5ee14fd",
+  "icons": {
+    "lucide": {
+      "source": "https://github.com/iconify/icon-sets/blob/master/json/lucide.json",
+      "author": {
+        "name": "Lucide Contributors",
+        "url": "https://github.com/lucide-icons/lucide"
+      },
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      },
+      "sourceSha256": "b7850c358db3f6f804f70f3d50d90c31fdfbabf5320344cb06a4b9d960cdc2b3",
+      "icons": {
+        "plus": "plus",
+        "minus": "minus",
+        "close": "x",
+        "copy": "copy",
+        "archive": "archive",
+        "sliders": "sliders-horizontal",
+        "chat": "message-circle",
+        "checklist": "list-checks",
+        "settings": "settings",
+        "arrow-up-right": "arrow-up-right",
+        "arrow-up": "arrow-up",
+        "chevron-down": "chevron-down",
+        "chevron-left": "chevron-left",
+        "chevron-right": "chevron-right",
+        "more": "ellipsis",
+        "replay": "rotate-cw",
+        "check": "check",
+        "help": "circle-help",
+        "edit": "pencil",
+        "grid": "grid-2x2",
+        "type": "type"
+      },
+      "catalog": "../icons.json",
+      "catalogIcons": 22,
+      "catalogAliases": 0,
+      "strokeWidth": 1
+    }
+  },
+  "fonts": {
+    "albert-sans": {
+      "family": "Albert Sans",
+      "source": "https://fonts.gstatic.com/s/albertsans/v4/i7dOIFdwYjGaAMFtZd_QA1ZbYFeQGQyU.woff2",
+      "license": "https://raw.githubusercontent.com/google/fonts/main/ofl/albertsans/OFL.txt",
+      "sha256": "acf304385d0648fd9377eff186c269f2802a5311d3ae62dca46683b05c9c2b48"
+    }
+  }
+}

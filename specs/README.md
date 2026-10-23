@@ -4,6 +4,8 @@
 
 Requirements come from [HUMAN_SPEC.md](HUMAN_SPEC.md) and subsequent user decisions. Accepted refinements supersede the corresponding original requirement. Label additions as proposed or assumed; keep unresolved conflicts explicit.
 
+Frontend work: [design requirements](design-system.md) distinguish hard requirements, experiential principles and optional refinements. [Integration and verification](../docs/features/design-system.md).
+
 ## Feature index
 
 Sequencing is proposed. Source names refer to overview headings.

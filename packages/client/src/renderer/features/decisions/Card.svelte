@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Status from "../../ui/Status.svelte";
+  import {surface,mist} from '../../ui/surface.ts';
+  import {scrollArea} from '../../ui/scroll.ts';
   import { policyText, permissionForReview } from '@ash/shared';
   import type { DecisionView, RunView, SavePermission, ToolJson } from '@ash/shared';
   type Api = <T>(path: string, body?: object) => Promise<T>;
@@ -69,7 +72,7 @@
   }
 </script>
 
-<article class="decision-card" data-testid="decision-card">
+<article class="decision-card" data-testid="decision-card" use:surface><div class="surface-content">
   <div class="meta"><span>{decision.request.kind === 'permission' ? 'Permission request' : 'Question'}</span><time datetime={decision.createdAt} title={new Date(decision.createdAt).toLocaleString()}>{new Date(decision.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</time></div>
   <h3>{decision.request.question}</h3><p class="reason">{decision.request.reason}</p>
   {#if decision.request.action}
@@ -80,37 +83,37 @@
   {/if}
   {#if decision.dueAt}<p class="due">Due {new Date(decision.dueAt).toLocaleString()}</p>{/if}
   {#if open}
-    {#if decision.request.proposal && onRule}<details class="proposal"><summary>Suggested permission</summary><p>{policyText(decision.request.proposal.policy)}</p><button disabled={busy} onclick={() => onRule!(permissionForReview(decision.request.proposal!))}>Review permission</button></details>{/if}
+    {#if decision.request.proposal && onRule}<details class="proposal"><summary>Suggested permission</summary><p>{policyText(decision.request.proposal.policy)}</p><button disabled={busy} onclick={() => onRule!(permissionForReview(decision.request.proposal!))} class="ash-button">Review permission</button></details>{/if}
     <form onsubmit={event => { event.preventDefault(); void answer(text); }}>
-      {#if decision.request.form === 'text'}<label for={`answer-${controlId}`}>Answer</label><textarea id={`answer-${controlId}`} bind:value={text} maxlength="4000" disabled={busy}></textarea>{/if}
-      <details class="comment"><summary>Add comment</summary><label for={`comment-${controlId}`} class="sr-only">Optional comment</label><textarea id={`comment-${controlId}`} bind:value={comment} maxlength="4000" disabled={busy}></textarea></details>
+      {#if decision.request.form === 'text'}<label for={`answer-${controlId}`}>Answer</label><textarea id={`answer-${controlId}`} bind:value={text} maxlength="4000" disabled={busy} class="ash-field"></textarea>{/if}
+      <details class="comment"><summary>Add comment</summary><label for={`comment-${controlId}`} class="sr-only">Optional comment</label><textarea id={`comment-${controlId}`} bind:value={comment} maxlength="4000" disabled={busy} class="ash-field"></textarea></details>
       <div class="choices">
-        {#if decision.request.form === 'text'}<button class="primary" disabled={busy || !text.trim()}>Submit answer</button>
-        {:else}{#each decision.request.options as option}<button type="button" class:primary={decision.request.kind === 'permission' && ['approve', 'exception'].includes(option.id)} disabled={busy} onclick={() => answer(option.id)}>{option.label}</button>{/each}{/if}
+        {#if decision.request.form === 'text'}<button class="ash-button ash-primary primary" disabled={busy || !text.trim()}>Submit answer</button>
+        {:else}{#each decision.request.options as option}<button type="button" class:primary={decision.request.kind === 'permission' && ['approve', 'exception'].includes(option.id)} disabled={busy} onclick={() => answer(option.id)} class="ash-button">{option.label}</button>{/each}{/if}
       </div>
     </form>
   {:else if decision.resolution?.kind === 'answer'}<div class="answer"><strong>{savedLabel}</strong>{#if decision.resolution.comment}<p>{decision.resolution.comment}</p>{/if}</div>
   {:else if decision.resolution?.kind === 'cancellation'}<p class="answer">Cancelled: {decision.resolution.reason}</p>{/if}
   <div class="footer">
-    <div class="work">{#each work as run}<span>Work: {workStatus(run)}</span>{#if run.status === 'waiting'}<button class="quiet" disabled={busy} onclick={() => stopWork(run.id)}>Stop work</button>{/if}{/each}</div>
+    <div class="work">{#each work as run}<span>Work: {workStatus(run)}</span>{#if run.status === 'waiting'}<button class="ash-button ash-ghost quiet" disabled={busy} onclick={() => stopWork(run.id)}>Stop work</button>{/if}{/each}</div>
     <div class="secondary">
-      {#if decision.threadId && onThread}<button class="quiet" onclick={() => onThread!(decision.threadId!)}>Open Thread</button>{/if}
+      {#if decision.threadId && onThread}<button class="ash-button ash-ghost quiet" onclick={() => onThread!(decision.threadId!)}>Open Thread</button>{/if}
       {#if open}
-        {#if decision.status === 'snoozed'}<span class="until">Until {new Date(decision.snoozedUntil!).toLocaleString()}</span><button class="quiet" disabled={busy} onclick={() => snooze(null)}>Wake now</button>{/if}
-        <button class="quiet" aria-expanded={showSnooze} disabled={busy} onclick={() => showSnooze = !showSnooze}>Snooze…</button>
-        <button class="quiet" disabled={busy} onclick={decision.request.kind === 'question' ? () => answer({ skipped: true }) : cancel}>{decision.request.kind === 'question' ? 'Skip' : 'Cancel request'}</button>
+        {#if decision.status === 'snoozed'}<span class="until">Until {new Date(decision.snoozedUntil!).toLocaleString()}</span><button class="ash-button ash-ghost quiet" disabled={busy} onclick={() => snooze(null)}>Wake now</button>{/if}
+        <button class="ash-button ash-ghost quiet" aria-expanded={showSnooze} disabled={busy} onclick={() => showSnooze = !showSnooze}>Snooze…</button>
+        <button class="ash-button ash-ghost quiet" disabled={busy} onclick={decision.request.kind === 'question' ? () => answer({ skipped: true }) : cancel}>{decision.request.kind === 'question' ? 'Skip' : 'Cancel request'}</button>
       {/if}
     </div>
   </div>
   {#if open && showSnooze}<div class="snooze" role="group" aria-label="Snooze decision">
-    <div><button disabled={busy} onclick={() => snooze(new Date(Date.now() + 3600000).toISOString())}>Snooze 1 hour</button><button disabled={busy} onclick={() => { const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(9, 0, 0, 0); void snooze(tomorrow.toISOString()); }}>Tomorrow</button></div>
-    <div><label for={`snooze-${controlId}`}>Custom time</label><input id={`snooze-${controlId}`} type="datetime-local" bind:value={custom} disabled={busy}/><button disabled={busy || !custom || new Date(custom).getTime() <= Date.now()} onclick={() => snooze(new Date(custom).toISOString())}>Set time</button></div>
+    <div><button disabled={busy} onclick={() => snooze(new Date(Date.now() + 3600000).toISOString())} class="ash-button">Snooze 1 hour</button><button disabled={busy} onclick={() => { const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(9, 0, 0, 0); void snooze(tomorrow.toISOString()); }} class="ash-button">Tomorrow</button></div>
+    <div><label for={`snooze-${controlId}`}>Custom time</label><input id={`snooze-${controlId}`} type="datetime-local" bind:value={custom} disabled={busy} class="ash-field"/><button disabled={busy || !custom || new Date(custom).getTime() <= Date.now()} onclick={() => snooze(new Date(custom).toISOString())} class="ash-button">Set time</button></div>
   </div>{/if}
-  {#if error}<p role="alert">{error}</p>{/if}
-</article>
+  {#if error}<div role="alert"><Status announce={false} label="Action failed">{error}</Status></div>{/if}
+</div></article>
 
 <style>
-  .decision-card{border-bottom:1px solid #d6dfcc;padding:20px 0 24px;color:#495741;font-size:13px;overflow-wrap:anywhere}h3{font-size:17px;line-height:1.5;margin:10px 0 6px;font-weight:500}p{line-height:1.6}.reason{color:#65745b;margin:0 0 18px}.meta{display:flex;justify-content:space-between;gap:8px;color:#65745b;font-size:11px}.action{border-left:2px solid #c3d1b8;padding:2px 0 2px 14px;margin:18px 0}h4{font-size:12px;margin:0 0 8px;font-weight:600}.target{margin:6px 0;white-space:pre-wrap}.target span{display:block;color:#65745b;font-size:11px}dl{font-size:12px;margin:12px 0 0}dl div{display:flex;gap:18px;margin:6px 0}dt{min-width:110px;color:#65745b}dd{margin:0;white-space:pre-wrap}.answer{margin:18px 0}.answer strong{font-weight:500}.answer p{margin:6px 0;color:#65745b}
-  button{border:1px solid #c7d1be;background:#f6f8ef;color:#495741;border-radius:5px;padding:8px 11px;font:inherit;font-size:12px;cursor:pointer}button:hover{background:#e6ecdf}button:disabled{opacity:.5;cursor:default}.primary{background:#536f43;color:white;border-color:#536f43}.primary:hover{background:#425d32}.quiet{border:0;background:transparent;padding:6px 0}.choices{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.comment,.proposal{font-size:12px;color:#65745b;margin:12px 0}summary{cursor:pointer;min-height:24px;line-height:24px}.comment textarea{min-height:60px}label{font-size:12px}textarea{display:block;width:100%;box-sizing:border-box;border:1px solid #c7d1be;border-radius:5px;background:#fffefa;min-height:80px;padding:10px;font:inherit;margin:8px 0;resize:vertical}
-  .footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px}.work,.secondary{display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:11px;color:#65745b}.work:empty{display:none}.snooze{border-top:1px solid #dfe5d6;padding-top:16px;margin-top:16px}.snooze div{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.due,.until{font-size:11px;color:#65745b}input{font:inherit;padding:7px;border:1px solid #c7d1be;border-radius:5px;background:#fffefa;color:inherit;max-width:190px}[role=alert]{color:#963d30}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  .decision-card{border-bottom:1px solid var(--divider);padding:20px 0 24px;color:var(--text);font-size:1rem;overflow-wrap:anywhere}h3{font-size:17px;line-height:1.5;margin:10px 0 6px;font-weight:525}p{line-height:1.6}.reason{color:var(--text);margin:0 0 18px}.meta{display:flex;justify-content:space-between;gap:8px;color:var(--text);font-size:.8rem}.action{border-left:2px solid var(--divider);padding:2px 0 2px 14px;margin:18px 0}h4{font-size:.9rem;margin:0 0 8px;font-weight:525}.target{margin:6px 0;white-space:pre-wrap}.target span{display:block;color:var(--text);font-size:.8rem}dl{font-size:.9rem;margin:12px 0 0}dl div{display:flex;gap:18px;margin:6px 0}dt{min-width:110px;color:var(--text)}dd{margin:0;white-space:pre-wrap}.answer{margin:18px 0}.answer strong{font-weight:525}.answer p{margin:6px 0;color:var(--text)}
+  button{border:1px solid var(--divider);background:color-mix(in srgb,var(--control) 35%,transparent);color:var(--text);border-radius:5px;padding:8px 11px;font:inherit;font-size:.9rem;cursor:pointer}button:disabled{opacity:.5;cursor:default}.primary{background:color-mix(in srgb,var(--control) 35%,transparent);color:white;border-color:var(--divider)}.quiet{border:0;background:transparent;padding:6px 0}.choices{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.comment,.proposal{font-size:.9rem;color:var(--text);margin:12px 0}summary{cursor:pointer;min-height:24px;line-height:24px}.comment textarea{min-height:60px}label{font-size:.9rem}textarea{display:block;width:100%;box-sizing:border-box;border:1px solid var(--divider);border-radius:5px;background:color-mix(in srgb,var(--control) 35%,transparent);min-height:80px;padding:10px;font:inherit;margin:8px 0;resize:vertical}
+  .footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px}.work,.secondary{display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:.8rem;color:var(--text)}.work:empty{display:none}.snooze{border-top:1px solid var(--divider);padding-top:16px;margin-top:16px}.snooze div{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.due,.until{font-size:.8rem;color:var(--text)}input{font:inherit;padding:7px;border:1px solid var(--divider);border-radius:5px;background:color-mix(in srgb,var(--control) 35%,transparent);color:inherit;max-width:190px}[role=alert]{color:var(--danger)}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
 </style>

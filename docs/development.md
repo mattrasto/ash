@@ -28,7 +28,7 @@ Read-only tools require an explicit [filesystem configuration](features/filesyst
 1. Start a Codex chat in a new worktree for a feature. Automatic setup installs pinned dependencies, registers the workspace and prepares its preview data.
 2. Choose **Run Preview**. Open that feature's chat preview with hot reload. Other feature previews keep running.
 3. Iterate in the same preview; restarts preserve its database, file and client preference. Reset explicitly when a clean fixture is useful. Product fixtures will replace the scratchpad as features land.
-4. Follow the [testing workflow](testing.md): run automated checks and let the coding agent exercise a separate verification instance. Testing does not interrupt or rewrite the preview being inspected.
+4. For frontend changes, read the [design requirements](../specs/design-system.md) and [implementation guidance](features/design-system.md). Follow the [testing workflow](testing.md): run automated checks and let the coding agent exercise a separate verification instance. Testing does not interrupt or rewrite the preview being inspected.
 5. The coding agent reviews the diff and evidence, then demonstrates the feature and presents any targeted manual checks. Follow the [delivery agreement](../specs/product.md#confirmed-engineering-agreement) for review and integration.
 6. Preserve source changes in a Git checkpoint or saved patch, including relevant untracked files. Dispose of development resources before archiving the checkout; retain verification evidence.
 

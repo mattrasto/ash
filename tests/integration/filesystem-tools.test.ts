@@ -309,7 +309,7 @@ test('Filesystem tools: scoped observations and desktop inspection', { timeout: 
         await page.getByRole('button',{name:'Close inspector',exact:true}).click();
       }
       await page.getByRole('link',{name:'Ambiguous old source',exact:true}).click();
-      await page.getByText('Source citation unavailable',{exact:true}).waitFor();assert.equal(await page.getByLabel('Artifact inspector').count(),0);
+      await page.getByText('Source citation unavailable',{exact:true}).waitFor();assert.equal(await page.getByRole('complementary',{name:'Artifact inspector',exact:true}).count(),0);
       await page.reload();await page.getByRole('link',{name:'Later observation',exact:true}).click();
       await page.getByLabel('Execution steps').locator('pre:visible').filter({hasText:'SECOND_CAPTURE'}).waitFor();
       await page.getByRole('button',{name:'Close inspector',exact:true}).click();

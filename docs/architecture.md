@@ -12,6 +12,10 @@ Run the backend independently of desktop windows. Laptop-off operation needs an 
 
 Asha's data model does not establish Ash's topic membership or recovery contract. Ash has a [separate codebase](decisions/0001-separate-codebase.md); evaluate components individually for reuse.
 
+## Renderer
+
+Shared visual primitives belong in `packages/client/src/renderer/ui/`; features own data, validation and navigation consequences. Follow [design requirements](../specs/design-system.md) and the [frontend code map](features/design-system.md) for appearance, motion, focus and scroll ownership.
+
 ## Processing and persistence
 
 - Treat Listen/Input/Filter/Route/Act/Surface as logical stages within the backend.

@@ -18,7 +18,9 @@ export class ThreadScroll {
     if(!this.viewport.clientHeight)return;
     const users=this.content.querySelectorAll('.user');const last=users[users.length-1];
     const anchor=last?Math.max(0,this.offset(last)-this.viewport.clientHeight*.2):0;
-    this.spacer.style.height=`${Math.max(this.viewport.clientHeight*.2,anchor+this.viewport.clientHeight-this.end())}px`;
+    // Breathing room must not manufacture overflow when the conversation fits.
+    const contentEnd=this.offset(this.content,true);
+    this.spacer.style.height=contentEnd<=this.viewport.clientHeight+1?`${Math.max(0,this.viewport.clientHeight-contentEnd)}px`:`${Math.max(this.viewport.clientHeight*.2,anchor+this.viewport.clientHeight-this.end())}px`;
     if(this.following)this.move(this.target());this.jump();
   }
   scroll(){if(!this.programmatic)this.following=this.viewport.scrollTop>=this.target()-32;this.jump();}

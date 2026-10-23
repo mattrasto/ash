@@ -19,9 +19,9 @@
       {@const request=artifacts.find(artifact=>artifact.id===round.requestId)?.payload}
       <details open={expansion[round.requestId]??round.requestId===selectedRequestId} ontoggle={event=>expansion[round.requestId]=event.currentTarget.open}>
         <summary>Model call {index+1} · {round.status}</summary>
-        <button onclick={()=>onInspect(round.requestId)}>Inspect captured request</button>
+        <button onclick={()=>onInspect(round.requestId)} class="ash-button">Inspect captured request</button>
         {#if request?.type==='model_request'&&request.tools}<details><summary>Supplied tools, scope and continuation results</summary><pre>{JSON.stringify(request.tools,null,2)}</pre></details>{/if}
-        {#if round.outputId}<button onclick={()=>onInspect(round.outputId!)}>Inspect output</button>{/if}
+        {#if round.outputId}<button onclick={()=>onInspect(round.outputId!)} class="ash-button">Inspect output</button>{/if}
         {#if round.model}<pre>{JSON.stringify(round.model,null,2)}</pre>{/if}
         {#each run.state.tools.calls.filter(call=>call.requestId===round.requestId) as call (call.id)}
           <details open={expansion[call.id]??(call.callArtifactId===selectedId||call.resultArtifactId===selectedId)} ontoggle={event=>expansion[call.id]=event.currentTarget.open}><summary>{call.call.name} · {call.status}</summary>
@@ -34,9 +34,9 @@
                 {#each payload.result.content as content}{#if content.type==='text'}<pre>{content.text}</pre>{:else}<pre>{JSON.stringify(content,null,2)}</pre>{/if}{/each}
                 {#if payload.result.status!=='success'}<p>{payload.result.error.code}: {payload.result.error.message}</p>{/if}
                 {#each payload.result.omissions as omission}<p>{omission}</p>{/each}
-                {#each payload.result.references as ref}<details><summary>{ref.label}</summary>{#if ref.kind==='video'&&typeof ref.location.attachmentId==='string'&&typeof ref.location.startSeconds==='number'}<button onclick={()=>onVideo?.(ref.location.attachmentId as string,ref.location.startSeconds as number)}>Open video at this moment</button>{/if}<pre>{JSON.stringify(ref,null,2)}</pre></details>{/each}
+                {#each payload.result.references as ref}<details><summary>{ref.label}</summary>{#if ref.kind==='video'&&typeof ref.location.attachmentId==='string'&&typeof ref.location.startSeconds==='number'}<button onclick={()=>onVideo?.(ref.location.attachmentId as string,ref.location.startSeconds as number)} class="ash-button">Open video at this moment</button>{/if}<pre>{JSON.stringify(ref,null,2)}</pre></details>{/each}
               {/if}
-              <button onclick={()=>onInspect(call.resultArtifactId!)}>Inspect saved result</button>
+              <button onclick={()=>onInspect(call.resultArtifactId!)} class="ash-button">Inspect saved result</button>
             {/if}
           </details>
         {/each}
@@ -45,5 +45,5 @@
   </section>
 {/if}
 <style>
-  section{border-top:1px solid #dbe2d1;padding-top:18px;margin-top:20px}h3{font-size:12px;color:#596b4d}details{margin-top:10px}summary{cursor:pointer;overflow-wrap:anywhere}button{display:block;border:0;background:transparent;color:var(--accent);font-size:11px;padding:5px 0;text-align:left}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:10px/1.6 ui-monospace,monospace;max-height:420px;overflow:auto}p{overflow-wrap:anywhere}
+  section{border-top:1px solid var(--divider);padding-top:18px;margin-top:20px}h3{font-size:.9rem;color:var(--text)}details{margin-top:10px}summary{cursor:pointer;overflow-wrap:anywhere}button{display:block;border:0;background:transparent;color:var(--accent);font-size:.8rem;padding:5px 0;text-align:left}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:10px/1.6 ui-monospace,monospace;max-height:420px;overflow:auto}p{overflow-wrap:anywhere}
 </style>
