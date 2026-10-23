@@ -7,7 +7,7 @@ export const ChangeTopic = z.object({expectedUpdatedAt:z.string().datetime(), na
 export const ChangeMembership = z.object({expectedVersion:z.number().int().nonnegative(), topicIds:z.array(id).max(100)}).strict()
   .refine(value => new Set(value.topicIds).size === value.topicIds.length, 'Duplicate Topics.');
 export const InstructionOwner = z.discriminatedUnion('scope', [
-  z.object({scope:z.literal('global'), key:z.enum(['response','image-description','video-caption','video-understanding','engine-filter','engine-route','engine-assess','thread-visibility','thread-naming'])}).strict(),
+  z.object({scope:z.literal('global'), key:z.enum(['model-routing','response','image-description','video-caption','video-understanding','engine-filter','engine-route','engine-assess','thread-visibility','thread-naming'])}).strict(),
   z.object({scope:z.literal('topic'), id}).strict(),
   z.object({scope:z.literal('thread'), id}).strict(),
 ]);

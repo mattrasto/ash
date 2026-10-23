@@ -46,3 +46,5 @@ export { ZodError } from 'zod';
 export * from './contracts/artifacts.ts';
 
 export * from './contracts/visibility.ts';
+
+export * from './contracts/model-routing.ts';

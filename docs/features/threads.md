@@ -67,7 +67,7 @@ pnpm dev:stop
 pnpm dev --openai-model MODEL_ID --max-output-tokens 1024 --reasoning-effort low
 ```
 
-With no flags, `pnpm dev` starts `gpt-6.1-sol` with low reasoning. The command above overrides that default; replace `MODEL_ID` with an available Responses model and a supported reasoning effort. Missing or unsafe credentials stop startup with setup guidance. `--deterministic` explicitly selects the offline demo and cannot be combined with live options. Automated test instances use the offline adapter without reading credentials.
+With no flags, `pnpm dev` starts a `gpt-6.1-sol` session with [automatic conversation routing](model-routing.md#operation) between Sol and Luna, both with low reasoning. `--no-model-routing` disables routing for a new fixed-model session. The command above overrides that default; replace `MODEL_ID` with an available Responses model and a supported reasoning effort. Missing or unsafe credentials stop startup with setup guidance. `--deterministic` explicitly selects the offline demo and cannot be combined with live options. Automated test instances use the offline adapter without reading credentials.
 
 The launcher prints a session ID. Running `pnpm dev` again reopens the active live preview; Stop/Run and hot reload retain its model, settings, call counter and limits. `--live-session SESSION_ID` explicitly resumes an older session owned by that instance. New model or tuning flags create a new session and require stopping the current preview first. Offline demos require `--deterministic` on every launch; that choice does not become the normal preview default.
 

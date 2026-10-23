@@ -1,7 +1,9 @@
 import { z } from 'zod';
+import { RoutingState } from './model-routing.ts';
 import type { RequestPayload } from './threads.ts';
 const instant=z.string().datetime({offset:true}).refine(value=>{const date=new Date(value);return Number.isFinite(date.getTime())&&date.getUTCFullYear()>=1&&date.getUTCFullYear()<=9999;},'Use a valid datetime in calendar years 1–9999.');
 export const ThreadLifecycle=z.object({
+  modelRouting:RoutingState.optional(),
   version:z.number().int().default(0), controls:z.number().int().default(0), activity:z.number().int().default(0),
   seen:z.number().int().default(0), unread:z.number().int().default(0), unreadAt:instant.nullable().default(null),
   messages:z.number().int().default(0), namedCount:z.number().int().default(0), titleMode:z.enum(['manual','automatic']).default('manual'),

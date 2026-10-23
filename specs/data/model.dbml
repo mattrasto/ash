@@ -53,7 +53,7 @@ Table artifacts {
   thread_id uuid [note: 'Surface: required current owner. Other layers: original processing association, or null if unknown.']
   run_id uuid [note: 'Producing Run; null for user Input/Surface and pre-Act processing.']
   actor text [not null, check: `actor IN ('user', 'ash', 'system')`, note: 'Attribution: user input/messages, Ash actions/replies, or system ingestion.']
-  payload jsonb [not null, note: 'Validated content with a type tag. Surface: speaker/content. Model request: messages/provider/model/options. Act type: permission_evaluation, containing action, rule snapshots, evidence and outcome. Only active response content may grow.']
+  payload jsonb [not null, note: 'Validated content with a type tag. Surface: speaker/content. Model request: messages/provider/model/options. Model-routing preparation retains frozen context and assessment input. Act type: permission_evaluation, containing action, rule snapshots, evidence and outcome. Only active response content may grow.']
   created_at timestamptz [not null, note: 'When first saved; immutable. Used with id for thread ordering.']
   updated_at timestamptz [not null, note: 'When content or thread ownership last changed; initially created_at.']
 

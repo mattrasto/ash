@@ -1,3 +1,5 @@
+import { ModelRoutingRequest, RoutingState, ChangeRouting } from '@ash/shared';
+import { ModelRouting, retryRoutingRequest } from './model-routing.ts';
 import { randomUUID, createHash } from 'node:crypto';
 import { Prisma, type Artifact, type PrismaClient, type Run } from '@prisma/client';
 import { InputPayload, MessagePayload, RequestPayload, RunState, ModelExecution, isActive, isVideoAttachment, AttachmentMetadata, type ModelMode, type ToolLimits, DEFAULT_TOOL_LIMITS, IncomingPayload, ActPlan } from '@ash/shared';
@@ -28,7 +30,7 @@ export class Threads {
   private stopping = false;
   private scheduling=false;
   private scheduleAgain=false;
-  constructor(readonly db: PrismaClient, private model: ModelAdapter = deterministicModel, private autoDispatch = true, private images?:ImageStorage, private tools?:ToolRuntime, private toolLimits?:ToolLimits, private decisions?:Decisions, private permissions?:Permissions) {if(decisions)decisions.onChanged=()=>{void this.resumeWaiting().catch(()=>console.error('Decision resumption failed'));};}
+  constructor(readonly db: PrismaClient, private model: ModelAdapter = deterministicModel, private autoDispatch = true, private images?:ImageStorage, private tools?:ToolRuntime, private toolLimits?:ToolLimits, private decisions?:Decisions, private permissions?:Permissions, private routing?:ModelRouting) {if(decisions)decisions.onChanged=()=>{void this.resumeWaiting().catch(()=>console.error('Decision resumption failed'));};}
 
   async recover() {
     const pending = await this.db.run.findMany({where:{threadId:{not:null},status:{in:['queued','running']}}});
@@ -135,6 +137,18 @@ export class Threads {
       const saved=await tx.thread.update({where:{id},data:{...data,lifecycle:json(v)}});
       await recordThreadChange(tx,row,saved,{id:command.requestId,origin:command.undo?'undo':'manual',command},now);
       return threadView(saved);
+    });
+  }
+  async changeRouting(id:string,input:unknown){
+    const command=ChangeRouting.parse(input);
+    if(command.override==='private')throw new ThreadError(409,'Private inference is not configured. No routing or inference request was sent.');
+    if(!this.model.routingConfiguration)throw new ThreadError(409,'Model routing is unavailable for this model session.');
+    return this.db.$transaction(async tx=>{
+      const row=await lockThread(tx,id),lifecycle=ThreadLifecycle.parse(row.lifecycle),current=RoutingState.parse(lifecycle.modelRouting??{});
+      if(current.override===command.override)return threadView(row);
+      if(current.version!==command.expectedVersion)throw new ThreadError(409,'The model override changed. Refresh before saving.');
+      lifecycle.modelRouting={...current,override:command.override,version:current.version+1};
+      return threadView(await tx.thread.update({where:{id},data:{lifecycle:json(lifecycle)}}));
     });
   }
   async markSeen(id:string,cursor:number){return this.db.$transaction(async tx=>{
@@ -246,6 +260,7 @@ export class Threads {
           await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId}::uuid FOR UPDATE`;
           const thread = await tx.thread.findUnique({where:{id:threadId}});
           if (!thread) throw new ThreadError(404, 'Thread not found.');
+          if(RoutingState.parse(ThreadLifecycle.parse(thread.lifecycle).modelRouting??{}).override==='private')throw new ThreadError(409,'Private inference is not configured. No routing or inference request was sent.');
           const duplicate = await tx.run.findUnique({where:{requestKey}});
           if (duplicate) return this.existing(duplicate,hash);
           if(await tx.artifact.findUnique({where:{id:requestKey}}))throw new ThreadError(409,'This submission key was already used for another operation.');
@@ -274,7 +289,7 @@ export class Threads {
             if (isActive(previous.status)||previous.status==='waiting') throw new ThreadError(409, 'Wait for the previous Run to stop before retrying.');
             inputId = previous.inputArtifactId;
             const priorRequest = await tx.artifact.findUniqueOrThrow({where:{id:RunState.parse(previous.state).request_artifact_id}});
-            const prior = RequestPayload.parse(priorRequest.payload);
+            const prior = (priorRequest.payload as {type:string}).type==='model_routing_request' ? retryRoutingRequest(ModelRoutingRequest.parse(priorRequest.payload)) : RequestPayload.parse(priorRequest.payload);
             request = RequestPayload.parse({...prior,...this.model.configuration(command.mode,prior)});
           }
           const runId = randomUUID(), requestId = randomUUID();
@@ -282,9 +297,10 @@ export class Threads {
             const tools = await captureTools(this.tools,runId,threadId,request,this.toolLimits);
             if (tools) request = RequestPayload.parse({...request,tools});
           }
+          const capture=command.kind==='send'&&this.routing?await this.routing.prepare(tx,thread,request):request;
           const state = RunState.parse({request_artifact_id:requestId,response_artifact_id:null});
           const run = await tx.run.create({data:{id:runId,inputArtifactId:inputId,threadId,retryOfId:command.kind === 'retry' ? command.previousId : null,status:'queued',state,requestKey,requestHash:hash,createdAt:now}});
-          await tx.artifact.create({data:{id:requestId,layer:'act',sourceId:inputId,threadId,runId,actor:'ash',payload:asJson(request),createdAt:now,updatedAt:now}});
+          await tx.artifact.create({data:{id:requestId,layer:'act',sourceId:inputId,threadId,runId,actor:'ash',payload:asJson(capture),createdAt:now,updatedAt:now}});
           await referenceImages(tx,requestId,request.selection.images?.map(image=>image.id)??[]);
           await referenceImages(tx,requestId,request.selection.videos?.map(video=>video.id)??[]);
           await tx.thread.update({where:{id:threadId},data:{updatedAt:now}});
@@ -355,14 +371,20 @@ export class Threads {
     try {
       const run = await this.db.run.findUniqueOrThrow({where:{id}});
       const request = await this.db.artifact.findUniqueOrThrow({where:{id:RunState.parse(run.state).request_artifact_id}});
-      const parsed=RequestPayload.parse(request.payload);
+      let parsed:RequestPayload,requestId=request.id;
+      if((request.payload as {type:string}).type==='model_routing_request'){
+        if(!this.routing)throw new ModelFailure('routing_unavailable','This saved routing request requires its original routing configuration.');
+        const resolved=await this.routing.resolve(id,request.id,ModelRoutingRequest.parse(request.payload),signal);
+        if(!resolved)return;
+        parsed=resolved.request;requestId=resolved.id;
+      }else parsed=RequestPayload.parse(request.payload);
       // Deterministic runs also validate media, so offline checks exercise the real storage path.
       for(const message of parsed.messages)if(Array.isArray(message.content))for(const block of message.content)if(block.type==='image') {
         if(!this.images)throw new ModelFailure('image_unavailable','Saved image storage is unavailable.');
         await this.images.read(block.attachmentId,block.image);
       }
       if (parsed.tools) {
-        await new ToolExecutor(this.db,this.model,this.tools,this.images,this.decisions,this.permissions).execute(id,parsed,request.id,signal);
+        await new ToolExecutor(this.db,this.model,this.tools,this.images,this.decisions,this.permissions).execute(id,parsed,requestId,signal);
         return;
       }
       for await (const event of this.model.stream(parsed,signal,this.images?image=>this.images!.dataUrl(image):undefined)) {

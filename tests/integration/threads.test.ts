@@ -64,7 +64,8 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
         await checkDiagram(admin,evidence);
       } finally {await admin.end();}
       await assert.rejects(db.$executeRawUnsafe('CREATE TABLE forbidden (id integer)'),/permission denied/);
-      assert.equal(await db.instruction.count(),9);
+      assert.equal(await db.instruction.count(),10);
+      assert.ok(await db.instruction.findUnique({where:{key:'model-routing'}}));
       const serverRequire=createRequire(join(instance.checkout,'packages/server/package.json'));
       const difference=await exec(process.execPath,[serverRequire.resolve('prisma/build/index.js'),'migrate','diff','--from-url',cfg.databaseUrl,'--to-schema-datamodel','prisma/schema.prisma','--exit-code'],{cwd:join(instance.checkout,'packages/server')});
       assert.match(difference.stdout,/No difference detected/);

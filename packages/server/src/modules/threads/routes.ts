@@ -9,6 +9,7 @@ export function threadRoutes(app: FastifyInstance, threads: Threads) {
   app.get<{Params:{id:string}}>('/api/thread-assessments/:id', request=>threads.inspectAssessment(Uuid.parse(request.params.id)));
   app.get<{Params:{id:string}}>('/api/application-changes/:id', request=>threads.inspectChange(Uuid.parse(request.params.id)));
   app.get<{Params:{id:string}}>('/api/threads/:id/changes', request=>threads.changes(Uuid.parse(request.params.id)));
+  app.post<{Params:{id:string}}>('/api/threads/:id/model-routing',request=>threads.changeRouting(Uuid.parse(request.params.id),request.body));
   app.get('/api/threads', () => threads.listThreads());
   app.post('/api/threads', async request => { const {id,title,topicId} = CreateThread.parse(request.body); return threads.createThread(id,title,topicId); });
   app.get<{Params:{id:string}}>('/api/threads/:id', request => threads.readThread(Uuid.parse(request.params.id)));

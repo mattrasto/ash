@@ -13,6 +13,7 @@ export type ModelConfiguration = Pick<Extract<RequestPayload, {provider:'determi
   | Pick<Extract<RequestPayload, {provider:'openai'}>, 'provider'|'model'|'options'>;
 export interface ModelAdapter {
   configuration(mode: ModelMode, previous?: RequestPayload): ModelConfiguration;
+  routingConfiguration?(role:'strong'|'fast'): ModelConfiguration;
   summaryConfiguration(previous?: RequestPayload): ModelConfiguration;
   info(): Promise<ModelInfo>;
   stream(request: RequestPayload, signal: AbortSignal, imageUrl?: (image:RequestImage)=>Promise<string>, replay?: ModelReplay): AsyncIterable<string | ModelExecution | ModelOutput>;

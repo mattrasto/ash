@@ -75,3 +75,13 @@ test('disposable live tests require paired explicit limits, including on resume'
   const bounded=(await configureLiveModel(disposable,{'openai-model':'test-model','live-calls':'3','live-minutes':'5'}))!;
   assert.equal((await readSession(disposable,bounded)).maxCalls,3);
 });
+
+test('routing defaults on, can be disabled for a new session, and persists on reopen',async t=>{
+  const {root,instance}=await fixture();t.after(()=>rm(root,{recursive:true,force:true}));
+  const routed=(await configureLiveModel(instance,{}))!;
+  assert.equal((await openSession(instance,routed)).routingEnabled,true);
+  const fixed=(await configureLiveModel(instance,{'no-model-routing':true}))!;
+  assert.equal((await openSession(instance,fixed)).routingEnabled,false);
+  assert.equal((await readSession(instance,fixed)).model,'gpt-6.1-sol');
+  await assert.rejects(configureLiveModel(instance,{'live-session':fixed,'no-model-routing':true}),/without changing/);
+});

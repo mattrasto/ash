@@ -60,6 +60,8 @@ Private access does not specify provider data access, recording retention or spe
 
 **Selected provider:** OpenAI, using Responses for text first and its image capabilities later. [Live-mode behavior](features/threads.md#requirements) and [configuration](../docs/features/threads.md#openai-mode).
 
+**Model routing direction accepted, 2026-10-22:** hosted Jev, Ash-owned policy, a strong default and evaluation on actual usage before cheaper routes. [Routing spec](features/model-routing.md) owns proposed behavior, staged delivery and remaining configuration decisions. This does not settle the broader personal-data policy below.
+
 **Initial live check:** the authorized model and bounded allowance passed the [text smoke test](../docs/features/threads.md#verification).
 
 **Interactive development:** remove the short session call/time cap from normal chat. Keep routine automated verification offline; isolate optional live checks and use cheaper models where the behavior under test permits. [Provider rule](features/threads.md#requirements) · [Test strategy](../docs/plans/persisted-chat-tests.md#openai-adapter).

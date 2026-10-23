@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RoutingAttempt, RoutingSelection } from './model-routing.ts';
 import { ThreadChange, type ApplicationChangeView, type ThreadLifecycle } from './visibility.ts';
 import { IncomingPayload, IncomingSource, EngineOutcome, EngineStage } from './artifacts.ts';
 import { ImageBlock, VideoBlock, VideoFile, TextBlock, ModelContent, type AttachmentView } from './attachments.ts';
@@ -48,6 +49,7 @@ export const OpenAIOptions = z.object({
 const requestContent = {
   type: z.literal('model_request'),
   tools: ToolRequest.optional(),
+  routing: RoutingSelection.optional(),
   purpose:z.enum(['image_summary','engine_filter','engine_route','engine_assess','thread_visibility','thread_naming']).optional(),
   incoming:z.object({inputArtifactId:Uuid,showResponse:z.boolean()}).strict().optional(),
   messages: z.array(z.object({ role: z.enum(['system', 'user', 'assistant']), content: ModelContent }).strict()),
@@ -69,12 +71,13 @@ export const RequestPayload = z.discriminatedUnion('provider', [
   z.object({...requestContent, provider:z.literal('deterministic'), model:z.literal('ash-test-v1'), options:z.object({mode:ModelMode}).strict()}).strict(),
   z.object({...requestContent, provider:z.literal('openai'), model:z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,199}$/), options:OpenAIOptions}).strict(),
 ]);
+export const ModelRoutingRequest = z.object({type:z.literal('model_routing_request'),request:RequestPayload,attempt:RoutingAttempt}).strict();
 export type RequestPayload = z.infer<typeof RequestPayload>;
 export type MessagePayload = z.infer<typeof MessagePayload>;
 export const VideoArtifact=z.union([VideoPlan,VideoModelRequest,VideoModelResponse,VideoUnderstandingPayload]);
 export const EngineRequest=z.object({type:z.literal('engine_request'),stage:EngineStage,request:RequestPayload,scope:z.record(z.unknown())}).strict();
 export const EngineArtifact=z.union([EngineRequest,EngineOutcome,z.object({type:z.literal('engine_response'),text:z.string().max(16000),model:ModelExecution.optional()}).strict()]);
-export type ArtifactPayload =  z.infer<typeof EngineArtifact> | z.infer<typeof InputPayload> | MessagePayload | RequestPayload | z.infer<typeof DescriptionPayload> | ToolArtifact | PermissionEvaluation | z.infer<typeof VideoArtifact>;
+export type ArtifactPayload = z.infer<typeof ModelRoutingRequest> |  z.infer<typeof EngineArtifact> | z.infer<typeof InputPayload> | MessagePayload | RequestPayload | z.infer<typeof DescriptionPayload> | ToolArtifact | PermissionEvaluation | z.infer<typeof VideoArtifact>;
 export interface ThreadView {
   id: string; title: string; createdAt: string; updatedAt: string; isArchived:boolean; isPinned?:boolean; lifecycle?:ThreadLifecycle; activeWork?:boolean; waitingWork?:boolean; unread?:boolean;
   latestRun?: {id:string;status:RunStatus;endedAt:string|null}|null;
@@ -91,7 +94,7 @@ export interface RunView {
 export interface ThreadDetail { thread: ThreadView; artifacts: ArtifactView[]; changes: ApplicationChangeView[]; runs: RunView[]; attachments?:AttachmentView[]; membership?:import('./organization.ts').MembershipView; decisions?:DecisionView[] }
 export interface InspectionView { selectedId: string; input: ArtifactView; artifacts: ArtifactView[]; runs: RunView[]; attachments?:AttachmentView[] }
 export interface ModelInfo {
-  provider: 'deterministic' | 'openai'; model: string;
+  provider: 'deterministic' | 'openai'; model: string; routingEnabled?:boolean;
   session?: { id: string; callsUsed: number; maxCalls: number | null; expiresAt: string | null };
 }
 export const isActive = (status: string) => status === 'queued' || status === 'running';

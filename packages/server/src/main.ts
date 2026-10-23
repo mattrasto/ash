@@ -1,3 +1,6 @@
+import { ModelRouting } from './modules/threads/model-routing.ts';
+import { jevRouter } from './platform/models/jev-router.ts';
+import { ensureRoutingInstruction } from './modules/instructions/model-routing.ts';
 import { ThreadVisibility } from './modules/visibility/service.ts';
 import { ensureVisibilityInstructions } from './modules/visibility/instructions.ts';
 import { Incoming } from './modules/artifacts/service.ts';
@@ -77,7 +80,9 @@ const filesystemConfiguration=async()=>{
   return settings;
 };
 await permissions.seed();await filesystemConfiguration().catch(()=>undefined);
-const threads = new Threads(product,model,true,imageStorage,composeToolRuntimes(decisionRuntime(decisions),topicRuntime(new TopicRetrieval(product)),filesystemRuntime(filesystemConfiguration,modelSessionId?'all':'offline-demo',true),videoRuntime(video)),undefined,decisions,permissions);
+await ensureRoutingInstruction(product);
+const modelRouting=model.routingConfiguration?new ModelRouting(product,model,jevRouter(jevKey)):undefined;
+const threads = new Threads(product,model,true,imageStorage,composeToolRuntimes(decisionRuntime(decisions),topicRuntime(new TopicRetrieval(product)),filesystemRuntime(filesystemConfiguration,modelSessionId?'all':'offline-demo',true),videoRuntime(video)),undefined,decisions,permissions,modelRouting);
 await threads.recover();
 await ensureEngineInstructions(product);
 const incoming=new Incoming(product,threads,model);

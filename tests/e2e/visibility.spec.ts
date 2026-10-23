@@ -153,7 +153,8 @@ test('visibility-recording-recovery',async({ash},testInfo)=>{
   ipcMain.removeHandler('recording:upload');ipcMain.handle('recording:upload',()=>{throw new Error('Synthetic upload unavailable; retain the local draft.');});
   ipcMain.removeHandler('recording:discard');ipcMain.handle('recording:discard',()=>{});
  },id);
- await page.evaluate(id=>{const drafts=JSON.parse(localStorage.getItem('ash-chat-drafts')!);delete drafts[id];localStorage.setItem('ash-chat-drafts',JSON.stringify(drafts));},id);
+ // Clear the saved text before the next app boots; the old document may save its in-memory draft while reloading.
+ await page.addInitScript(id=>{const drafts=JSON.parse(localStorage.getItem('ash-chat-drafts')??'{}');delete drafts[id];localStorage.setItem('ash-chat-drafts',JSON.stringify(drafts));},id);
  await page.reload();await expect(page.getByTestId('connection')).toContainText('Connected');
  await expect(page.getByLabel('Message',{exact:true})).toHaveValue('');
  await expect.poll(async()=>(await state()).lifecycle.kind,{timeout:25000}).toBe('until');

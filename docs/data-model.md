@@ -166,6 +166,8 @@ A `model_request` Act stores the exact ordered model-visible messages, instructi
 
 Build thread context from Surface messages under [CONV-R05 and CONV-R15](../specs/features/threads.md#requirements). Do not include their Input or Act copies as additional messages. For each Input, choose its completed Run with the greatest `(ended_at, id)` and include that Run's response if it is in the current Thread. Apply context limits after selection and record compact omission counts in the request. An Input without a completed response contributes its user message only.
 
+Conversation model routing adds an immutable preparation Act and atomic selection checkpoint before inference; [routing persistence](features/model-routing.md#code-and-persistence) owns its payload/state contract.
+
 Select and record the call's provider, exact model identifier and generation options before committing that request. Dispatch must use those recorded values; choosing a different request requires another Artifact, not mutation of a frozen one. A saved request records prepared work, not proof that the provider accepted or completed it.
 
 Each call gets its own request Artifact, including explicit retries. A retry copies the previous frozen model-visible content instead of reading current instructions or thread; its call record retains that retry's selected provider/model/options. The original input and `retry_of_id` retain the relationship to the earlier execution. The initial live retry policy follows [CONV-R16](../specs/features/threads.md#requirements).

@@ -6,7 +6,7 @@ import { ModelFailure, type ModelAdapter } from './adapter.ts';
 
 export type OpenAIRequest = Extract<RequestPayload, {provider:'openai'}>;
 export interface OpenAIModelSettings {
-  apiKey: string; model: string; options: OpenAIRequest['options'];
+  apiKey: string; model: string; routingEnabled?:boolean; options: OpenAIRequest['options'];
   // Reservation is durable before dispatch. A failed or ambiguous call consumes a slot.
   reserve: () => Promise<number>;
   info: () => Promise<ModelInfo>;
@@ -35,11 +35,13 @@ function failure(error: unknown): ModelFailure {
 export function openAIModel(settings: OpenAIModelSettings, testFetch?: typeof fetch): ModelAdapter {
   const client = new OpenAI({apiKey:settings.apiKey,baseURL:'https://api.openai.com/v1',maxRetries:0,
     logLevel:'off',...(testFetch ? {fetch:testFetch} : {})});
+  const routed = settings.routingEnabled && settings.model==='gpt-6.1-sol';
   return {
+    ...(routed?{routingConfiguration(role:'strong'|'fast'){return {provider:'openai' as const,model:role==='fast'?'gpt-6-luna':'gpt-6.1-sol',options:{...settings.options,reasoningEffort:'low' as const}};}}:{}),
     configuration(mode, previous) {
       if (mode !== 'normal') throw new ModelFailure('test_mode_unavailable', 'Test response behavior is only available with the deterministic model.');
       if (previous) {
-        if (previous.provider !== 'openai' || previous.model !== settings.model ||
+        if (previous.provider !== 'openai' || (previous.model !== settings.model && !(settings.model==='gpt-6.1-sol' && previous.routing && ['gpt-6-luna','gpt-6.1-sol'].includes(previous.model))) ||
           previous.options.maxOutputTokens > settings.options.maxOutputTokens) {
           throw new ModelFailure('provider_unavailable', 'Retry requires a session with the original provider/model and a sufficient output limit.');
         }
@@ -53,7 +55,7 @@ export function openAIModel(settings: OpenAIModelSettings, testFetch?: typeof fe
         throw new ModelFailure('provider_unavailable','Description retry requires its original provider and model.');
       return previous ? {provider:previous.provider as 'openai',model:previous.model,options:(previous as OpenAIRequest).options} : configuration;
     },
-    info:settings.info,
+    info:async()=>({...await settings.info(),...(routed?{routingEnabled:true}:{})}),
     async *stream(request, signal, imageUrl, replay) {
       if (request.provider !== 'openai') throw new ModelFailure('provider_unavailable', 'This request requires the deterministic model.');
       if(request.purpose==='image_summary')this.summaryConfiguration(request);else this.configuration('normal',request);

@@ -26,14 +26,14 @@ try {
     fixture: { type: 'string' }, json: { type: 'boolean' }, headless: { type: 'boolean' }, windowed: { type: 'boolean' }, background: { type: 'boolean' }, detach: { type: 'boolean' },
     'openai-model': {type:'string'}, 'live-session': {type:'string'}, 'live-calls': {type:'string'},
     'live-minutes': {type:'string'}, 'max-output-tokens': {type:'string'}, 'reasoning-effort': {type:'string'},
-    deterministic: {type:'boolean'},
+    deterministic: {type:'boolean'}, 'no-model-routing':{type:'boolean'},
   } });
   jsonOutput = values.json ?? false;
   assertEnvironment();
   const root = await devRoot(values['dev-root']);
   const ws = await workspace(resolve(values.workspace ?? process.cwd()), root);
   const command = positionals[0];
-  if (!['start','explore'].includes(command) && ['deterministic','openai-model','live-session','live-calls','live-minutes','max-output-tokens','reasoning-effort'].some(key=>values[key as keyof typeof values] !== undefined)) throw new Error('Model options require start or explore');
+  if (!['start','explore'].includes(command) && ['deterministic','openai-model','live-session','live-calls','live-minutes','max-output-tokens','reasoning-effort','no-model-routing'].some(key=>values[key as keyof typeof values] !== undefined)) throw new Error('Model options require start or explore');
   const instanceId = values.instance ?? ws.previewId;
   const selected = values.instance ? await readInstance(ws, instanceId) : undefined;
   if (values.instance && ['setup', 'explore'].includes(command)) throw new Error(`${command} does not accept --instance`);
@@ -50,7 +50,7 @@ try {
     logDirectory = join(instance.root, 'logs');
     const prior = await runtime(instance);
     if (prior && await alive(prior.supervisor)) {
-      const changing = ['openai-model','live-calls','live-minutes','max-output-tokens','reasoning-effort'].some(key=>values[key as keyof typeof values] !== undefined)
+      const changing = ['openai-model','live-calls','live-minutes','max-output-tokens','reasoning-effort','no-model-routing'].some(key=>values[key as keyof typeof values] !== undefined)
         || (values['live-session'] !== undefined && values['live-session'] !== prior.modelSessionId)
         || (values.deterministic ? !!prior.modelSessionId : !prior.modelSessionId && instance.profile !== 'test');
       if (changing) throw new Error('Stop the running instance before changing its model session');

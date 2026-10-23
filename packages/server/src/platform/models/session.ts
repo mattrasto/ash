@@ -7,6 +7,7 @@ import { ModelFailure } from './adapter.ts';
 
 export const Session = z.object({
   version:z.literal(1), id:Identity, workspaceId:Identity, instanceId:Identity,
+  routingEnabled:z.boolean().optional(),
   model:z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,199}$/), options:OpenAIOptions,
   maxCalls:z.number().int().min(1).max(1000).nullable(), callsUsed:z.number().int().nonnegative(),
   expiresAt:z.string().datetime().nullable(),
@@ -42,7 +43,7 @@ export async function openSession(instance: Instance, id: string) {
   // The database owner lock guarantees a single backend; this queue serializes its threads.
   let tail: Promise<unknown> = Promise.resolve();
   return {
-    model:session.model,options:session.options,
+    model:session.model,options:session.options,routingEnabled:session.routingEnabled??true,
     async reserve() {
       const reservation = tail.then(async () => {
         const current = await readSession(instance,id);
