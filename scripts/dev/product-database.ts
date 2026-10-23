@@ -55,6 +55,10 @@ export async function migrateProduct(instance: Instance, cluster: Cluster) {
       await tx.unsafe(`GRANT UPDATE (title, is_archived, is_pinned, lifecycle, updated_at) ON threads TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT UPDATE (payload, updated_at) ON artifacts TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT UPDATE (status, state, error, started_at, ended_at) ON runs TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT UPDATE (interaction_mode) ON threads TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT SELECT, INSERT ON adapt_workspaces, adapt_executions TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT UPDATE (status, controller, checkpoint, updated_at) ON adapt_workspaces TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT UPDATE (controller) ON adapt_executions TO "${instance.runtimeRole}"`);
     });
   } finally { await db.end(); }
 }

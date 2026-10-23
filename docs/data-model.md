@@ -39,6 +39,10 @@ Tables, immutable answers and single-rule Permissions with reviewed overrides im
 
 Keep feature ownership separate. Use foreign keys for relational references and validate JSON references in resolution/checkpoint data and Permission override links. The new Permission policy uses existing columns; its [contract and migration](features/permissions.md#persistence) replace resource/activity and mixed matchers without adding entity, relationship or version tables. Waiting tool steps resume within their original Run under the [execution contract](features/decisions.md#execution-integration). Retention/erasure policy belongs to the separate security/privacy design. Schema changes follow the [synchronization workflow](architecture.md#schema-workflow).
 
+## Adapt extension
+
+`threads.interaction_mode`, `adapt_workspaces` and `adapt_executions` persist coding routing, source identity and operational reconciliation. Immutable `coding_request` and `coding_evidence` Acts retain context and cumulative source checkpoints. `adapt_preparation`, `adapt_candidate` and `adapt_application` Acts retain verification requests, frozen local builds and Decision-linked application outcomes. The private Workspace controller references those records; protected filesystem journals own version switching. [Persistence and ownership](features/adapt.md#persistence) · [Local application](features/adapt.md#local-application).
+
 ## Run boundary
 
 A Run tracks an Act workflow and its outputs, including Surface Artifacts. Routine Listen/Input/Filter/Route processing and intake action/presentation assessment do not create Run rows. Those stages may use workers or model calls; using a worker does not itself create a product Run.
@@ -186,6 +190,8 @@ The first response workflow uses this minimal shape at acceptance:
 ```
 
 `request_artifact_id` is required and immutable for this workflow; it references this Run's frozen `model_request` Act. `response_artifact_id` stays null until a response is saved, then references this Run's Surface (or its result Act for a description). Create the result and set the reference atomically. A completed empty chat reply still has a Surface; incoming internal work instead references its final model output under the incoming-item contract above. Failure/cancellation before output may have none. In that case, display the Run's outcome beside its originating user message.
+
+An automatic Adapt handoff retains this original request and Run. `state.adapt.requestArtifactId` references its additional frozen `coding_request`, sourced from the initiating tool call. The mode, execution binding and completed tool result commit together. Workspace refresh saves a new immutable `coding_evidence` checkpoint sourced from its predecessor; private integration state retains the installed baseline and conflict paths. [Adapt workflow](features/adapt.md#automatic-entry-and-parallel-changes).
 
 Validate each reference's existence, layer, type and producing Run on write; JSON references have no SQL FKs. Commit checkpoint changes with their related Artifacts/outcome. Terminal Runs freeze the checkpoint; status and error remain separate columns.
 

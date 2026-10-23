@@ -27,6 +27,7 @@ Table threads {
   updated_at timestamptz [not null]
   is_archived boolean [not null, default: false, note: 'Hidden from the ordinary thread list; accessible in the archive.']
   is_pinned boolean [not null, default: false, note: 'Pinned in the thread list. Does not override is_archived.']
+  interaction_mode text [not null, default: 'chat', check: `interaction_mode IN ('chat','adapt')`, note: 'Routes future submissions; accepted Runs retain their captured mode.']
   initial_title text [note: 'Creation identity, independent of subsequent naming.']
   lifecycle jsonb [not null, default: `'{}'::jsonb`, note: 'Validated ThreadLifecycle checkpoint; see visibility implementation.']
   topics_version integer [not null, default: 0, check: `topics_version >= 0`, note: 'Rejects stale membership edits without changing thread activity.']
@@ -252,3 +253,23 @@ Table application_changes {
 Ref: application_changes.thread_id > threads.id [delete: restrict, update: no action]
 Ref: application_changes.source_artifact_id > artifacts.id [delete: restrict, update: no action]
 Ref: application_changes.assessment_id > thread_assessments.id [delete: restrict, update: no action]
+
+Table adapt_workspaces {
+  id uuid [pk, not null]
+  thread_id uuid [not null, unique, note: 'One Workspace per Thread in the first phase.']
+  base_revision text [not null, note: 'Exact configured master commit; immutable source base.']
+  status text [not null, default: 'preparing']
+  controller jsonb [not null, default: `'{}'::jsonb`, note: 'Private versioned provider binding and environment generation; excluded from public views.']
+  checkpoint jsonb [note: 'Last validated source patch/tree and reported checks; null before first export.']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+Table adapt_executions {
+  run_id uuid [pk, not null, note: 'Ash Run; captured context is an immutable coding_request Artifact.']
+  workspace_id uuid [not null]
+  controller jsonb [not null, default: `'{}'::jsonb`, note: 'Private dispatch journal, session identity and cancellation/cleanup state.']
+  indexes { workspace_id }
+}
+Ref: adapt_workspaces.thread_id > threads.id [delete: restrict, update: no action]
+Ref: adapt_executions.run_id > runs.id [delete: restrict, update: no action]
+Ref: adapt_executions.workspace_id > adapt_workspaces.id [delete: restrict, update: no action]

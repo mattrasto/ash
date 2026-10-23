@@ -16,8 +16,13 @@ export const Instance = z.object({
 export type Instance = z.infer<typeof Instance>;
 export type Fixture = z.infer<typeof Fixture>;
 
+export const CandidatePreview=z.object({
+  workspaceId:z.string().uuid(),threadId:z.string().uuid(),checkpointId:z.string().uuid(),
+  ownerInstancePath:z.string(),baseRevision:z.string().regex(/^[a-f0-9]{40,64}$/),tree:z.string().regex(/^[a-f0-9]{40,64}$/),checkout:z.string(),releaseId:z.string().uuid().optional(),rendererBuild:z.string().optional(),
+}).strict();
+export type CandidatePreview=z.infer<typeof CandidatePreview>;
 export const ServerConfig = z.object({
-  instance: Instance, databaseUrl: z.string().url(), token: z.string().min(32),
+  instance: Instance, databaseUrl: z.string().url(), token: z.string().min(32), candidatePreview:CandidatePreview.optional(),
   testTiming: z.literal('accelerated').optional(),
 }).superRefine((value, context) => {
   if (value.testTiming && value.instance.profile !== 'test') context.addIssue({ code: z.ZodIssueCode.custom, message: 'Accelerated timing requires a disposable test instance' });
@@ -29,10 +34,12 @@ export const ScratchChange = z.object({
 }).strict();
 
 export interface PreviewInfo {
+  candidatePreview?: {workspaceId:string;threadId:string;checkpointId:string;tree:string};
   label: string; workspaceId: string; instanceId: string; profile: string;
   checkout: string; source: { branch: string | null; revision: string } | null;
   fixture: string; generation: string; schemaVersion: number;
   model?: import('./contracts/threads.ts').ModelInfo;
+  adapt?: import('./contracts/adapt.ts').AdaptInfo;
 }
 
 export * from './contracts/threads.ts';
@@ -44,10 +51,11 @@ export * from './contracts/video-understanding.ts';
 export * from './contracts/permissions.ts';
 export * from './contracts/decisions.ts';
 
-export { ZodError } from 'zod';
+export { z, ZodError } from 'zod';
 
 export * from './contracts/artifacts.ts';
 
 export * from './contracts/visibility.ts';
 
 export * from './contracts/model-routing.ts';
+export * from './contracts/adapt.ts';

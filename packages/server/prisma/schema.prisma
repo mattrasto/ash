@@ -24,6 +24,8 @@ model Thread {
   updatedAt     DateTime     @map("updated_at") @db.Timestamptz(6)
   isArchived    Boolean      @default(false) @map("is_archived")
   isPinned      Boolean      @default(false) @map("is_pinned")
+  interactionMode String     @default("chat") @map("interaction_mode")
+  adaptWorkspaces AdaptWorkspace[]
   initialTitle  String?      @map("initial_title")
   lifecycle     Json         @default("{}") @db.JsonB
   assessments   ThreadAssessment[]
@@ -135,10 +137,36 @@ model Run {
   artifacts Artifact[] @relation("produced")
   attachmentSummary Attachment?
   continuations ProviderContinuation[]
+  adaptExecution AdaptExecution?
   @@index([inputArtifactId])
   @@index([threadId])
   @@index([retryOfId])
   @@map("runs")
+}
+
+model AdaptWorkspace {
+  id String @id @db.Uuid
+  threadId String @unique @map("thread_id") @db.Uuid
+  baseRevision String @map("base_revision")
+  status String @default("preparing")
+  controller Json @default("{}") @db.JsonB
+  checkpoint Json? @db.JsonB
+  createdAt DateTime @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(6)
+  thread Thread @relation(fields:[threadId],references:[id],onDelete:Restrict,onUpdate:NoAction)
+  executions AdaptExecution[]
+  @@map("adapt_workspaces")
+}
+
+// Provider handles and dispatch journal are private, never returned through Thread views.
+model AdaptExecution {
+  runId String @id @map("run_id") @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  controller Json @default("{}") @db.JsonB
+  run Run @relation(fields:[runId],references:[id],onDelete:Restrict,onUpdate:NoAction)
+  workspace AdaptWorkspace @relation(fields:[workspaceId],references:[id],onDelete:Restrict,onUpdate:NoAction)
+  @@index([workspaceId])
+  @@map("adapt_executions")
 }
 
 // Private provider replay data, never included in Artifact/inspection payloads.

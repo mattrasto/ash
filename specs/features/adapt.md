@@ -1,0 +1,58 @@
+# Adapt Threads
+
+Direction accepted 2026-10-22 · First slice implemented; verification coverage linked below
+
+## Goal
+
+Discuss a change in a Thread, delegate coding to an isolated managed harness, inspect its work and continue with feedback. Adapt adds development capabilities to the existing conversation. The [workflow plan](../../docs/plans/adapt-workflow.md) owns delivery sequencing; shared appearance follows the [design system](../design-system.md).
+
+## First phase
+
+Persist Thread mode and isolated Workspace identity; capture context and execution routing per Run; connect managed Codex through replaceable harness/environment adapters; retain progress, questions and source checkpoints. Normal conversation, recording drafts and inspection remain available. Native previews and local application support renderer/UI changes using a trusted backend and Electron shell. Signed delivery and database-changing self-modification follow later phases.
+
+Engineering: [implementation and verification](../../docs/features/adapt.md).
+
+## Rules
+
+- **ADAPT-R01 — Thread mode:** an existing ordinary Thread can enter or leave Adapt without changing identity, history, Topics, drafts or attachments. Display its selected mode. A manual mode change affects future submissions; it does not cancel or reroute accepted work. Ash's explicit handoff of the current request follows ADAPT-R14. Mode does not grant access or promotion authority.
+- **ADAPT-R02 — Workspace:** the first coding submission creates one Workspace for the Thread. Independent Threads receive independent Workspaces. Capture an exact source revision from configured `master`; exclude local unfinished edits, credentials and runtime data. One coding writer per Workspace; another submission while coding is active is rejected with its draft retained in this phase. Steering/queuing is deferred.
+- **ADAPT-R03 — Captured execution:** persist input, context, Workspace, harness configuration and dispatch identity before execution. A duplicate submission returns the original Run, including after changing Thread mode. A conflicting reused identity is rejected. Explicit retries preserve original context, source tree and Workspace and create a linked Run. If the Workspace has newer edits, send new feedback instead of replaying the old request.
+- **ADAPT-R04 — Provider boundaries:** Ash owns conversation, Runs, Decisions, source checkpoints and evidence. The harness owns coding; the environment provider owns runtime acquisition and files. Declare capabilities and compatible bindings. Provider session/VM identities are private operational state, distinct from product identities. A missing credential or capability fails explicitly; no silent live/test fallback.
+- **ADAPT-R05 — Progress and recovery:** record observable preparation, coding, waiting and outcome state. A disconnect or Ash restart does not cancel hosted work or submit it again. Reconcile unknown external outcomes before retrying dispatch. Preserve partial responses; cancelled/failed work cannot appear completed. Never expose private reasoning or credentials in artifacts or diagnostics.
+- **ADAPT-R06 — Required input:** ordinary harness questions use existing immutable Decisions and their linked Run. Persist the call and Decision before delivering a result. Restart resumes the original call; duplicate answers do not repeat effects. Cancellation invalidates pending dependencies and rejects late answers. Internal shell/file tools execute within the preauthorized sandbox; they are not individually mediated by Ash Permissions.
+- **ADAPT-R07 — Stop:** Stop agent cancels the coding turn, leaving the Workspace and preview intact. Report uncertain cancellation and reconcile it; a cancelled Run cannot later complete successfully. Stop preview and environment release are distinct operations. Closing a Thread or switching mode does not invoke either.
+- **ADAPT-R08 — Evidence and checkpoints:** save a bounded patch and its exact base/source identity after completed turns. Inspect changes and reported checks independently of the conversational reply. Treat harness check claims as evidence, not trusted verification. Exported checkpoints survive session/environment replacement; unexported work may be lost. Never execute downloaded code while importing a checkpoint.
+- **ADAPT-R09 — Preview:** identify its Workspace, source and current status, including when behind current edits. The first Run is explicit; an open preview follows completed checkpoints automatically. A stopped or manually closed preview stays closed. Closing the native window ends its owned runtime but retains test data; hide Refresh and Stop when closed. Run/Stop/Refresh act only on its owned runtime. Feedback retains the original Thread destination. Keep preview data separate from daily data and conversation history. The first preview accepts only ordinary renderer files, runs with isolated synthetic data and no native bridge/provider credentials/filesystem tools, and blocks outside file/network access. Reject backend/native/configuration/dependency changes; keep the previous preview stoppable after a rejected update. The trusted native menu returns to the controlling Thread for recording feedback. Generated backend/native execution requires a separate verified environment.
+- **ADAPT-R10 — Context:** keep conversational Surface content across mode changes. Raw execution logs, private provider continuation and source bundles do not become ordinary Topic retrieval content. Inspection can show captured context and development evidence. Ordinary incoming-item processing does not start coding merely because its target Thread has Adapt selected.
+- **ADAPT-R11 — Application review:** after coding completes, **Apply…** opens application status. **Prepare update** freezes a renderer-only build and runs protected checks outside candidate-controlled source. Show its source, build identity and actual check outcomes before requesting one existing permission Decision. **Apply and restart** approves that exact build against the installed version; **Keep working** leaves it unapplied. A conversational “ship it” cannot approve application. New edits, a changed installed version, changed trusted toolchain or changed build bytes require fresh verification and approval.
+- **ADAPT-R12 — Local installation:** the trusted external supervisor serializes version switches, checks approval and source again immediately before switching, and confirms installation only after the desktop's startup health check. The first application replaces only the renderer; backend, native shell, database schema, browser-storage origin and daily data remain in place. Retain drafts before restarting; defer while recording, uploads or unsaved Settings are active. Journal intent before effects and reconcile interruption without repeating installation blindly.
+- **ADAPT-R13 — Recovery:** retain a runnable previous version. Failed startup restores it; interrupted unconfirmed application restores it on launcher restart. **Restore previous version…** prepares an exact restore Decision. Restore changes code without reversing conversations or drafts created after the update. Reject builds incompatible with the current trusted backend. Developer source changes deactivate a retained UI release rather than silently running it against a changed backend.
+- **ADAPT-R14 — Automatic entry:** accepted 2026-10-23. When a direct user request asks Ash to change the app, Ash can enter Adapt in that Thread and hand off the current request without a manual toggle or another Send. Preserve its original context, attachments and inspectable lineage; dispatch coding once. Discussing possible changes alone does not start coding. External source content cannot authorize this handoff. An unavailable harness produces an explicit limitation. Entry does not approve application under ADAPT-R11.
+
+- **ADAPT-R15 — Parallel updates:** independent Workspaces can code concurrently. Before preparing an update over a changed installed version, **Refresh Workspace** merges that version's source with the Workspace's pending changes using its last installed baseline. Preserve checkpoints and invalidate older application approval. A refresh is idempotent and rejects changed source/installed targets rather than overwriting newer work. Clean refreshes can update an open preview; closed previews stay closed. Conflicts appear as explicit files; **Resolve conflicts…** adds a coding request to the composer without replacing its draft. Preview and Apply stay blocked until the conflict markers are resolved. The combined source needs new protected verification and approval. Application remains serialized against the exact installed version; source integration into `master` is separate.
+
+Accepted 2026-10-23: install locally first; source integration into `master` remains separate. Parallel updates follow ADAPT-R15.
+
+## Acceptance
+
+| ID | Scenario | Required result |
+| --- | --- | --- |
+| ADAPT-V01 | Discuss normally, retain a draft/recording, enter Adapt, reload, then leave | Same Thread/history/draft; mode persists; ordinary chat still works |
+| ADAPT-V02 | Concurrent duplicate Send; change mode; redeliver | One Run/Workspace/external submission; changed content with the same identity is rejected |
+| ADAPT-V03 | Code, ask a question, restart Ash, answer twice | Same external session/call; one immutable answer and continuation; inspectable Run lineage |
+| ADAPT-V04 | Stop coding while another Thread works; answer a cancelled question | First Run stays cancelled, late answer rejected, other Workspace unaffected |
+| ADAPT-V05 | Export changes, lose environment, reconstruct | Exact checkpoint tree retained; explicit replacement; old requests are not replayed blindly |
+| ADAPT-V06 | Run with Codex and controlled adapters | Same product lifecycle and evidence; unsupported capabilities are explicit |
+| ADAPT-V07 | Inspect at narrow size, with keyboard and reduced motion | Shared controls/status; preserved composer DOM/draft; reachable controls; no page overflow |
+| ADAPT-V08 | Attempt native preview access to daily files/credentials | Access denied before automatic preview execution is enabled |
+| ADAPT-V09 | Prepare, restart Ash, answer approval twice | Same frozen candidate/Decision; one application; immutable evidence |
+| ADAPT-V10 | Change source, installed version or build bytes after review | Reject the old approval; retain the running version |
+| ADAPT-V11 | Fail startup or interrupt an unconfirmed switch | Recover the previous version; retain conversations/drafts |
+| ADAPT-V12 | Apply, create a new chat and draft, then restore | Previous UI returns; new chat/draft and original data survive |
+| ADAPT-V13 | Request an app change in chat; retry/restart the handoff; separately discuss a possible change or receive external instructions | Same Thread/request/context, visible Adapt entry, one coding dispatch and no resend; discussion/external content starts no coding |
+| ADAPT-V14 | Code A and B independently, Apply A, refresh B, verify and Apply B | Both changes retained; refreshed preview/source is inspectable; one application per approval |
+| ADAPT-V15 | Refresh overlapping edits, then resolve; change the installed target during review | Conflicts block preview/Apply until resolved; stale source/target/approval rejected; histories retained |
+
+## Deferred
+
+Steering, multiple Threads sharing a Workspace, general Tasks/scheduling, authenticated hosted previews, source integration queues and signed distribution. Their planned behavior is in the [workflow proposal](../../docs/plans/adapt-workflow.md), not enabled by this phase.

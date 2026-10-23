@@ -19,3 +19,8 @@ contextBridge.exposeInMainWorld('ashRecording',{
   control:(action:string)=>ipcRenderer.send('recording:overlay-control',action),
   move:(phase:string,x:number,y:number)=>ipcRenderer.send('recording:overlay-move',phase,x,y),
 });
+
+contextBridge.exposeInMainWorld('ashNavigation',{
+  onThread:(callback:(id:string)=>void)=>{const listener=(_event:unknown,id:string)=>callback(id);ipcRenderer.on('adapt:thread',listener);return()=>ipcRenderer.removeListener('adapt:thread',listener);},
+  onPrepareRestart:(callback:()=>Promise<boolean>)=>{const listener=(_event:unknown,requestId:string)=>{void callback().then(ready=>ipcRenderer.send('app:restart-ready',requestId,ready)).catch(()=>ipcRenderer.send('app:restart-ready',requestId,false));};ipcRenderer.on('app:prepare-restart',listener);return()=>ipcRenderer.removeListener('app:prepare-restart',listener);},
+});

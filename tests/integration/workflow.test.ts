@@ -92,7 +92,8 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       const original = await readFile(renderer, 'utf8');
       const changedPlaceholder = 'Workflow hot reload check';
       try {
-        await writeFile(renderer, original.replace('placeholder="Message Ash…"', `placeholder="${changedPlaceholder}"`));
+        assert.ok(original.includes("'Message Ash…'"),'Composer placeholder fixture must match the current source.');
+        await writeFile(renderer, original.replace("'Message Ash…'", JSON.stringify(changedPlaceholder)));
         await da.page.getByPlaceholder(changedPlaceholder,{exact:true}).waitFor();
         assert.equal(await da.page.getByLabel('Message',{exact:true}).inputValue(),'An unsent draft');
         assert.equal(await db.page.getByPlaceholder('Message Ash…',{exact:true}).count(),1);

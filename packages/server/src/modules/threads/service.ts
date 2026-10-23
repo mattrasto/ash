@@ -2,7 +2,8 @@ import { ModelRoutingRequest, RoutingState, ChangeRouting } from '@ash/shared';
 import { ModelRouting, retryRoutingRequest } from './model-routing.ts';
 import { randomUUID, createHash } from 'node:crypto';
 import { Prisma, type Artifact, type PrismaClient, type Run } from '@prisma/client';
-import { InputPayload, MessagePayload, RequestPayload, RunState, ModelExecution, isActive, isVideoAttachment, AttachmentMetadata, type ModelMode, type ToolLimits, DEFAULT_TOOL_LIMITS, IncomingPayload, ActPlan } from '@ash/shared';
+import { InputPayload, MessagePayload, RequestPayload, CodingRequest, RunState, ModelExecution, isActive, isVideoAttachment, AttachmentMetadata, type ModelMode, type ToolLimits, DEFAULT_TOOL_LIMITS, IncomingPayload, ActPlan } from '@ash/shared';
+import type { Adapt } from '../adapt/service.ts';
 import { selectContext, ContextLimitError, type ScopedInstruction } from '../context/select.ts';
 import { memberships } from '../organization/service.ts';
 import { deterministicModel } from '../../platform/models/deterministic.ts';
@@ -30,7 +31,7 @@ export class Threads {
   private stopping = false;
   private scheduling=false;
   private scheduleAgain=false;
-  constructor(readonly db: PrismaClient, private model: ModelAdapter = deterministicModel, private autoDispatch = true, private images?:ImageStorage, private tools?:ToolRuntime, private toolLimits?:ToolLimits, private decisions?:Decisions, private permissions?:Permissions, private routing?:ModelRouting) {if(decisions)decisions.onChanged=()=>{void this.resumeWaiting().catch(()=>console.error('Decision resumption failed'));};}
+  constructor(readonly db: PrismaClient, private model: ModelAdapter = deterministicModel, private autoDispatch = true, private images?:ImageStorage, private tools?:ToolRuntime, private toolLimits?:ToolLimits, private decisions?:Decisions, private permissions?:Permissions, private routing?:ModelRouting, private adapt?:Adapt) {if(decisions)decisions.onChanged=()=>{void this.resumeWaiting().catch(()=>console.error('Decision resumption failed'));};}
 
   async recover() {
     const pending = await this.db.run.findMany({where:{threadId:{not:null},status:{in:['queued','running']}}});
@@ -39,6 +40,7 @@ export class Threads {
       const current = await tx.run.findUniqueOrThrow({where:{id:run.id}});
       if (!isActive(current.status)) return;
       const state=RunState.parse(current.state);
+      if(state.adapt)return; // Reconcile hosted work without replaying or marking it interrupted.
       if(state.decisions?.length&&state.tools?.rounds.at(-1)?.status==='completed'&&!state.tools.calls.some(c=>['running','unknown'].includes(c.status))){
         for(const call of state.tools.calls)if(call.status==='preparing'){call.status=call.decisionId?'waiting':'queued';delete call.reservedBytes;}
         state.tools.reservedResultBytes=0;
@@ -57,6 +59,7 @@ export class Threads {
       this.scheduleAgain=false;
       const waiting=await this.db.run.findMany({where:{status:'waiting',threadId:{not:null}},orderBy:[{createdAt:'asc'},{id:'asc'}]});
       for(const run of waiting){
+        if(RunState.parse(run.state).adapt)continue;
         if(this.jobs.has(run.id))continue;
         const ready=await this.db.$transaction(async tx=>{
           await tx.$queryRaw`SELECT id FROM threads WHERE id=${run.threadId}::uuid FOR UPDATE`;
@@ -180,14 +183,19 @@ export class Threads {
     const row=await this.db.applicationChange.findUnique({where:{id}});if(!row)throw new ThreadError(404,'Application change not found.');return changeView(row);
   }
   async readThread(threadId: string) {
-    return this.db.$transaction(async tx => {
+    const detail=await this.db.$transaction(async tx => {
       const thread = await tx.thread.findUnique({where:{id:threadId}});
       if (!thread) throw new ThreadError(404, 'Thread not found.');
       const artifacts = await tx.artifact.findMany({where:{threadId,layer:'surface'},orderBy:order});
       const runs = await tx.run.findMany({where:{threadId},orderBy:order});
       const decisionIds=runs.flatMap(run=>RunState.parse(run.state).decisions?.map(dependency=>dependency.decisionId)??[]);
-      return {thread:{...threadView(thread),activeWork:await activeWork(tx,threadId),waitingWork:await waitingWork(tx,threadId)}, changes:(await tx.applicationChange.findMany({where:{threadId},orderBy:order})).map(changeView), artifacts:artifacts.map(artifactView), runs:runs.map(runView),attachments:await attachmentViews(tx,artifacts.map(a=>a.id)),membership:await memberships(tx,threadId),...(this.decisions?{decisions:(await tx.decision.findMany({where:{OR:[{threadId},{id:{in:decisionIds}}]},orderBy:order})).map(row=>({ ...row,request:row.request,resolution:row.resolution,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString(),dueAt:row.dueAt?.toISOString()??null,snoozedUntil:row.snoozedUntil?.toISOString()??null}))}:{})};
+      return {...(this.adapt?{workspace:await this.adapt.workspace(tx,threadId)}:{}),thread:{...threadView(thread),activeWork:await activeWork(tx,threadId),waitingWork:await waitingWork(tx,threadId)}, changes:(await tx.applicationChange.findMany({where:{threadId},orderBy:order})).map(changeView), artifacts:artifacts.map(artifactView), runs:runs.map(runView),attachments:await attachmentViews(tx,artifacts.map(a=>a.id)),membership:await memberships(tx,threadId),...(this.decisions?{decisions:(await tx.decision.findMany({where:{OR:[{threadId},{id:{in:decisionIds}}]},orderBy:order})).map(row=>({ ...row,request:row.request,resolution:row.resolution,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString(),dueAt:row.dueAt?.toISOString()??null,snoozedUntil:row.snoozedUntil?.toISOString()??null}))}:{})};
     }, {isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead});
+    if(detail.workspace&&this.adapt){
+      const [preview,application]=await Promise.all([this.adapt.previews?this.adapt.previewStatus(detail.workspace.id):undefined,this.adapt.applications?.view(threadId).catch(()=>({phase:'failed' as const,message:'Application status unavailable. Reconnecting…',installedVersion:'unknown',canRestore:false}))]);
+      return {...detail,workspace:{...detail.workspace,preview,application}};
+    }
+    return detail;
   }
   async inspect(id: string) {
     return this.db.$transaction(async tx => {
@@ -222,7 +230,7 @@ export class Threads {
   async submitMessage(threadId:string,requestKey:string,text:string,mode:ModelMode,attachmentIds:string[]) {
     const rows=await this.db.attachment.findMany({where:{id:{in:attachmentIds}}});
     const onlyVideos=!text&&attachmentIds.length>0&&rows.length===attachmentIds.length&&rows.every(row=>'durationSeconds' in AttachmentMetadata.parse(row.metadata));
-    if(!onlyVideos)return this.submit(threadId,requestKey,text,mode,attachmentIds);
+    if(!onlyVideos||(await this.db.thread.findUnique({where:{id:threadId}}))?.interactionMode==='adapt')return this.submit(threadId,requestKey,text,mode,attachmentIds);
     if(this.stopping)throw new ThreadError(503,'The backend is stopping.');
     const hash=createHash('sha256').update(JSON.stringify({threadId,text,mode,attachmentIds})).digest('hex');
     return this.db.$transaction(async tx=>{
@@ -267,7 +275,7 @@ export class Threads {
           if (await tx.run.findFirst({where:{threadId,status:{in:['queued','running']}}})) throw new ThreadError(409, 'A response is already active in this thread.');
           const now = new Date();
           let inputId: string;
-          let request: RequestPayload;
+          let request: RequestPayload | CodingRequest;
           if (command.kind === 'send') {
             const attachmentIds=command.attachmentIds??[];
             const attachments=await retainImages(tx,attachmentIds);
@@ -288,21 +296,31 @@ export class Threads {
             const previous = await tx.run.findUniqueOrThrow({where:{id:command.previousId}});
             if (isActive(previous.status)||previous.status==='waiting') throw new ThreadError(409, 'Wait for the previous Run to stop before retrying.');
             inputId = previous.inputArtifactId;
-            const priorRequest = await tx.artifact.findUniqueOrThrow({where:{id:RunState.parse(previous.state).request_artifact_id}});
-            const prior = (priorRequest.payload as {type:string}).type==='model_routing_request' ? retryRoutingRequest(ModelRoutingRequest.parse(priorRequest.payload)) : RequestPayload.parse(priorRequest.payload);
-            request = RequestPayload.parse({...prior,...this.model.configuration(command.mode,prior)});
+            const priorRequest = await tx.artifact.findUniqueOrThrow({where:{id:RunState.parse(previous.state).adapt?.requestArtifactId??RunState.parse(previous.state).request_artifact_id}});
+            if((priorRequest.payload as {type:string}).type==='coding_request')request=CodingRequest.parse(priorRequest.payload);
+            else{const prior = (priorRequest.payload as {type:string}).type==='model_routing_request'?retryRoutingRequest(ModelRoutingRequest.parse(priorRequest.payload)):RequestPayload.parse(priorRequest.payload);request = RequestPayload.parse({...prior,...this.model.configuration(command.mode,prior)});}
           }
           const runId = randomUUID(), requestId = randomUUID();
-          if (command.kind === 'send') {
+          if(command.kind==='send'&&thread.interactionMode==='adapt'){
+            if(!this.adapt)throw new ThreadError(409,'Coding is not configured.');
+            request=await this.adapt.capture(tx,thread,request as RequestPayload,runId);
+          }
+          if (command.kind === 'send'&&request.type==='model_request') {
             const tools = await captureTools(this.tools,runId,threadId,request,this.toolLimits);
             if (tools) request = RequestPayload.parse({...request,tools});
           }
-          const capture=command.kind==='send'&&this.routing?await this.routing.prepare(tx,thread,request):request;
-          const state = RunState.parse({request_artifact_id:requestId,response_artifact_id:null});
+          const capture=command.kind==='send'&&request.type==='model_request'&&this.routing?await this.routing.prepare(tx,thread,request):request;
+          const state = RunState.parse({request_artifact_id:requestId,response_artifact_id:null,...(request.type==='coding_request'?{adapt:{workspaceId:request.workspaceId,phase:'preparing',message:'Preparing the coding workspace.'}}:{})});
           const run = await tx.run.create({data:{id:runId,inputArtifactId:inputId,threadId,retryOfId:command.kind === 'retry' ? command.previousId : null,status:'queued',state,requestKey,requestHash:hash,createdAt:now}});
           await tx.artifact.create({data:{id:requestId,layer:'act',sourceId:inputId,threadId,runId,actor:'ash',payload:asJson(capture),createdAt:now,updatedAt:now}});
-          await referenceImages(tx,requestId,request.selection.images?.map(image=>image.id)??[]);
-          await referenceImages(tx,requestId,request.selection.videos?.map(video=>video.id)??[]);
+          const selection=request.type==='coding_request'?request.context.selection:request.selection;
+          if(request.type==='coding_request'){
+            if(!this.adapt)throw new ThreadError(409,'Coding is not configured.');
+            if(await tx.adaptExecution.findFirst({where:{workspaceId:request.workspaceId,run:{id:{not:runId},status:{in:['queued','running','waiting']}}}}))throw new ThreadError(409,'This Workspace is already active.');
+            await this.adapt.attach(tx,runId,request);
+          }
+          await referenceImages(tx,requestId,selection.images?.map(image=>image.id)??[]);
+          await referenceImages(tx,requestId,selection.videos?.map(video=>video.id)??[]);
           await tx.thread.update({where:{id:threadId},data:{updatedAt:now}});
           return run;
         }, {isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
@@ -366,6 +384,7 @@ export class Threads {
   }
   private async execute(id: string, signal: AbortSignal) {
     const existing=await this.db.run.findUniqueOrThrow({where:{id}});
+    if(RunState.parse(existing.state).adapt){if(this.adapt)await this.adapt.execute(id,signal);return;}
     const claim = await this.db.run.updateMany({where:{id,status:'queued'},data:{status:'running',startedAt:existing.startedAt??new Date()}});
     if (!claim.count) return;
     try {
@@ -385,6 +404,7 @@ export class Threads {
       }
       if (parsed.tools) {
         await new ToolExecutor(this.db,this.model,this.tools,this.images,this.decisions,this.permissions).execute(id,parsed,requestId,signal);
+        if(this.adapt&&RunState.parse((await this.db.run.findUniqueOrThrow({where:{id}})).state).adapt)await this.adapt.execute(id,signal);
         return;
       }
       for await (const event of this.model.stream(parsed,signal,this.images?image=>this.images!.dataUrl(image):undefined)) {
@@ -442,9 +462,11 @@ export class Threads {
       if (!run?.threadId) throw new ThreadError(404,'Thread Run not found.');
       if (!isActive(run.status)&&run.status!=='waiting') return run;
       const state=RunState.parse(run.state);await this.decisions?.cancelWorkIn(tx,id,state);
+      if(state.adapt){state.adapt={...state.adapt,phase:'cancelled',message:'Coding stopped. The last saved source checkpoint is retained.'};await tx.adaptWorkspace.update({where:{id:state.adapt.workspaceId},data:{status:'cancelled',updatedAt:new Date()}});}
       return tx.run.update({where:{id},data:{status:'cancelled',state:asJson(interruptTools(state,true)),endedAt:new Date()}});
     });
     this.jobs.get(id)?.controller.abort();
+    if(saved.status==='cancelled'&&RunState.parse(saved.state).adapt)await this.adapt?.cancel(id);
     return runView(saved);
   }
   async stop() {

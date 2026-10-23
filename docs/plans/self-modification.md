@@ -2,13 +2,15 @@
 
 Direction accepted, 2026-10-12 · Images, inspectable tools and Topics/context implemented · Later designs proposed
 
+The [Adapt workflow proposal](adapt-workflow.md) owns the delegated-change workflow: Adapt as a Thread mode, recording handoff, replaceable harness/environment adapters, parallel Workspaces and local/signed application paths. The renderer workflow is implemented; source integration and signed delivery remain proposed.
+
 Build toward a small code change completed through Ash: screenshot → discussion → isolated Codex workspace → tests and preview → reviewed application → revert. Start with image understanding and usable chat; add tools and explicit context before delegating code changes.
 
 [Product intent](../../specs/HUMAN_SPEC.md#modifying-ashs-code) · [Open decisions](../../specs/open-questions.md) · [Existing implementation](../features/threads.md)
 
 ## First complete demonstration
 
-In an “Ash development” Topic, paste a screenshot and ask Ash to improve a small part of its own interface. Ash reads relevant specifications/source and prior threads in the Topic, then delegates an agreed change to the detached Codex harness. The user can follow progress, stop work, inspect the diff and verification evidence, try an isolated preview, and approve the exact revision to apply. After restarting Ash, the change works and existing threads/images remain. Reverting restores the previous application version without erasing subsequent chat.
+In an Adapt Thread, paste a screenshot or narrated recording and ask Ash to improve a small part of its own interface. Ash supplies relevant specifications/source and captured context to the managed Codex harness. The user can follow progress, stop work, inspect the diff and verification evidence, try an isolated preview, and approve the exact revision to apply. After restarting Ash, the change works and existing threads/images remain. Reverting restores the previous application version without erasing subsequent chat.
 
 Use a UI-only change for this demonstration. Database migrations, dependency upgrades and changes to permissions, credentials or the runner require additional rollout contracts. Custom apps, automatic organization, semantic memory, realtime voice and general computer control are outside this path. Add image generation when a change needs new assets; screenshot understanding is the immediate dependency.
 
@@ -23,7 +25,7 @@ Each slice follows the [delivery agreement](../../specs/product.md#confirmed-eng
 | 3. Topics and working context | Manual Topic membership, global/Topic/Thread instruction editors and retrieval within linked Topics. Topic instructions guide Route; automatic routing and explicit references are deferred. | Continue development in a new thread using retrieved prior findings; inspect the supplied context and factual limit/truncation metadata. |
 | 4. Delegated changes | Contained Codex runner, durable workspace records, Decisions, diff/test/preview UI, and controlled apply/revert. | Complete the first demonstration above, including a denied action, restart during work, stale approval rejection and a successful revert. |
 
-The user deferred the Codex integration feasibility check on 2026-10-12. It is not a prerequisite for slice 2 and does not enable delegation or self-modification in that slice.
+The Codex feasibility check, initially deferred on 2026-10-12, was completed in the separate `ash_experiments` repository on 2026-10-22. It does not itself implement delegation in Ash; [findings and remaining gates](adapt-workflow.md#execution-boundary-and-lifecycle) guide slice 4.
 
 ## 1. Images and usable chat
 
@@ -52,23 +54,13 @@ Verify zero/multiple Topics, instruction edits between submission and dispatch, 
 
 ## 4. Codex workspaces, Decisions and application
 
-### Proposed parallel work
+Follow the [Adapt delivery sequence](adapt-workflow.md#delivery-sequence). The real Thread → Run → coding harness → native preview → feedback path and protected local UI application are [implemented](../features/adapt.md). Reuse existing Permissions and Decisions. Keep feature work in isolated previews and integrate only under the [Git requirements](../development.md#git-integration).
 
-Start by agreeing on the workspace/job, Decision and candidate-revision contracts. Keep one owner for shared schema/contracts; each track can then use a fake adapter until integration.
-
-| Track | First deliverable | Integration dependency |
-| --- | --- | --- |
-| Codex runner and isolation | Disposable harness experiment proving progress, Stop, reconnect, authentication and denied access; then a durable workspace/job adapter. | Agreed job lifecycle and permission-request contract. |
-| Permissions and Decisions | Backend permission evaluation connected to persisted requests, approve/deny/cancel, restart-safe resumption and exact-action checks. Demonstrate with an Ash-proposed instruction edit. | Shared action/authorization/Decision contract; runner can remain fake. |
-| Recording feedback | Video attachments, one-click screen recording and Flash understanding implemented; [sequence and scope](../../specs/features/recording-feedback.md#goal-and-scope). | Independent of the Codex runner; Live Mode integration remains future work. |
-| Review workspace | Progress, diff, test evidence, preview identity and Decision controls using representative fixtures. | Job/candidate/evidence contracts; wire to the runner afterward. |
-| Verification and apply/revert controller | External controller checks the exact revision, retains the previous runnable version, restarts, checks health and reverts while preserving later chat. | Candidate/approval contract; prove initially with hand-prepared UI-only commits. |
-
-The runner experiment is the first uncertainty to resolve. Defer broader tools, automatic organization and memory until the first complete demonstration works. Keep feature work in isolated previews and integrate in dependency order under the [Git requirements](../development.md#git-integration).
+The [implementation](../features/adapt.md) owns current adapter and execution details; [source integration](adapt-workflow.md#parallel-work-and-integration) remains proposed. Do not duplicate provider-specific session, approval or lifecycle models in the Thread UI.
 
 ### Permissions and Decisions together
 
-Scope clarified, 2026-10-14: specify [Permissions](../../specs/features/permissions.md) and [Decisions](../../specs/features/decisions.md) as separate general features with a shared handoff. Reuse the [selected evaluator](../features/permissions.md#selected-evaluator); settle their open behavior and continuation questions before implementation.
+[Permissions](../../specs/features/permissions.md) and [Decisions](../../specs/features/decisions.md) are separate general features with a shared handoff. Their current-tool integration is implemented; delegated execution consumes the [existing continuation contract](../features/decisions.md#execution-integration) and [selected evaluator](../features/permissions.md#selected-evaluator).
 
 An Ash-proposed instruction edit remains a later demonstration for this self-modification plan. It will consume the general contracts; its authority, review and application workflow are outside the current specification work.
 
@@ -78,32 +70,9 @@ Workflow priority raised on 2026-10-14. The [recording feedback spec](../../spec
 
 Screen recording, video attachments and general video understanding are implemented. [Implementation, Asha adaptations and verification limits](../features/recording-feedback.md). Live Mode integration remains a later design.
 
-### Integration check
+### Verification and delivery
 
-Use the detached Codex harness requested in the [source](../../specs/HUMAN_SPEC.md#modifying-ashs-code). Prefer an app-server adapter because this workflow needs streamed progress, interruption and approval requests; the SDK/`codex exec` remains a simpler option for a strictly noninteractive job. [Official app-server guidance](https://learn.chatgpt.com/docs/app-server) · [Codex SDK](https://learn.chatgpt.com/docs/codex-sdk).
-
-Before committing to the transport, verify the installed version with a disposable fixture: start a workspace/session, pass a screenshot/context bundle, stream changes and test output, interrupt a child process, handle a denied permission request, and reconnect without starting duplicate work. Establish authentication, model/cost settings, session storage and cleanup explicitly; do not assume Ash's Responses key supplies Codex authentication. Keep a small adapter boundary around the verified protocol.
-
-### Workspace and execution boundary
-
-- Ash supplies intent/context and tracks the delegated job; Codex owns the edit/test loop. Add durable workspace/session records linked to the requesting Run, source revision and candidate revision. Retain diffs, logs, test results and preview references as inspectable outputs.
-- Reuse worktree and development-instance provisioning, with separate database/files/client state. A Git worktree is not a security sandbox. Establish a tested OS/container boundary before executing generated code: constrained mounts/network, no live database credentials, developer `.env.local`, home directory or host Docker socket. Broker provisioning and provider authentication outside generated shell commands. The integration check must prove these boundaries, not infer them from working-directory settings.
-- Let the worker read/edit/test only its granted workspace. Stop must terminate owned child processes; backend restart reconciles the existing job/session before any continuation. Unknown execution outcomes require inspection, not replay.
-
-### Decisions and review UX
-
-- Introduce a minimal durable Decision entity independent of threads, linked to the Run/workspace. Support pending, approved, denied and cancelled outcomes; show the action, scope and target. Reuse it for Ash-proposed instruction changes.
-- Enforce scoped permissions in backend/tool dispatch, outside prompts. Routine edits/tests within a granted workspace proceed without per-file approval; broader access and applying a candidate require the appropriate Decision. Denial/revocation must prevent execution.
-- Use the general [Decision execution design](../features/decisions.md#execution-integration) for durable waiting and resumption. Never resume a stale harness permission request by treating an old approval as fresh authority.
-- Provide progress/Stop, diff, test evidence, preview and Decision controls. Bind approval to the exact candidate revision, target revision and action; changes invalidate it. Completion and requests for input get an in-app indicator; a general notification system can follow.
-
-### Apply and revert
-
-Keep application control outside the process being replaced. The controller verifies the approved candidate and target, detects conflicting local changes, records the previous runnable revision, and promotes/restarts only that candidate. Run health checks and the persisted-chat smoke flow; if startup fails, restore the previous runnable version. Never reset user data as part of code rollback.
-
-For the UI-only first change, keep schema/data formats compatible and test both directions against retained data. Broader self-modification requires coordinated database/file backup and restore verification under the [recovery design](../data-model.md#backup-and-recovery); Git rollback cannot undo a migration. Publishing/pushing and unattended promotion are separate capabilities.
-
-Verify workspace containment with attempted denied reads/writes/network access; harness failure and cancellation; duplicate/denied/stale Decisions; restart while waiting; changed target/dirty checkout; candidate failure; and revert after a new chat has been saved. Use a fake harness for routine tests and separate targeted real-harness checks.
+The [Adapt verification coverage](../features/adapt.md#verification) records the Run bridge, adapter replacement, native preview containment and trusted apply/recovery checks. Signed builds follow the [distribution plan](adapt-workflow.md#published-and-signed-applications). Broader schema-changing self-modification also requires coordinated database/file backup and restore verification under the [recovery design](../data-model.md#backup-and-recovery); Git rollback cannot undo a migration. Publishing/pushing and unattended promotion are separate capabilities.
 
 ## Contract and schema changes
 
@@ -112,6 +81,6 @@ Verify workspace containment with attempted denied reads/writes/network access; 
 | Images | Durable asset metadata/reference lifecycle; structured content/request contracts and backward readers. |
 | Tools | Typed call/result Artifacts; versioned per-step Run checkpoints; restricted provider continuation storage if required. |
 | Context | Scoped instruction selection and captured retrieval metadata; existing ownership tables remain. |
-| Delegation | Workspace/session and Decision records; waiting/dispatch constraints; candidate and promotion records. |
+| Delegation | Workspace, harness/environment linkage and captured Thread mode; existing Decision linkage; waiting/dispatch constraints; candidate and promotion records. |
 
 These extend the initial six-table scope only as each slice needs them. Keep [Prisma, migrations, DBML and payload documentation synchronized](../architecture.md#schema-workflow). Add product rules to their feature specs when each slice is finalized; this plan owns sequencing and implementation dependencies.

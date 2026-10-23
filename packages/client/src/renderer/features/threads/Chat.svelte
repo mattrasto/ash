@@ -1,6 +1,16 @@
 <script lang="ts">
   import ModelSettings from './ModelSettings.svelte';
   import Rail from '../../ui/Rail.svelte';
+  import AdaptWorkspace from '../adapt/Workspace.svelte';
+  import DevelopmentEvidence from '../adapt/Evidence.svelte';
+  import ApplyUpdate from '../adapt/Apply.svelte';
+  import type {AdaptCheckpoint} from '@ash/shared';
+  let developmentEvidence=$state<{kind:'changes'|'checks'|'apply';checkpoint:AdaptCheckpoint}|null>(null);
+  async function openEvidence(kind:'changes'|'checks'|'apply'){
+    const checkpoint=detail?.workspace?.checkpoint;if(!checkpoint)return;
+    if(!inspectedId&&!developmentEvidence)inspectionFocus=document.activeElement as HTMLElement;
+    await replaceContent(inspectorContent,()=>{inspectedId='';inspection=null;developmentEvidence={kind,checkpoint};},{resize:false});
+  }
   import Status from "../../ui/Status.svelte";
   import {selectField} from '../../ui/select.ts';
   import {dismissPopups} from '../../ui/popup.ts';
@@ -79,6 +89,14 @@
   let submitting = $state(false);
   let creating = $state(false);
   let mode = $state<ModelMode>('normal');
+  let modeBusy=$state(false);
+  const adaptRun=$derived(detail?.runs.filter(run=>!!run.state.adapt).at(-1));
+  const adaptSelected=$derived(detail?.thread.interactionMode==='adapt');
+  async function switchMode(){
+    if(!detail||modeBusy)return;modeBusy=true;const id=selected;const previous=detail.thread.interactionMode??'chat';
+    try{await api(`threads/${id}/mode`,{expectedMode:previous,mode:previous==='adapt'?'chat':'adapt'});await refresh();}
+    catch(e){error=(e as Error).message;}finally{modeBusy=false;}
+  }
   let recorder:Recorder|undefined;
   let recording=$state<RecordingState|null>(null),recordBusy=$state(false),recordingNotice=$state(''),recordingAvailable=$state(false);
   let recordingThread='',captureMic=$state(true),hoveredDraft=$state<string|null>(null),reducedMotion=$state(false);
@@ -103,7 +121,7 @@
   let inspectedId = $state('');
   let inspectionKind=$state<'artifact'|'assessment'|'change'>('artifact');
   let assessmentInspection=$state<AssessmentDetail|null>(null),changeInspection=$state<ApplicationChangeView|null>(null);
-  const timeline=$derived([...(detail?.artifacts??[]).map(artifact=>({kind:'artifact' as const,id:artifact.id,createdAt:artifact.createdAt,artifact})),...(detail?.changes??[]).flatMap(change=>change.events.flatMap((event,index)=>['archived','unarchived','renamed'].includes(event.event)?[{kind:'change' as const,id:change.id+':'+index,createdAt:change.createdAt,change,event}]:[]))].sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||a.id.localeCompare(b.id)));
+  const timeline=$derived([...(detail?.artifacts??[]).map(artifact=>({kind:'artifact' as const,id:artifact.id,createdAt:artifact.createdAt,artifact})),...(detail?.decisions??[]).map(decision=>({kind:'decision' as const,id:decision.id,createdAt:decision.createdAt,decision})),...(detail?.changes??[]).flatMap(change=>change.events.flatMap((event,index)=>['archived','unarchived','renamed'].includes(event.event)?[{kind:'change' as const,id:change.id+':'+index,createdAt:change.createdAt,change,event}]:[]))].sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||a.id.localeCompare(b.id)));
   const firstName=$derived(timeline.find(entry=>entry.kind==='change'&&entry.event.event==='renamed')?.id);
   let transcript: HTMLElement;
 
@@ -116,6 +134,7 @@
     if(inspectionKind!=='artifact')return undefined;
     if(inspected?.payload.type==='model_request')return inspected.payload;
     if(inspected?.payload.type==='model_routing_request')return inspected.payload.request;
+    if(inspected?.payload.type==='coding_request')return {...inspected.payload.context,provider:inspected.payload.harness,model:inspected.payload.model,tools:undefined,options:undefined,purpose:undefined,routing:undefined};
     if(inspected?.payload.type==='engine_request')return inspected.payload.request;
     let requestId=inspectionRun?.state.tools?.rounds.at(-1)?.requestId??inspectionRun?.state.request_artifact_id;
     if(inspected&&'requestId' in inspected.payload)requestId=inspected.payload.requestId;
@@ -124,13 +143,41 @@
       if(call?.type==='tool_call')requestId=call.requestId;
     }
     const payload=inspection?.artifacts.find(artifact=>artifact.id===requestId)?.payload;
-    return payload?.type==='model_request'?payload:undefined;
+    return payload?.type==='model_request'?payload:payload?.type==='coding_request'?{...payload.context,provider:payload.harness,model:payload.model,tools:undefined,options:undefined,purpose:undefined,routing:undefined}:undefined;
   });
   class ApiError extends Error { constructor(message:string, public status?:number) { super(message); } }
   async function api<T>(path:string, body?:object):Promise<T> {
     const response = await fetch(`/api/${path}`, {method:body ? 'POST' : 'GET', headers:{'content-type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {}), signal:AbortSignal.timeout(['permissions/formalize','permissions/review'].includes(path)?40000:10000)});
     if (!response.ok) { const data = await response.json().catch(() => ({})); throw new ApiError(data.error ?? 'The request failed.',response.status); }
     return response.json();
+  }
+  let previewBusy=$state<Record<string,boolean>>({});
+  let applicationBusy=$state<Record<string,boolean>>({});
+  let applicationCommands=$state<Record<string,{submissionId:string;checkpointId:string;action:'apply'|'restore'}>>({});
+  let refreshingWorkspace=$state<Record<string,boolean>>({});
+  let refreshCommands=$state<Record<string,{submissionId:string;checkpointId:string;version:string}>>({});
+  async function refreshWorkspace(){
+    const threadId=selected,checkpoint=detail?.workspace?.checkpoint,version=detail?.workspace?.application?.installedVersion;if(!checkpoint||!version||applicationBusy[threadId])return;
+    const prior=refreshCommands[threadId],command=prior?.checkpointId===checkpoint.id&&prior.version===version?prior:{submissionId:crypto.randomUUID(),checkpointId:checkpoint.id,version};
+    refreshCommands[threadId]=command;localStorage.setItem('ash-adapt-refreshes',JSON.stringify(refreshCommands));applicationBusy[threadId]=true;refreshingWorkspace[threadId]=true;
+    try{await api('threads/'+threadId+'/workspace/refresh',command);delete refreshCommands[threadId];localStorage.setItem('ash-adapt-refreshes',JSON.stringify(refreshCommands));await refresh();}
+    catch(e){error=(e as Error).message;}finally{applicationBusy[threadId]=false;refreshingWorkspace[threadId]=false;}
+  }
+  async function resolveWorkspaceConflicts(){
+    const paths=detail?.workspace?.application?.conflicts??[],prompt='Resolve the merge conflicts in this Workspace, preserving the installed changes and my requested changes. Run checks after resolving them.\n'+paths.join('\n');
+    if(!(drafts[selected]??'').includes(prompt))drafts[selected]=[drafts[selected],prompt].filter(Boolean).join('\n\n');saveLocal();await closeInspector();textarea?.focus();autosize();
+  }
+  async function prepareApplication(action:'apply'|'restore'){
+    const threadId=selected,checkpoint=detail?.workspace?.checkpoint;if(!checkpoint||applicationBusy[threadId])return;
+    const previous=applicationCommands[threadId];
+    const command=previous?.checkpointId===checkpoint.id&&previous.action===action?previous:{submissionId:crypto.randomUUID(),checkpointId:checkpoint.id,action};
+    applicationCommands[threadId]=command;localStorage.setItem('ash-adapt-applications',JSON.stringify(applicationCommands));applicationBusy[threadId]=true;
+    try{await api('threads/'+threadId+'/application',command);delete applicationCommands[threadId];localStorage.setItem('ash-adapt-applications',JSON.stringify(applicationCommands));await refresh();}
+    catch(e){error=(e as Error).message;}finally{applicationBusy[threadId]=false;}
+  }
+  async function previewAction(action:'run'|'stop'|'refresh'){
+    const threadId=selected;if(previewBusy[threadId])return;previewBusy[threadId]=true;
+    try{const preview=await api<import('@ash/shared').AdaptPreviewState>('threads/'+threadId+'/preview',{action,submissionId:crypto.randomUUID()});if(selected===threadId&&detail?.workspace)detail={...detail,workspace:{...detail.workspace,preview}};await refresh();}catch(e){error=(e as Error).message;}finally{previewBusy[threadId]=false;}
   }
   function saveLocal() {
     localStorage.setItem('ash-chat-drafts',JSON.stringify(drafts));
@@ -253,12 +300,12 @@
   $effect(()=>{drafts[selected];selected;textarea;let current=true;void tick().then(()=>{if(current)autosize();});return()=>{current=false;};});
   $effect(()=>{if(!textarea)return;let width=0;const observer=new ResizeObserver(entries=>{const next=entries[0].contentRect.width;if(next!==width){width=next;autosize();}});observer.observe(textarea);return()=>observer.disconnect();});
   function toggleSidebar(){sidebarOpen=!sidebarOpen;localStorage.setItem('ash-sidebar-open',String(sidebarOpen));}
-  function closeInspector(){inspectedId='';inspection=null;assessmentInspection=null;changeInspection=null;inspectionFocus?.focus({preventScroll:true});}
+  function closeInspector(){developmentEvidence=null;inspectedId='';inspection=null;assessmentInspection=null;changeInspection=null;inspectionFocus?.focus({preventScroll:true});}
   function key(event:KeyboardEvent){
     if(viewer||document.querySelector('dialog[open]'))return;
     if(event.key==='Escape'&&visibilityId){event.preventDefault();visibilityId='';return;}
     if(event.key==='Escape'&&decisionsOpen){event.preventDefault();closeDecisions();return;}
-    if(event.key==='Escape'&&inspectedId){event.preventDefault();closeInspector();}
+    if(event.key==='Escape'&&(inspectedId||developmentEvidence)){event.preventDefault();closeInspector();}
     if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='n'){event.preventDefault();if(connected)void createThread();}
     if((event.metaKey||event.ctrlKey)&&event.key==='\\'){event.preventDefault();toggleSidebar();}
   }
@@ -309,7 +356,7 @@
   }
   async function selectThread(id:string) {
     const navigation=++navigationSequence;dismissPopups();rememberScroll();await departComposition(decisionsOpen?document.querySelector<HTMLElement>('[data-testid="decisions-page"]')??undefined:content);if(navigation!==navigationSequence)return;
-    decisionsOpen=false;restoring=true;selected = id; detail = null; inspection = null; assessmentInspection=null;changeInspection=null;inspectedId = ''; error = '';jumpVisible=false; saveLocal();
+    decisionsOpen=false;restoring=true;selected = id; detail = null; developmentEvidence=null;inspection = null; assessmentInspection=null;changeInspection=null;inspectedId = ''; error = '';jumpVisible=false; saveLocal();
     try { await loadThread(id);await tick();autosize(); } catch (e) { error = (e as Error).message; }
   }
   async function refresh() {
@@ -367,9 +414,9 @@
     } finally { submitting = false; }
   }
   let inspectorContent=$state<HTMLDivElement>(null!);
-  async function inspect(id:string,kind:'artifact'|'assessment'|'change'='artifact'){if(inspectedId&&inspectedId!==id)await replaceContent(inspectorContent,()=>inspectValue(id,kind),{resize:false});else await inspectValue(id,kind);}
+  async function inspect(id:string,kind:'artifact'|'assessment'|'change'='artifact'){if(developmentEvidence||inspectedId&&inspectedId!==id)await replaceContent(inspectorContent,()=>inspectValue(id,kind),{resize:false});else await inspectValue(id,kind);}
   async function inspectValue(id:string,kind:'artifact'|'assessment'|'change'='artifact') {
-    decisionsOpen=false;
+    developmentEvidence=null;decisionsOpen=false;
     if(!inspectedId)inspectionFocus=document.activeElement as HTMLElement;
     if(inspectionKind!==kind){inspection=null;assessmentInspection=null;changeInspection=null;}
     else if(kind!=='artifact'&&inspectedId!==id){assessmentInspection=null;changeInspection=null;}
@@ -405,6 +452,12 @@
   function associatedRun(artifact:ArtifactView) { return detail?.runs.find(run => run.id === artifact.runId); }
   function outcomes(inputId:string) { return detail?.runs.filter(run => run.inputArtifactId === inputId && !run.state.response_artifact_id) ?? []; }
   onMount(() => {
+    const offNavigation=window.ashNavigation?.onThread(id=>{void selectThread(id);})??(()=>{});
+    try{applicationCommands=JSON.parse(localStorage.getItem('ash-adapt-applications')??'{}');refreshCommands=JSON.parse(localStorage.getItem('ash-adapt-refreshes')??'{}');}catch{}
+    const offRestart=window.ashNavigation?.onPrepareRestart(async()=>{
+      if(recording||recordBusy||settings||creating||Object.values(draftImages).flat().some(image=>image.status==='uploading'))return false;
+      saveLocal();await syncDrafts();return true;
+    })??(()=>{});
     let disposed = false; let timer: ReturnType<typeof setTimeout>;
     draftPresence=new DraftPresenceSync((id,command)=>api(`threads/${id}/draft`,command));
     try { pendingThread = JSON.parse(localStorage.getItem('ash-chat-new-thread') ?? 'null'); drafts = JSON.parse(localStorage.getItem('ash-chat-drafts') ?? '{}'); pending = JSON.parse(localStorage.getItem('ash-chat-pending') ?? '{}'); retryCommands = JSON.parse(localStorage.getItem('ash-chat-retries') ?? '{}'); selected = localStorage.getItem('ash-chat-selected') ?? ''; } catch { drafts = {}; pending = {}; }
@@ -425,7 +478,7 @@
     scrolling=new ThreadScroll(transcript,content,spacer,visible=>jumpVisible=visible);
     const poll = async () => { await refresh(); if (!disposed) timer = setTimeout(poll,active ? 150 : 800); };
     void poll();
-    return () => { disposed = true;motion.removeEventListener('change',motionChanged);offState();offControl();void recorder?.discard(); clearTimeout(timer); requestSequence++;scrolling?.dispose();clearTimeout(scrollTimer);for(const local of localFiles.values()){local.xhr?.abort();if(local.preview)URL.revokeObjectURL(local.preview);} };
+    return () => { offRestart();offNavigation();disposed = true;motion.removeEventListener('change',motionChanged);offState();offControl();void recorder?.discard(); clearTimeout(timer); requestSequence++;scrolling?.dispose();clearTimeout(scrollTimer);for(const local of localFiles.values()){local.xhr?.abort();if(local.preview)URL.revokeObjectURL(local.preview);} };
   });
 </script>
 
@@ -439,9 +492,10 @@
   <div class="main-column" class:covered={decisionsOpen} ondragenter={(e)=>drag(e,'enter')} ondragover={(e)=>drag(e,'over')} ondragleave={(e)=>drag(e,'leave')} ondrop={(e)=>drag(e,'drop')}>
     {#if isDragOver}<div class="drop-overlay"><strong>Drop images or videos here</strong><span>PNG, JPEG, WebP, MP4, MOV or WebM</span></div>{/if}
     {#if lastEdit}<div class="recording-notice" role="status">Thread updated. <button onclick={()=>lastEdit&&void updateThread(lastEdit.id,{undo:true},lastEdit.version)} class="ash-button">Undo</button><button aria-label="Dismiss undo" onclick={()=>lastEdit=null} class="ash-button ash-ghost ash-icon ash-close"><Icon name="close"/></button></div>{/if}
-    <header>{#if !sidebarOpen}<button class="ash-button icon-button" aria-label="Show sidebar" title="Show sidebar" onclick={toggleSidebar}><Icon name="sidebar"/></button>{/if}<div class="heading"><span class="eyebrow">THREAD</span><h1>{detail?.thread.title ?? 'Untitled'}</h1>{#if detail?.thread.isArchived}<span class="archived-label">Archived</span>{/if}</div><div class="header-actions"><div class="header-controls">{#if info?.model?.routingEnabled&&detail}<ModelSettings thread={detail.thread} {api} onChanged={refresh}/>{/if}<button class="ash-button settings-button" disabled={!connected} onclick={()=>processing=true}>Processing</button><button class="ash-button settings-button" disabled={!connected} onclick={()=>openSettings()}>Settings</button></div><span class="connection" data-testid="connection"><i class:offline={!connected}></i>{connected ? 'Connected' : 'Reconnecting…'}</span></div></header>
+    <header>{#if !sidebarOpen}<button class="ash-button icon-button" aria-label="Show sidebar" title="Show sidebar" onclick={toggleSidebar}><Icon name="sidebar"/></button>{/if}<div class="heading"><span class="eyebrow">THREAD</span><h1>{detail?.thread.title ?? 'Untitled'}</h1>{#if detail?.thread.isArchived}<span class="archived-label">Archived</span>{/if}</div><div class="header-actions"><div class="header-controls">{#if info?.model?.routingEnabled&&detail&&!adaptSelected}<ModelSettings thread={detail.thread} {api} onChanged={refresh}/>{/if}<button class="ash-button settings-button" class:ash-primary={adaptSelected} aria-pressed={adaptSelected} disabled={!connected||!detail||modeBusy||!!pending[selected]||!info?.adapt?.available} title={adaptSelected?'Return to chat mode':'Enable Adapt mode'} onclick={()=>void switchMode()}>Adapt</button><button class="ash-button settings-button" disabled={!connected} onclick={()=>processing=true}>Processing</button><button class="ash-button settings-button" disabled={!connected} onclick={()=>openSettings()}>Settings</button></div><span class="connection" data-testid="connection"><i class:offline={!connected}></i>{connected ? 'Connected' : 'Reconnecting…'}</span></div></header>
     {#if detail}<div class="topic-strip" aria-label="Thread Topics">{#each detail.membership?.topics??[] as topic}<span>{topic.name}</span>{:else}<span>No Topics</span>{/each}</div>{/if}
-    <div class="model-banner"><span class="model-dot"></span>{#if info?.model?.provider === 'openai'}OpenAI · {info.model.model}{#if info.model.session}<span>· {info.model.session.callsUsed}{#if info.model.session.maxCalls !== null} / {info.model.session.maxCalls}{/if} calls{#if info.model.session.expiresAt !== null} · expires {new Date(info.model.session.expiresAt).toLocaleTimeString()}{/if}</span>{/if}{:else}Deterministic test model <span>· No external calls</span>{/if}</div>
+    {#if adaptSelected||(adaptRun&&['queued','running','waiting'].includes(adaptRun.status))}<AdaptWorkspace busy={!!previewBusy[selected]} workspace={detail?.workspace} run={adaptRun} info={info?.adapt} {connected} onPreview={action=>void previewAction(action)} onEvidence={openEvidence} onStop={()=>adaptRun&&void runAction(adaptRun,'cancel')} onInspect={id=>void inspect(id)}/>{/if}
+    {#if !adaptSelected}<div class="model-banner"><span class="model-dot"></span>{#if info?.model?.provider === 'openai'}OpenAI · {info.model.model}{#if info.model.session}<span>· {info.model.session.callsUsed}{#if info.model.session.maxCalls !== null} / {info.model.session.maxCalls}{/if} calls{#if info.model.session.expiresAt !== null} · expires {new Date(info.model.session.expiresAt).toLocaleTimeString()}{/if}</span>{/if}{:else}Deterministic test model <span>· No external calls</span>{/if}</div>{/if}
     {#if error}<div class="error" role="alert"><Status announce={false} label="Action failed">{error}</Status></div>{/if}
     <div class="transcript-frame">
     <main use:scrollArea={{onIntent:up=>scrolling?.intent(up)}} class="transcript" bind:this={transcript} onscroll={scroll} onwheel={e=>scrolling?.intent(e.deltaY<0)}><div class="messages" bind:this={content}>
@@ -450,6 +504,8 @@
       {#each timeline as entry (entry.id)}
         {#if entry.kind==='change'}
         <ThreadEvent change={entry.change} event={entry.event} initial={entry.id===firstName} onInspect={id=>void inspect(id,'change')}/>
+        {:else if entry.kind==='decision'}
+        <DecisionCard decision={entry.decision} {api} onChanged={refresh} onRule={reviewRule} runs={detail?.runs??[]}/>
         {:else}
         {@const artifact=entry.artifact}
         {@const payload = artifact.payload as MessagePayload}
@@ -457,7 +513,6 @@
         <Message animate={!restoring} {artifact} {run} outcomes={payload.speaker!=='ash'?outcomes(payload.inputArtifactId??artifact.sourceId!):[]} images={messageImages(payload)} blocked={!!active||!!(run&&actionBusy[run.id])} onInspect={inspect} onCitation={(resultId,citationId)=>void openCitation(resultId,citationId)} onRetry={run=>runAction(run,'retry')} onOpen={openImages}/>
         {/if}
       {/each}
-      {#each detail?.decisions??[] as decision(decision.id)}<DecisionCard {decision} {api} onChanged={refresh} onRule={reviewRule} runs={detail?.runs??[]}/>{/each}
     </div><div class="bottom-spacer" bind:this={spacer} aria-hidden="true"></div></main>
     <!-- Keep transcript overlays clear of recording and composer controls. -->
       {#if jumpVisible}<button class="ash-button jump-latest" onclick={latest}>↓ Latest messages</button>{/if}
@@ -470,19 +525,19 @@
           {#if images.length}<div class="draft-images">{#each images as image (image.id)}<div class="draft-image" class:upload-error={image.status==='error'} data-testid="draft-image"><button type="button" class="ash-button draft-thumb" onmouseenter={()=>hoveredDraft=image.id} onmouseleave={()=>hoveredDraft=null} onfocus={()=>hoveredDraft=image.id} onblur={()=>hoveredDraft=null} disabled={!image.attachment} aria-label={`Preview ${image.filename}`} onclick={()=>openImages(images.flatMap(item=>item.attachment?[item.attachment]:[]),images.filter(item=>item.attachment).findIndex(item=>item.id===image.id))}>{#if image.kind==='video'&&image.attachment}{#if hoveredDraft===image.id&&!reducedMotion}<video class="draft-hover-video" src={`/api/attachments/${image.id}/playback`} autoplay muted loop playsinline></video>{/if}<img src={`/api/attachments/${image.id}/thumbnail`} alt={image.filename}/><span class="draft-play">▶</span>{#if isVideoAttachment(image.attachment)}<span class="draft-duration">{formatVideoDuration(image.attachment.metadata.durationSeconds)}</span>{/if}{:else if image.preview||image.attachment}<img src={image.preview??`/api/attachments/${image.id}/thumbnail`} alt={image.attachment?.summary??image.filename}/>{:else}<span>▧</span>{/if}</button><div class="draft-meta"><strong>{image.filename}</strong>{#if image.incomplete}<span>Incomplete recording</span>{/if}<span>{image.status==='uploading'?(image.progress<1?`Uploading ${Math.round(image.progress*100)}%`:'Preparing attachment…'):image.status==='error'?image.error:`${Math.round(image.size/1024)} KB`}</span>{#if image.status==='error'&&(localFiles.has(image.id)||image.captureId)}<button type="button" onclick={()=>queueUpload(selected,image.id)} class="ash-button">Retry upload</button>{#if image.captureId}<button type="button" onclick={()=>window.ashRecording.save(image.captureId!).then(result=>{recordingNotice=result==='saved'?'Recording saved locally.':'';}).catch(e=>recordingNotice=e.message)} class="ash-button">Save locally</button>{/if}{/if}</div><button class="ash-button remove-image ash-ghost ash-icon ash-close" type="button" disabled={creating||!!pending[selected]} aria-label={`Remove ${image.filename}`} onclick={()=>removeImage(selected,image.id)}><Icon name="close"/></button></div>{/each}</div>{/if}
           <input class="sr-only" type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime,video/webm,.mov" multiple bind:this={fileInput} aria-label="Choose images or videos" onchange={(event)=>{if(event.currentTarget.files)addFiles(event.currentTarget.files);event.currentTarget.value='';}}/>
           {#each images.filter(image=>image.captureId&&image.status==='ready') as image (image.id)}<div class="recording-draft-status" role="status">{#if image.recordingDraft==='pending'}Preparing action items from your narration…{:else if image.recordingDraft==='error'}{image.recordingDraftError}<button type="button" disabled={creating||!!pending[selected]} onclick={()=>void generateRecordingDraft(selected,image.id)} class="ash-button">Retry action items</button>{:else if image.recordingDraft==='empty'}No spoken action items found. You can write a message or send the video.{:else if !image.recordingDraft}<button type="button" disabled={creating||!!pending[selected]} onclick={()=>void generateRecordingDraft(selected,image.id)} class="ash-button">Generate action items</button>{/if}</div>{/each}
-          <label class="sr-only" for="message">Message</label><textarea bind:this={textarea} id="message" placeholder="Message Ash…" rows="1" maxlength="4000" disabled={creating||!!pending[selected]} value={drafts[selected] ?? ''} onpaste={paste} oninput={(event) => {drafts[selected] = event.currentTarget.value; saveLocal();autosize();}} onkeydown={(event) => {if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {event.preventDefault(); void send();}}} class="ash-field"></textarea>
+          <label class="sr-only" for="message">Message</label><textarea bind:this={textarea} id="message" placeholder={adaptSelected?'Describe a change to Ash…':'Message Ash…'} rows="1" maxlength="4000" disabled={creating||!!pending[selected]} value={drafts[selected] ?? ''} onpaste={paste} oninput={(event) => {drafts[selected] = event.currentTarget.value; saveLocal();autosize();}} onkeydown={(event) => {if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {event.preventDefault(); void send();}}} class="ash-field"></textarea>
           <div class="composer-actions"><div class="attachment-actions"><button class="ash-button ash-icon ash-ghost record-button" class:recording={!!recording} type="button" aria-label={recording?'Stop recording':'Record screen'} title={recording?'Stop recording':'Record screen'} disabled={!recordingAvailable||recordBusy||creating||!!pending[selected]||!connected} onclick={()=>recording?void stopRecording():void startRecording()}><Icon name="record"/></button><button class="ash-button ash-ghost ash-icon attach" type="button" aria-label="Attach images or videos" title="Attach images or videos" disabled={creating||!!pending[selected]} onclick={()=>fileInput?.click()}><Icon name="attach"/></button></div><span>{creating?'Creating Thread…':imagesPending?(images.some(image=>image.status==='error')?'Retry or remove failed uploads':'Uploading attachments…'):recordingDraftPending?'Preparing action items…':textTooLong?'Shorten your message to 4000 characters':active ? 'Response in progress · your draft is saved' : 'Enter to send · Shift + Enter for a new line'}</span>{#if active}<button type="button" class="ash-button ash-icon stop" aria-label="Stop response" title="Stop response" disabled={actionBusy[active.id]} onclick={() => runAction(active!,'cancel')}><Icon name="stop"/></button>{:else}<button class="ash-button ash-primary primary" aria-label={pending[selected]?'Retry sending':'Send message'} title={pending[selected]?'Retry sending':'Send message'} disabled={creating || submitting || !connected || imagesPending || recordingDraftPending || textTooLong || (!pending[selected] && !(drafts[selected] ?? '').trim()&&!images.length)}><Icon name={pending[selected]?'retry':'send'}/></button>{/if}</div>
         </div></form>
-        {#if info?.model?.provider !== 'openai'}<details class="test-controls"><summary>Test response settings</summary><label for="mode">Response behavior</label><select use:selectField id="mode" bind:value={mode} class="ash-field"><option value="normal">Normal</option><option value="slow">Slow streaming</option><option value="fail">Fail after partial output</option><option value="fail-before">Fail before output</option><option value="empty">Empty response</option></select></details>{/if}
+        {#if info?.model?.provider !== 'openai'&&!adaptSelected}<details class="test-controls"><summary>Test response settings</summary><label for="mode">Response behavior</label><select use:selectField id="mode" bind:value={mode} class="ash-field"><option value="normal">Normal</option><option value="slow">Slow streaming</option><option value="fail">Fail after partial output</option><option value="fail-before">Fail before output</option><option value="empty">Empty response</option></select></details>{/if}
       {/if}
     </div>
   </div>
   {#if visibilityId}<Visibility thread={threads.find(t=>t.id===visibilityId)} {api} onClose={()=>visibilityId=''} onChange={change=>updateThread(visibilityId,change)} onInspect={id=>{visibilityId='';void inspect(id,'assessment');}} onInspectChange={id=>{visibilityId='';void inspect(id,'change');}}/>{/if}
   {#if processing}<Processing {api} onClose={()=>processing=false} onInspect={id=>void tick().then(()=>inspect(id))} onThread={id=>void selectThread(id)}/>{/if}
   {#if decisionsOpen}<DecisionsPage {decisions} {api} onChanged={refresh} onThread={selectThread} onRule={reviewRule} onSettings={()=>openSettings()} onClose={closeDecisions}/>{/if}
-  {#if inspectedId}
-    <Rail side="right" className="inspector-rail"><aside class="inspector" aria-label={inspectionKind==='artifact'?'Artifact inspector':'Thread inspector'} use:surface={{dense:true}} transition:mist={{role:"large"}}><div bind:this={inspectorContent} use:scrollArea class="surface-content"><div class="inspector-heading"><h2>{inspectionKind==='artifact'?'Artifact inspector':'Thread inspector'}</h2><button aria-label="Close inspector" onclick={closeInspector} class="ash-button ash-ghost ash-icon ash-close"><Icon name="close"/></button></div>
-      {#if inspectionKind!=='artifact'}
+  {#if inspectedId||developmentEvidence}
+    <Rail side="right" className="inspector-rail"><aside class="inspector" aria-label={developmentEvidence?'Development inspector':inspectionKind==='artifact'?'Artifact inspector':'Thread inspector'} use:surface={{dense:true}} transition:mist={{role:"large"}}><div bind:this={inspectorContent} use:scrollArea class="surface-content"><div class="inspector-heading"><h2>{developmentEvidence?(developmentEvidence.kind==='changes'?'Changes':developmentEvidence.kind==='checks'?'Checks':'Apply changes'):inspectionKind==='artifact'?'Artifact inspector':'Thread inspector'}</h2><button aria-label="Close inspector" onclick={closeInspector} class="ash-button ash-ghost ash-icon ash-close"><Icon name="close"/></button></div>
+      {#if developmentEvidence}{#if developmentEvidence.kind==='apply'}<ApplyUpdate application={detail?.workspace?.application} decision={detail?.decisions?.find(d=>d.id===detail?.workspace?.application?.decisionId)} available={!!info?.adapt?.capabilities.localApply} unavailableReason={info?.adapt?.applicationReason} busy={!!applicationBusy[selected]} refreshing={!!refreshingWorkspace[selected]} onPrepare={action=>void prepareApplication(action)} onRefresh={()=>void refreshWorkspace()} onResolve={()=>void resolveWorkspaceConflicts()} {api} onChanged={refresh}/>{:else}<DevelopmentEvidence kind={developmentEvidence.kind} checkpoint={developmentEvidence.checkpoint}/>{/if}{:else if inspectionKind!=='artifact'}
         {#if assessmentInspection}{@const result=assessmentInspection.result}
           <div class="section"><h3>{assessmentInspection.kind} · {assessmentInspection.status}</h3><p>{new Date(assessmentInspection.createdAt).toLocaleString()}</p>{#if result}<p>{result.reason}</p><details><summary>Assessment output</summary><pre>{result.output}</pre></details>{#if result.model}<details><summary>Provider result</summary><pre>{JSON.stringify(result.model,null,2)}</pre></details>{/if}{/if}</div>
           <ContextView captured={assessmentInspection.request} onSource={id=>void openAssessmentSource(id)} onChange={id=>void inspect(id,'change')}/>

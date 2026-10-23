@@ -59,11 +59,11 @@ test('design-rails: Real overflow and sidebar movement preserve the live workspa
     await expect(page.getByTestId('run-status')).toHaveCount(before+1);await expect(page.getByTestId('run-status').last()).toHaveText('completed');
   }
   await expect(bar).toHaveAttribute('data-visible','true');
-  await page.emulateMedia({reducedMotion:'reduce'});
-  await expect.poll(()=>page.evaluate(()=>matchMedia('(prefers-reduced-motion:reduce)').matches)).toBe(true);
+  await page.emulateMedia({reducedMotion:'reduce'});await expect.poll(()=>page.evaluate(()=>matchMedia('(prefers-reduced-motion:reduce)').matches)).toBe(true);
   await page.getByRole('button',{name:'Hide sidebar',exact:true}).click();await expect(page.getByRole('complementary',{name:'Thread sidebar'})).toHaveCount(0);await page.getByRole('button',{name:'Show sidebar',exact:true}).click();
-  const animations=await page.locator('.ash-rail').evaluateAll(nodes=>nodes.flatMap(node=>node.getAnimations().map(animation=>({duration:animation.effect?.getComputedTiming().duration,playState:animation.playState,node:node.className}))));
-  expect(animations).toEqual([]);
+  // A zero-duration transition may still have an animation object until its cleanup frame.
+  const durations=await page.locator('.ash-rail').evaluateAll(nodes=>nodes.flatMap(node=>node.getAnimations().map(animation=>animation.effect?.getTiming().duration)));expect(durations.every(duration=>duration===0)).toBe(true);
+  await expect.poll(()=>page.locator('.ash-rail').evaluateAll(nodes=>nodes.flatMap(node=>node.getAnimations()).length)).toBe(0);
 });
 
 test('design-reading: Links stay readable and nested editors retain wheel scrolling',async({ash})=>{

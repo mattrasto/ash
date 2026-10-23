@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { modelContentText, type RequestPayload } from '@ash/shared';
-  let {captured,onSource,onChange}:{captured:RequestPayload;onSource:(id:string)=>void;onChange?:(id:string)=>void}=$props();
+  import { modelContentText, type CapturedContext } from '@ash/shared';
+  let {captured,onSource,onChange}:{captured:CapturedContext;onSource:(id:string)=>void;onChange?:(id:string)=>void}=$props();
   let copyStatus=$state('');
   const omitted=$derived(captured.selection.omissions ?? {history:captured.selection.omitted.filter(item=>item.reason==='context-limit').length,notCompleted:captured.selection.omitted.filter(item=>item.reason==='not-completed').length,superseded:captured.selection.omitted.filter(item=>item.reason==='superseded').length});
   async function copy() {try{await window.ashMedia.copyText(captured.messages.map(message=>`${message.role}:\n${modelContentText(message.content)}`).join('\n\n'));copyStatus='Copied';}catch{copyStatus='Could not copy context.';}}
@@ -25,7 +25,7 @@
   {#if onChange&&captured.selection.changes?.length}<details><summary>Application history · {captured.selection.changes.length}</summary>{#each captured.selection.changes as change}<button class="ash-button source" onclick={()=>onChange?.(change.id)}>Inspect application change</button><code>{change.id}</code>{/each}</details>{/if}
   <button class="ash-button source" onclick={copy}>Copy text-only context</button><span role="status">{copyStatus}</span>
   <details><summary>Captured identities and metadata</summary><pre>{JSON.stringify(captured.selection,null,2)}</pre></details>
-  <details><summary>Generation options</summary><pre>{JSON.stringify(captured.options,null,2)}</pre></details>
+  {#if captured.options}<details><summary>Generation options</summary><pre>{JSON.stringify(captured.options,null,2)}</pre></details>{/if}
 </section>
 <style>
   section{border-top:1px solid var(--divider);padding-top:18px;margin-top:20px;font-size:.8rem;color:var(--text)}h3{font-size:.9rem;font-weight:525;color:var(--text);margin:0 0 10px}p{line-height:1.7}details{margin-top:14px}summary{cursor:pointer;color:var(--text)}.item{background:color-mix(in srgb,var(--control) 35%,transparent);border:1px solid var(--divider);border-radius:6px;padding:11px;margin:10px 0}.item strong{font-size:.8rem}.item p{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 0}.topic{margin:12px 0}code{display:block;font-size:.8rem;overflow-wrap:anywhere;margin-top:7px;color:var(--muted)}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.8rem;line-height:1.6}.source{border:0;background:transparent;color:var(--text);font-size:.8rem;padding:8px 0;text-decoration:underline;text-underline-offset:3px}img{display:block;max-width:100%;max-height:190px;object-fit:contain;margin:10px auto}small{font-size:.8rem;color:var(--muted)}span[role=status]{margin-left:10px;font-size:.8rem}

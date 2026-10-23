@@ -48,6 +48,7 @@ ash/
 │   │   │   ├── main.ts               # Process startup/shutdown
 │   │   │   ├── app.ts                # App assembly
 │   │   │   ├── modules/
+│   │   │   │   ├── adapt/             # Coding orchestration and replaceable provider/preview contracts
 │   │   │   │   ├── threads/    # Threads and thread operations
 │   │   │   │   ├── attachments/      # Image/video ingestion, storage and cleanup
 │   │   │   │   ├── video/            # Video analysis plans, segmentation and tools

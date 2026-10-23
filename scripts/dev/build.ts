@@ -1,17 +1,10 @@
 import { build as bundle } from 'esbuild';
-import { build as viteBuild, type InlineConfig } from 'vite';
-import { svelte, vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { build as viteBuild } from 'vite';
 import { join, resolve } from 'node:path';
+import {rendererConfig} from './renderer-config.ts';
+export {rendererConfig} from './renderer-config.ts';
 import { fileURLToPath } from 'node:url';
 
-export function rendererConfig(checkout: string, output: string): InlineConfig {
-  return {
-    configFile: false, root: join(checkout, 'packages/client'), plugins: [svelte({ preprocess: vitePreprocess({ script: true }) })],
-    cacheDir: join(output, 'vite-cache'), logLevel: 'warn',
-    resolve: { conditions: ['browser', 'module', 'import', 'default'] },
-    build: { outDir: join(output, 'renderer'), emptyOutDir: true },
-  };
-}
 export async function buildMain(checkout: string, output: string) {
   await bundle({ entryPoints: [join(checkout, 'packages/client/src/main/index.ts')], outfile: join(output, 'main.cjs'),
     bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: ['electron'], logLevel: 'warning' });

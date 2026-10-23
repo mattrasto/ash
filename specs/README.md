@@ -35,6 +35,7 @@ Sequencing is proposed. Source names refer to overview headings.
 | Mobile and wearables | Mobile viewing/chat/features; quick capture; microphone and audio devices; device-aware responses | Later | Mobile App; Wearables; G02, G09 |
 | Computer and browser use | Control personal or separate environments, including away-from-computer use | Later; execution environment unresolved | Computer / Browser Use; G02, G08 |
 | Custom apps | User/Ash collaboration, versioned apps, isolated data/files/runtime and separate version control | Later | Self-Modding / Custom Apps; G10 |
+| [Adapt Threads](features/adapt.md) | Automatic Thread mode entry, isolated coding Workspaces, replaceable adapters, parallel renderer changes, previews and verified local UI application | Implemented; source integration/distribution deferred | Self-Modding; G08, G10 |
 | Self-modification | Instruction edits through Decisions; isolated code workspaces, testing and rollback; future sharing/upgrades | Later | Instructions; Self-Modding; G08, G10 |
 | Observation, timeline and dreamtime | Observe activity, summarize daily history, review during spare capacity | Later; privacy/cost boundaries first | Other Features; G09 |
 | Recurring and long-running workflows | Recurring jobs, decomposed work, periodic summaries and apartment alerts | Later | Use-Cases; G07, G09 |

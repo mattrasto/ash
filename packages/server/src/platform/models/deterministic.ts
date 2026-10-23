@@ -48,6 +48,10 @@ export const deterministicModel: ModelAdapter = {
     const inputs = request.messages.filter(message => message.role === 'user');
     const previous = request.messages.filter(message => message.role === 'assistant').length;
     const userText=modelContentText(inputs.at(-1)!.content);
+    if(request.tools?.definitions.some(tool=>tool.name==='adapt.start')&&!request.tools.previousOutputIds.length&&/^(?:please\s+)?(?:change|update|fix|make)\b.*\bash\b/i.test(userText)){
+      yield 'I’ll enter Adapt and work on this change in the same Thread.';
+      yield {kind:'output',calls:[{callId:'adapt_handoff',name:'adapt.start',arguments:'{}'}]};return;
+    }
     if(request.tools?.definitions.some(tool=>tool.name==='decisions.ask')&&/^ask me\b/i.test(userText)){
       if(!request.tools.previousOutputIds.length){yield {kind:'output',calls:[{callId:'ordinary_question',name:'decisions.ask',arguments:JSON.stringify({question:userText.replace(/^ask me\s*/i,'')||'Which folder should I use?',reason:'Your answer is needed to continue.'})}]};return;}
       yield `Saved answer: ${request.tools.results.at(-1)?.result.content.map(c=>c.type==='text'?c.text:'').join('')}.`;yield {kind:'output',calls:[]};return;

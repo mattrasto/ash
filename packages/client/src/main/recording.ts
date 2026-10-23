@@ -87,5 +87,5 @@ export function installRecording(win:BrowserWindow,config:{root:string;url:strin
   win.on('close',event=>{if(active){event.preventDefault();closing=true;requestStop();}});
   app.on('before-quit',event=>{if(active){event.preventDefault();quitting=true;requestStop();}});
   win.webContents.on('render-process-gone',()=>{if(active){void active.file.close();active=undefined;overlay?.destroy();overlay=undefined;}});
-  return ()=>{clearInterval(timer);screen.removeListener('display-removed',removed);};
+  return Object.assign(()=>{clearInterval(timer);screen.removeListener('display-removed',removed);},{busy:()=>!!active||uploaded.size>0});
 }

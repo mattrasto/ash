@@ -3,7 +3,7 @@
   let { info }: { info: PreviewInfo | null } = $props();
   const branch = $derived(info?.source ? info.source.branch ?? `Detached · ${info.source.revision}` : 'Branch unavailable');
   const worktree = $derived(info?.checkout.split('/').slice(-2).join('/') ?? 'Connecting…');
-  const profile = $derived(info?.profile === 'test' ? 'Test' : info?.profile === 'verify' ? 'Verification' : 'Preview');
+  const profile = $derived(info?.candidatePreview ? 'Adapt preview' : info?.profile === 'test' ? 'Test' : info?.profile === 'verify' ? 'Verification' : 'Preview');
 </script>
 
 <div class="preview-bar" aria-label="Preview identity">

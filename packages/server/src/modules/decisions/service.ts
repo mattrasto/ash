@@ -72,6 +72,21 @@ export class Decisions {
   }
   async cancelIn(tx:Prisma.TransactionClient,id:string,reason:string){return tx.decision.updateMany({where:{id,status:{in:['pending','snoozed']}},data:{status:'cancelled',snoozedUntil:null,resolution:json({kind:'cancellation',reason,resolvedAt:new Date().toISOString()}),updatedAt:new Date()}});}
   async cancel(id:string,reason='Input is no longer needed.'){await this.db.$transaction(tx=>this.cancelIn(tx,id,reason));this.onChanged();return decisionView(await this.db.decision.findUniqueOrThrow({where:{id}}));}
+  /** A delegated harness owns its tool loop; its question still uses Ash's Run dependency. */
+  async holdExternal(runId:string,stepKey:string,request:DecisionRequest){
+    return this.db.$transaction(async tx=>{
+      await tx.$queryRaw`SELECT id FROM runs WHERE id=${runId}::uuid FOR UPDATE`;
+      const run=await tx.run.findUniqueOrThrow({where:{id:runId}});
+      if(!['running','waiting'].includes(run.status)||request.kind!=='question')throw new DecisionError(409,'This work cannot request input.');
+      const state=RunState.parse(run.state);if(!state.adapt)throw new DecisionError(409,'Not delegated work.');
+      state.decisions??=[];let dependency=state.decisions.find(d=>d.stepKey===stepKey);
+      const view=dependency?decisionView(await tx.decision.findUniqueOrThrow({where:{id:dependency.decisionId}})):
+        await this.createIn(tx,CreateDecision.parse({id:randomUUID(),threadId:run.threadId,sourceArtifactId:state.adapt.requestArtifactId??state.request_artifact_id,request}));
+      if(fingerprint(view.request)!==fingerprint(request))throw new DecisionError(409,'The required input changed; the old answer cannot be reused.');
+      if(!dependency){dependency={decisionId:view.id,stepKey,status:'waiting'};state.decisions.push(dependency);}
+      await tx.run.update({where:{id:runId},data:{state:json(state)}});return view;
+    });
+  }
   async hold(runId:string,callId:string,request:DecisionRequest,existingQuestionId?:string){
     return this.db.$transaction(async tx=>{
       await tx.$queryRaw`SELECT id FROM runs WHERE id=${runId}::uuid FOR UPDATE`;
@@ -103,7 +118,8 @@ export class Decisions {
       if(dependency.status!=='waiting')continue;dependency.status='cancelled';
       const question=await tx.decision.findUnique({where:{id:dependency.decisionId}});
       const origin=question?.sourceArtifactId?await tx.artifact.findUnique({where:{id:question.sourceArtifactId}}):null;
-      if(!origin||(origin.payload as {type?:string}).type!=='tool_call')continue;
+      // Older automatic handoffs linked questions to the original model capture.
+      if(!origin||!(['tool_call','coding_request'].includes((origin.payload as {type:string}).type)||!!state.adapt&&origin.id===state.request_artifact_id))continue;
       const others=await tx.run.findMany({where:{id:{not:runId},status:{in:['running','queued','waiting']}}});
       if(!others.some(run=>RunState.parse(run.state).decisions?.some(d=>d.decisionId===dependency.decisionId&&d.status==='waiting')))await this.cancelIn(tx,dependency.decisionId,'The dependent work was cancelled.');
     }

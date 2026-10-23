@@ -1,3 +1,5 @@
+import type {Prisma} from '@prisma/client';
+import type {RunState} from '@ash/shared';
 import type { RequestPayload, ToolAction, ToolAuthorization, ToolAvailabilityIssue, ToolDefinition, ToolResource, ToolResult } from '@ash/shared';
 
 export interface ToolContext {
@@ -13,6 +15,9 @@ export interface PreparedToolAction {
   readonly action: ToolAction;
 }
 
+/** Database-only effects commit atomically with the saved tool result. No external effects. */
+export type ToolCommit=(tx:Prisma.TransactionClient,state:ReturnType<typeof RunState.parse>)=>Promise<void>;
+
 export interface ToolHandler<Args, Prepared extends PreparedToolAction> {
   readonly definition: ToolDefinition;
   /** Runtime argument validation; no IO or effects. */
@@ -20,6 +25,7 @@ export interface ToolHandler<Args, Prepared extends PreparedToolAction> {
   /** Constrained resolution only; must not perform the requested action. */
   prepare(args: Args, context: ToolContext): Promise<Prepared>;
   execute(action: Prepared, context: ToolContext): Promise<ToolResult>;
+  commit?(action:Prepared,context:ToolContext,tx:Prisma.TransactionClient,state:ReturnType<typeof RunState.parse>):Promise<void>;
 }
 
 /** A prepared closure retains typed arguments without exposing them to another handler. */
@@ -28,6 +34,7 @@ export interface ToolRegistration {
   prepare(input: unknown, context: ToolContext): Promise<{
     action: ToolAction;
     execute(context: ToolContext): Promise<ToolResult>;
+    commit?:ToolCommit;
   }>;
 }
 
@@ -42,7 +49,7 @@ export function registerTool<Args, Prepared extends PreparedToolAction>(handler:
     async prepare(input, context) {
       context.signal.throwIfAborted();
       const prepared = await handler.prepare(handler.parse(input), context);
-      return { action: prepared.action, execute: current => handler.execute(prepared, current) };
+      return { action: prepared.action, execute: current => handler.execute(prepared, current),...(handler.commit?{commit:(tx,state)=>handler.commit!(prepared,context,tx,state)}:{}) };
     },
   };
 }

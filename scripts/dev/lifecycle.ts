@@ -13,6 +13,9 @@ import { readSession } from '../../packages/server/src/platform/models/session.t
 export interface Runtime {
   phase: 'starting' | 'ready' | 'stopped' | 'failed'; instanceId: string; generation: string;
   supervisor: ProcessRef; children: ProcessRef[]; serverUrl?: string; webUrl?: string; controlUrl?: string;
+  desktop?: ProcessRef;
+  debuggingPort?:number;
+  rendererUpdates?:boolean;
   source?: { commit: string; hash: string }; error?: string;
   modelSessionId?: string;
 }
@@ -41,7 +44,7 @@ async function recover(instance: Instance, state: Runtime) {
     await stopProcess(ref, true);
   }
 }
-export async function startInstance(ws: Workspace, instanceId: string, options: { headless?: boolean; windowed?: boolean; background?: boolean; modelSessionId?: string } = {}) {
+export async function startInstance(ws: Workspace, instanceId: string, options: { headless?: boolean; windowed?: boolean; background?: boolean; modelSessionId?: string;debugging?:boolean } = {}) {
   return measure('services.ready', () => withLock(ws.devRoot, `instance-${instanceId}`, async () => {
     const instance = await readInstance(ws, instanceId);
     if (options.modelSessionId) await readSession(instance,options.modelSessionId);
@@ -77,7 +80,7 @@ export async function startInstance(ws: Workspace, instanceId: string, options: 
     const require = createRequire(join(ws.checkout, 'package.json'));
     const child = spawn(process.execPath, ['--import', require.resolve('tsx'), join(ws.checkout, 'scripts/dev/supervisor.ts'), join(instance.root, 'instance.json'),
       ...(options.modelSessionId ? ['--model-session',options.modelSessionId] : []),
-      ...(options.headless ? ['--headless'] : []), ...(options.windowed ? ['--windowed'] : []), ...(options.background ? ['--background'] : [])],
+      ...(options.debugging ? ['--debugging'] : []), ...(options.headless ? ['--headless'] : []), ...(options.windowed ? ['--windowed'] : []), ...(options.background ? ['--background'] : [])],
     { cwd: ws.checkout, detached: true, stdio: ['ignore', log.fd, log.fd], env: childEnvironment(join(instance.root, 'tmp')) });
     child.unref(); await log.close();
     const ref = await processRef(child.pid!);
@@ -112,6 +115,8 @@ export async function resetInstance(ws: Workspace, instanceId = ws.previewId, fi
     const instance = await readInstance(ws, instanceId);
     const cluster = await checkedCluster(instance);
     await assertDatabaseOwner(instance, cluster);
+    await (await import('./adapt-preview.ts')).disposeOwnedPreviews(instance);
+    await (await import('./adapt-release.ts')).disposeOwnedReleases(instance);
     await stopUnlocked(instance);
     await dropDatabase(instance, cluster);
     await rm(instance.root, { recursive: true });
@@ -127,6 +132,8 @@ export async function disposeInstance(ws: Workspace, instanceId = ws.previewId) 
     const instance = await readInstance(ws, instanceId);
     const cluster = await checkedCluster(instance);
     await assertDatabaseOwner(instance, cluster);
+    await (await import('./adapt-preview.ts')).disposeOwnedPreviews(instance);
+    await (await import('./adapt-release.ts')).disposeOwnedReleases(instance);
     await stopUnlocked(instance);
     await dropDatabase(instance, cluster);
     await rm(instance.root, { recursive: true });

@@ -1,5 +1,6 @@
-import { app, BrowserWindow, session, ipcMain, clipboard, nativeImage, dialog, shell } from 'electron';
-import { readFileSync } from 'node:fs';
+import { app, BrowserWindow, session, ipcMain, clipboard, nativeImage, dialog, shell,Menu } from 'electron';
+import { createServer } from 'node:http';
+import { readFileSync,writeFileSync,renameSync } from 'node:fs';
 import {createWriteStream} from 'node:fs';
 import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
@@ -9,25 +10,49 @@ import {installRecording} from './recording.ts';
 
 async function main() {
 const config = JSON.parse(readFileSync(process.env.ASH_CLIENT_CONFIG!, 'utf8')) as {
-  root: string; label: string; instanceId: string; url: string; windowed: boolean; background: boolean;
+  root: string; label: string; instanceId: string; url: string; windowed: boolean; background: boolean;candidatePreview?:boolean;installedUI?:string;returnToThread?:{instancePath:string;threadId:string};
 };
 app.setPath('userData', join(config.root, 'electron'));
 app.setName(`Ash (${config.label})`);
 // Background verification must not activate a regular macOS app or add a Dock icon.
 if (config.background && process.platform === 'darwin') app.setActivationPolicy('accessory');
 await app.whenReady();
+if(config.candidatePreview){
+  // Retain Chromium's process sandbox. An outer seatbelt profile prevents its
+  // child sandboxes from initializing on macOS; do not disable those sandboxes.
+  const deniedProxy=createServer((_request,response)=>response.writeHead(403).end());
+  deniedProxy.on('connect',(_request,socket)=>socket.destroy());
+  await new Promise<void>(resolve=>deniedProxy.listen(0,'127.0.0.1',resolve));
+  const address=deniedProxy.address();if(!address||typeof address==='string')throw Error('Preview proxy failed.');
+  await session.defaultSession.setProxy({mode:'fixed_servers',proxyRules:'http://127.0.0.1:'+address.port,proxyBypassRules:'<-loopback>;127.0.0.1:'+new URL(config.url).port});
+  app.on('will-quit',()=>deniedProxy.close());
+  session.defaultSession.setPermissionCheckHandler(()=>false);
+  session.defaultSession.setDisplayMediaRequestHandler((_request,callback)=>callback({}));
+  const origin=new URL(config.url).origin,wsOrigin=origin.replace('http:','ws:');
+  session.defaultSession.webRequest.onBeforeRequest((details,callback)=>{
+    const url=new URL(details.url);
+    callback({cancel:!([origin,wsOrigin].includes(url.origin)||['data:','blob:','devtools:'].includes(url.protocol))});
+  });
+}
 session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+let retained:{bounds:{x:number;y:number;width:number;height:number};fullscreen:boolean}|undefined;
+if(!config.candidatePreview)try{const saved=JSON.parse(readFileSync(join(config.root,'desktop-state.json'),'utf8'));if(Object.values(saved.bounds).every(value=>typeof value==='number'&&Number.isFinite(value))&&saved.bounds.width>=740&&saved.bounds.height>=650&&typeof saved.fullscreen==='boolean')retained=saved;}catch{}
 const win = new BrowserWindow({
-  width: 1040, height: 830, minWidth: 740, minHeight: 650,
+  width: 1040, height: 830,...retained?.bounds, minWidth: 740, minHeight: 650,
   title: `Ash — ${config.label}`, backgroundColor: '#f7f7f2',
   titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 19 },
-  fullscreen: !config.background && !config.windowed, show: false,
+  fullscreen: !config.background && (retained?.fullscreen??!config.windowed), show: false,
   focusable: !config.background, skipTaskbar: config.background,
   // Keep hidden renderers painting so automation, streaming and screenshots still run.
-  webPreferences: { backgroundThrottling: !config.background, contextIsolation: true, sandbox: true, nodeIntegration: false, preload: join(config.root, 'build/preload.cjs') },
+  webPreferences: { backgroundThrottling: !config.background, contextIsolation: true, sandbox: true, nodeIntegration: false, ...(config.candidatePreview?{}:{preload: join(config.root, 'build/preload.cjs')}) },
 });
-const disposeRecording=installRecording(win,config);win.on('closed',disposeRecording);
+if(config.candidatePreview)win.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
+let canRestart=()=>true;
+let updating=false;
+win.webContents.on('will-prevent-unload',event=>{if(updating)event.preventDefault();});
+if(!config.candidatePreview){const disposeRecording=installRecording(win,config);canRestart=()=>!disposeRecording.busy();win.on('closed',disposeRecording);}
 function trusted(event:Electron.IpcMainInvokeEvent) {
+  if(config.candidatePreview)throw new Error('Native bridge unavailable in renderer previews.');
   if(event.sender!==win.webContents || event.senderFrame!==win.webContents.mainFrame || new URL(event.senderFrame.url).origin!==new URL(config.url).origin)throw new Error('Invalid media request');
 }
 ipcMain.handle('media:copy-text',async(event,text:unknown)=>{
@@ -64,6 +89,40 @@ ipcMain.handle('media:image-action',async(event,value:unknown,action:unknown)=>{
 win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 win.webContents.on('will-navigate', (event, url) => {
   if (new URL(url).origin !== new URL(config.url).origin) event.preventDefault();
+});
+if(config.returnToThread){
+  const target=config.returnToThread;
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{role:'appMenu'},{role:'editMenu'},{label:'Adapt',submenu:[{label:'Back to Thread',accelerator:'CmdOrCtrl+Shift+B',click:()=>{void (async()=>{
+    const owner=JSON.parse(readFileSync(target.instancePath,'utf8')) as {root:string;id:string;generation:string};
+    const runtime=JSON.parse(readFileSync(join(owner.root,'runtime.json'),'utf8')) as {instanceId:string;generation:string;controlUrl?:string};
+    const parent=JSON.parse(readFileSync(join(owner.root,'server.json'),'utf8')) as {token:string};
+    if(runtime.instanceId!==owner.id||runtime.generation!==owner.generation||!runtime.controlUrl)throw Error('Controlling Ash is not running.');
+    const response=await fetch(runtime.controlUrl+'/open?thread='+Uuid.parse(target.threadId)+(config.background?'&background=true':''),{method:'POST',headers:{authorization:'Bearer '+parent.token},signal:AbortSignal.timeout(10000)});
+    if(!response.ok)throw Error('Controlling Ash could not open the Thread.');
+  })().catch(error=>dialog.showErrorBox('Back to Thread',error.message));}}]},{role:'windowMenu'}]));
+}
+win.webContents.on('page-title-updated',event=>{if(config.candidatePreview||config.installedUI){event.preventDefault();win.setTitle('Ash — '+config.label);}});
+ipcMain.on('app:restart-ready',(event,requestId:unknown,ready:unknown)=>{
+  if(event.sender!==win.webContents||event.senderFrame!==win.webContents.mainFrame||typeof requestId!=='string'||typeof ready!=='boolean')return;
+  process.send?.({type:'restart-ready',requestId,ready:ready&&canRestart()});
+});
+process.on('message',(message:unknown)=>{
+  const event=message as {type?:string;threadId?:string;requestId?:string};
+  if(event.type==='prepare-restart'){
+    if(!canRestart())process.send?.({type:'restart-ready',requestId:event.requestId,ready:false});
+    else win.webContents.send('app:prepare-restart',event.requestId);
+  }
+  if(event.type==='quit-for-update'&&canRestart()){
+    updating=true;session.defaultSession.flushStorageData();
+    const saved=join(config.root,'desktop-state.json'),temporary=saved+'.tmp';writeFileSync(temporary,JSON.stringify({bounds:win.getNormalBounds(),fullscreen:win.isFullScreen()}),{mode:0o600});renameSync(temporary,saved);app.quit();
+  }
+  if(event.type==='release-health')void win.webContents.executeJavaScript("document.readyState==='complete' && !!document.querySelector('[data-testid=connection]')?.textContent?.includes('Connected') && !!document.querySelector('textarea')").then(ready=>process.send?.({type:'release-health',requestId:event.requestId,ready:!!ready})).catch(()=>process.send?.({type:'release-health',requestId:event.requestId,ready:false}));
+  if(event.type==='capture'&&config.background&&config.candidatePreview)void win.webContents.capturePage().then(image=>process.send?.({type:'captured',requestId:event.requestId,png:image.toPNG().toString('base64')}));
+  if(event.type==='refresh')win.webContents.reload();
+  if(event.type==='open'){
+    if(event.threadId&&!config.candidatePreview){const id=Uuid.safeParse(event.threadId);if(id.success)win.webContents.send('adapt:thread',id.data);}
+    if(!config.background){win.show();win.focus();}
+  }
 });
 await win.loadURL(config.url);
 if (!config.background) win.show();

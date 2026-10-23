@@ -3,6 +3,16 @@ import { ModelRouting } from './modules/threads/model-routing.ts';
 import { jevRouter } from './platform/models/jev-router.ts';
 import { ensureRoutingInstruction } from './modules/instructions/model-routing.ts';
 import { ThreadVisibility } from './modules/visibility/service.ts';
+import {adaptRuntime} from './modules/adapt/tools.ts';
+import { Adapt } from './modules/adapt/service.ts';
+import { AdaptSources } from './modules/adapt/source.ts';
+import { AdaptError,ProviderFailure } from './modules/adapt/contract.ts';
+import { adaptRoutes } from './modules/adapt/routes.ts';
+import { managedCodex } from './platform/adapt/codex.ts';
+import { localPreview } from './platform/adapt/local-preview.ts';
+import {localApplication} from './platform/adapt/local-application.ts';
+import {AdaptApplications} from './modules/adapt/applications.ts';
+import { deterministicCoding } from './platform/adapt/deterministic.ts';
 import { ensureVisibilityInstructions } from './modules/visibility/instructions.ts';
 import { Incoming } from './modules/artifacts/service.ts';
 import { incomingRoutes } from './modules/artifacts/routes.ts';
@@ -57,7 +67,7 @@ const [owner] = await ownership`SELECT pg_try_advisory_lock(1095976961, 1) AS ac
 if (!owner.acquired) { ownership.release(); await ownerDb.end(); await db.end(); throw new Error('Another backend already owns this database'); }
 ownsDatabase = true;
 const product = connectProduct(config.databaseUrl);
-const modelSessionId = process.argv[3];
+const modelSessionId = config.candidatePreview?undefined:process.argv[3];
 const accelerated = config.testTiming === 'accelerated';
 if (accelerated && modelSessionId) throw new Error('Accelerated timing requires the deterministic test model');
 const modelSession=modelSessionId?await openSession(instance,modelSessionId):undefined;
@@ -82,11 +92,15 @@ const filesystemConfiguration=async()=>{
   }
   return settings;
 };
-await permissions.seed();await filesystemConfiguration().catch(()=>undefined);
+await permissions.seed();if(!config.candidatePreview)await filesystemConfiguration().catch(()=>undefined);
+const codingBinding=config.candidatePreview?undefined:modelSession?managedCodex(await readOpenAIKey(instance.checkout)):deterministicCoding(join(instance.root,'adapt','fixture'));
+const applications=config.candidatePreview?undefined:new AdaptApplications(product,decisions,localApplication(instance));
+const adapt=new Adapt(product,new AdaptSources(instance.checkout,join(instance.root,'adapt','sources')),codingBinding,decisions,imageStorage,config.candidatePreview?undefined:localPreview(instance),modelSession?async()=>{const info=await modelSession.info();if(info.session?.expiresAt){try{await modelSession.reserve();}catch{throw new ProviderFailure(false,'coding_session_unavailable','The bounded live session is expired or has used its job allowance. Start a new session.');}return Date.parse(info.session.expiresAt);}return null;}:undefined,applications);
 await ensureRoutingInstruction(product);
 const modelRouting=model.routingConfiguration?new ModelRouting(product,model,jevRouter(jevKey)):undefined;
-const threads = new Threads(product,model,true,imageStorage,composeToolRuntimes(decisionRuntime(decisions),topicRuntime(new TopicRetrieval(product)),filesystemRuntime(filesystemConfiguration,modelSessionId?'all':'offline-demo',true),videoRuntime(video)),undefined,decisions,permissions,modelRouting);
+const threads = new Threads(product,model,true,imageStorage,composeToolRuntimes(...(config.candidatePreview?[]:[adaptRuntime(adapt)]),decisionRuntime(decisions),topicRuntime(new TopicRetrieval(product)),...(config.candidatePreview?[]:[filesystemRuntime(filesystemConfiguration,modelSessionId?'all':'offline-demo',true)]),videoRuntime(video)),undefined,decisions,permissions,modelRouting,adapt);
 await threads.recover();
+const adaptTimer=setInterval(()=>{void adapt.pump(id=>threads.dispatch(id)).catch(()=>console.error('Coding reconciliation unavailable'));},2000);adaptTimer.unref();
 await ensureEngineInstructions(product);
 const incoming=new Incoming(product,threads,model);
 await incoming.recover();
@@ -101,6 +115,7 @@ app.addHook('onRequest', async (request, reply) => {
   if (request.headers.authorization !== `Bearer ${token}`) return reply.code(401).send({ error: 'Unauthorized' });
 });
 threadRoutes(app, threads);
+adaptRoutes(app,adapt);
 incomingRoutes(app,incoming);
 attachmentRoutes(app,attachments);
 organizationRoutes(app,new Organization(product));
@@ -115,9 +130,11 @@ app.get('/health', async () => {
 });
 app.get('/api/info', async () => ({
   label: instance.label, workspaceId: instance.workspaceId, instanceId: instance.id,
-  checkout: instance.checkout, source: await source(),
+  checkout: config.candidatePreview?.checkout??instance.checkout, source:config.candidatePreview?{branch:'Adapt · '+config.candidatePreview.workspaceId.slice(0,6),revision:config.candidatePreview.tree}:await source(),
+  ...(config.candidatePreview?{candidatePreview:{workspaceId:config.candidatePreview.workspaceId,threadId:config.candidatePreview.threadId,checkpointId:config.candidatePreview.checkpointId,tree:config.candidatePreview.tree}}:{}),
   generation: instance.generation, profile: instance.profile, fixture: instance.fixture, schemaVersion: instance.schemaVersion,
   model: await model.info(),
+  adapt:adapt.info(),
 }));
 async function state() {
   const [row] = await db`SELECT note, count FROM dev_scratch WHERE id = 1`;
@@ -136,6 +153,7 @@ app.patch('/api/state', async (request, reply) => {
 app.setErrorHandler((error, _request, reply) => {
   if (error instanceof ZodError) return reply.code(400).send({error:'Invalid thread request.'});
   if (error instanceof ThreadError) return reply.code(error.status).send({error:error.message});
+  if (error instanceof AdaptError) return reply.code(error.status).send({error:error.message});
   if (error instanceof OrganizationError) return reply.code(error.status).send({error:error.message});
   if (error instanceof DecisionError || error instanceof PermissionError) return reply.code(error.status).send({error:error.message});
   if (error instanceof AttachmentError) return reply.code(error.status).send({error:error.message});
@@ -150,7 +168,7 @@ process.send?.({ type: 'listening', url: `http://127.0.0.1:${address.port}` });
 async function stop() {
   if (stopping) return;
   stopping = true;
-  clearInterval(visibilityTimer);await visibility.stop();clearInterval(cleanupTimer);clearInterval(incomingTimer);clearInterval(decisionTimer);await app.close();await incoming.stop(); await threads.stop();await attachments.stop(); await product.$disconnect(); ownership.release(); await ownerDb.end(); await db.end(); process.exit(0);
+  clearInterval(adaptTimer);clearInterval(visibilityTimer);await visibility.stop();clearInterval(cleanupTimer);clearInterval(incomingTimer);clearInterval(decisionTimer);await app.close();await incoming.stop(); await threads.stop();await attachments.stop(); await product.$disconnect(); ownership.release(); await ownerDb.end(); await db.end(); process.exit(0);
 }
 process.on('SIGINT', stop); process.on('SIGTERM', stop);
 process.on('disconnect', stop);

@@ -7,7 +7,7 @@ import type { ImageStorage } from '../attachments/storage.ts';
 import { referenceImages } from '../attachments/service.ts';
 import { Decisions, DecisionWait, DecisionError } from '../decisions/service.ts';
 import { Permissions } from '../permissions/service.ts';
-import { ToolActionFailure, toolAvailability, toolCitationId, type ToolContext, type ToolRuntime } from './contract.ts';
+import { ToolActionFailure, toolAvailability, toolCitationId, type ToolContext, type ToolRuntime, type ToolCommit } from './contract.ts';
 
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 function parseArguments(text: string, maximumDepth: number): unknown {
@@ -193,7 +193,9 @@ export class ToolExecutor {
           if (repeats.get(key)! > limits.repeats) throw new ToolFailure('repetition_limit', 'The Run repeated an action too many times.');
         }
         await this.batch(id, snapshot.calls.filter(call => call.requestId === requestId&&['queued','waiting'].includes(call.status)), request, abort, controller);
-        const settled = RunState.parse((await this.db.run.findUniqueOrThrow({ where: { id } })).state).tools!;
+        const afterBatch=RunState.parse((await this.db.run.findUniqueOrThrow({where:{id}})).state);
+        if(afterBatch.adapt)return;
+        const settled=afterBatch.tools!;
         if(settled.calls.some(call=>call.status==='waiting')){
           await this.checkpoint(id,async(tx)=>{await tx.run.update({where:{id},data:{status:'waiting'}});});
           return;
@@ -228,6 +230,7 @@ export class ToolExecutor {
     try {
       for (const call of calls) {
         if (signal.aborted || failure) break;
+        if(RunState.parse((await this.db.run.findUniqueOrThrow({where:{id}})).state).adapt)break;
         const definition = request.tools!.definitions.find(tool => tool.name === call.call.name);
         if (definition?.concurrency !== 'independent') {
           await Promise.all(pending); if (signal.aborted || failure) break;
@@ -289,6 +292,7 @@ export class ToolExecutor {
     let result: ToolResult;
     const {threadId} = admission;
     let preparedAction:ToolAction|undefined;
+    let commit:ToolCommit|undefined;
     let authorizationSignal=abort,executionTimeout:AbortSignal|undefined;
     const evaluationCache=new Map<string,PermissionEvaluation>();
     const context: ToolContext = { runId: id, threadId, callId: step.id, signal: abort,
@@ -298,7 +302,7 @@ export class ToolExecutor {
         let normalized=proposal;
         const authorization = ToolAuthorization.parse(await abortable(this.runtime!.authorize(proposal, { runId: id, threadId, callId: step.id, signal: authorizationSignal }), authorizationSignal));
         abort.throwIfAborted();
-        if(authorization.outcome==='allowed'&&this.permissions&&!(['decisions.ask','decisions.answer'].includes(normalized.operation)&&normalized.effects.every(effect=>effect==='input')&&!normalized.resources.length)){
+        if(authorization.outcome==='allowed'&&this.permissions&&!(['decisions.ask','decisions.answer','adapt.start'].includes(normalized.operation)&&normalized.effects.every(effect=>effect==='input')&&!normalized.resources.length)){
           normalized=ToolAction.parse({...proposal,resources:await Promise.all(proposal.resources.map(async resource=>resource.kind==='filesystem'?{...resource,id:await realpath(resource.id),label:await realpath(resource.id)}:resource))});
           if(preparedAction&&digest(preparedAction.resources)===digest(proposal.resources))preparedAction=normalized;
           const run=await this.db.run.findUniqueOrThrow({where:{id}}),state=RunState.parse(run.state);
@@ -369,6 +373,7 @@ export class ToolExecutor {
           executionTimeout=AbortSignal.timeout(definition.limits.timeoutMs);
           const executionSignal=AbortSignal.any([abort,executionTimeout]);authorizationSignal=executionSignal;
           result = ToolResult.parse(await abortable(prepared.execute({...context,signal:executionSignal}), executionSignal));
+          if(result.status==='success'){if(prepared.commit&&definition.concurrency!=='exclusive')throw new TypeError('Transactional tools must be exclusive.');commit=prepared.commit;}
           // Attachment access must be validated by a future asset-aware runtime, not model IDs.
           if (result.content.some(content => content.type === 'attachment')) result = errorResult('unsupported_attachment', 'This runtime cannot authorize tool attachment results.');
         }
@@ -396,6 +401,9 @@ export class ToolExecutor {
     const errorsExhausted = await this.checkpoint(id, async (tx, state, thread) => {
       const call = state.tools!.calls.find(call => call.id === step.id)!;
       if (call.resultArtifactId) throw new ToolFailure('duplicate_result', 'A result is already recorded.');
+      signal.throwIfAborted();
+      if(result.status==='success')await commit?.(tx,state);
+      signal.throwIfAborted();
       if (state.tools!.resultBytes + bytes(result) > request.tools!.limits.totalResultBytes) throw new ToolFailure('total_result_limit', 'The Run reached its cumulative tool-result limit.');
       state.tools!.resultBytes += bytes(result);
       state.tools!.reservedResultBytes -= call.reservedBytes??0;

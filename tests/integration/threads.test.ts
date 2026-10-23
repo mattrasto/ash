@@ -61,7 +61,7 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
         assert.equal(checks.length,12);
         assert.ok(checks.some(check=>check.conname==='artifacts_exclude_thread_management'));
         const columns=await admin`SELECT table_name,column_name,data_type,is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name IN ('topics','threads','thread_topics','artifacts','instructions','runs')`;
-        assert.equal(columns.length,46);
+        assert.equal(columns.length,47);assert.ok(columns.some(row=>row.table_name==='threads'&&row.column_name==='interaction_mode'&&row.is_nullable==='NO'));
         await checkDiagram(admin,evidence);
       } finally {await admin.end();}
       await assert.rejects(db.$executeRawUnsafe('CREATE TABLE forbidden (id integer)'),/permission denied/);

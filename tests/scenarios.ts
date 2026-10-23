@@ -11,6 +11,32 @@ export interface Scenario {
 
 // Product rules stay in specs/. These IDs identify executable checks, not new requirements.
 const inventory: Omit<Scenario, 'group' | 'file'>[] = [
+ {id:'adapt-compiler-assets',title:'Protected compilation allows renderer assets and denies host-file asset transforms',suite:'boundary',requirements:['ADAPT-R09','ADAPT-R11','ADAPT-V08'],fixture:'none'},
+ {id:'adapt-auto-entry',title:'Direct app change requests hand the same captured Run into Adapt',suite:'workflow',requirements:['ADAPT-R14','ADAPT-V13'],fixture:'scratchpad / empty'},
+ {id:'adapt-auto-recovery',title:'Automatic coding handoff survives restart and cancellation without duplicate dispatch',suite:'workflow',requirements:['ADAPT-R14','ADAPT-R05','ADAPT-V13'],fixture:'scratchpad / empty'},
+ {id:'adapt-refresh-parallel',title:'Workspace refresh combines installed and independent pending changes once',suite:'workflow',requirements:['ADAPT-R15','ADAPT-V14'],fixture:'scratchpad / empty'},
+ {id:'adapt-refresh-conflicts',title:'Refresh conflicts block application until resolved and reject installed drift',suite:'workflow',requirements:['ADAPT-R15','ADAPT-V15'],fixture:'scratchpad / empty'},
+ {id:'adapt-parallel-apply',title:'Native Apply A then Refresh and Apply B preserves both renderer changes',suite:'workflow',requirements:['ADAPT-R14','ADAPT-R15','ADAPT-V14'],fixture:'scratchpad'},
+ {id:'adapt-parallel-conflict-apply',title:'Native conflict review preserves drafts and applies a resolved combined build',suite:'workflow',requirements:['ADAPT-R15','ADAPT-V15','DS-R08','DS-R11','DS-R12'],fixture:'scratchpad'},
+ {id:'adapt-managed-protocol',title:'Managed image input uses its own API schema and deleted-session cleanup is idempotent',suite:'boundary',requirements:['ADAPT-R04','ADAPT-R07'],fixture:'none'},
+ {id:'adapt-native-preview',title:'Native UI preview contains generated renderer code and preserves isolated data',suite:'workflow',requirements:['ADAPT-R09','ADAPT-V08'],fixture:'scratchpad'},
+ {id:'adapt-preview-protected-paths',title:'Native preview rejects backend and native source changes',suite:'workflow',requirements:['ADAPT-R09','ADAPT-V08'],fixture:'scratchpad'},
+ {id:'adapt-desktop',title:'Adapt mode and evidence preserve the Thread editor at narrow sizes',suite:'desktop',requirements:['ADAPT-R01','ADAPT-R08','ADAPT-R09','ADAPT-V01','ADAPT-V07','DS-R03','DS-R04','DS-R05','DS-R08','DS-R09','DS-R10','DS-R11','DS-R12','DS-R13','DS-V02','DS-V07','DS-V08','DS-V10'],fixture:'scratchpad'},
+ {id:'adapt-capture',title:'Adapt captures routing and deduplicates across mode changes',suite:'workflow',requirements:['ADAPT-R01','ADAPT-R02','ADAPT-R03','ADAPT-R04','ADAPT-R10'],fixture:'scratchpad / empty'},
+ {id:'adapt-decisions-restart',title:'Coding questions resume once after restart',suite:'workflow',requirements:['ADAPT-R05','ADAPT-R06'],fixture:'scratchpad / empty'},
+ {id:'adapt-cancel-parallel',title:'Stopping one coding Workspace preserves independent work',suite:'workflow',requirements:['ADAPT-R02','ADAPT-R06','ADAPT-R07'],fixture:'scratchpad / empty'},
+ {id:'adapt-recovery',title:'Unknown dispatch, expiry and provider replacement retain source history',suite:'workflow',requirements:['ADAPT-R03','ADAPT-R04','ADAPT-R05','ADAPT-R08'],fixture:'scratchpad / empty'},
+ {id:'adapt-checkpoint-boundary',title:'Checkpoint imports reject escaped paths and mismatched trees',suite:'workflow',requirements:['ADAPT-R08'],fixture:'scratchpad / empty'},
+ {id:'adapt-preview-follow',title:'Completed checkpoints follow open previews with durable restart recovery',suite:'workflow',requirements:['ADAPT-R05','ADAPT-R09'],fixture:'scratchpad / empty'},
+ {id:'adapt-decision-timeline',title:'Answered coding questions retain their chronological Thread position',suite:'desktop',requirements:['ADAPT-R06','DEC-R08'],fixture:'scratchpad'},
+ {id:'adapt-application-authority',title:'Frozen application evidence uses explicit Decisions and immutable outcomes',suite:'workflow',requirements:['ADAPT-R11','ADAPT-R12','ADAPT-V09'],fixture:'scratchpad / empty'},
+ {id:'adapt-application-stale',title:'New coding invalidates a pending application approval',suite:'workflow',requirements:['ADAPT-R11','ADAPT-V10'],fixture:'scratchpad / empty'},
+ {id:'adapt-application-recovery',title:'Application coordination recovers the same Decision after restart',suite:'workflow',requirements:['ADAPT-R12','ADAPT-V09'],fixture:'scratchpad / empty'},
+ {id:'adapt-local-apply',title:'Verified renderer update restarts the native app and preserves its draft',suite:'workflow',requirements:['ADAPT-R11','ADAPT-R12','ADAPT-V09'],fixture:'scratchpad'},
+ {id:'adapt-local-restore',title:'Restoring a previous UI retains chat and drafts created after application',suite:'workflow',requirements:['ADAPT-R13','ADAPT-V12'],fixture:'scratchpad'},
+ {id:'adapt-local-startup-recovery',title:'Failed startup recovers the previous runnable version',suite:'workflow',requirements:['ADAPT-R13','ADAPT-V11'],fixture:'scratchpad'},
+ {id:'adapt-local-approval-drift',title:'Changed installed version or build bytes reject stale application approval',suite:'workflow',requirements:['ADAPT-R11','ADAPT-V10'],fixture:'scratchpad'},
+ {id:'adapt-local-interrupted-apply',title:'Process interruption after version switch recovers without replaying application',suite:'workflow',requirements:['ADAPT-R12','ADAPT-R13','ADAPT-V11'],fixture:'scratchpad'},
  {id:'design-reading',title:'Readable links and native nested editor scrolling at minimum window size',suite:'desktop',requirements:['DS-R01','DS-R03','DS-R11','DS-R12','DS-V07','DS-V10','DS-V11'],fixture:'scratchpad'},
  {id:'design-dismissal',title:'Outside dismissal preserves layer ownership and guarded drafts; close controls align',suite:'desktop',requirements:['DS-R03','DS-R04','DS-R10','DS-V04','DS-V05'],fixture:'scratchpad'},
  {id:'design-rails',title:'Sidebars animate layout while real overflow and live editing remain intact',suite:'desktop',requirements:['DS-R09','DS-R11','DS-R12','DS-R13','DS-V07','DS-V08'],fixture:'scratchpad'},
@@ -163,6 +189,14 @@ const inventory: Omit<Scenario, 'group' | 'file'>[] = [
 
 export interface TestGroup { id: string; suite: Suite; file: string; scenarios: string[]; exclusive?: boolean }
 export const testGroups: TestGroup[] = [
+  {"id": "adapt-application", "suite": "workflow", "file": "tests/integration/adapt-application.test.ts", "scenarios": ["adapt-application-authority", "adapt-application-stale", "adapt-application-recovery"], "exclusive": false},
+  {"id": "adapt-parallel-apply", "suite": "workflow", "file": "tests/integration/adapt-parallel-apply.test.ts", "scenarios": ["adapt-parallel-apply", "adapt-parallel-conflict-apply"], "exclusive": false},
+  {"id": "adapt-preview", "suite": "workflow", "file": "tests/integration/adapt-preview.test.ts", "scenarios": ["adapt-native-preview", "adapt-preview-protected-paths"], "exclusive": false},
+  {"id": "adapt-release", "suite": "workflow", "file": "tests/integration/adapt-release.test.ts", "scenarios": ["adapt-local-apply", "adapt-local-restore", "adapt-local-startup-recovery", "adapt-local-approval-drift", "adapt-local-interrupted-apply"], "exclusive": false},
+  {"id": "adapt-routing-refresh", "suite": "workflow", "file": "tests/integration/adapt-routing-refresh.test.ts", "scenarios": ["adapt-auto-entry", "adapt-auto-recovery", "adapt-refresh-parallel", "adapt-refresh-conflicts"], "exclusive": false},
+  {"id": "adapt", "suite": "workflow", "file": "tests/integration/adapt.test.ts", "scenarios": ["adapt-capture", "adapt-decisions-restart", "adapt-cancel-parallel", "adapt-recovery", "adapt-checkpoint-boundary", "adapt-preview-follow"], "exclusive": false},
+  {"id": "adapt-desktop", "suite": "desktop", "file": "tests/e2e/adapt.spec.ts", "scenarios": ["adapt-desktop", "adapt-decision-timeline"]},
+
   {"id": "artifacts", "suite": "workflow", "file": "tests/integration/artifacts.test.ts", "scenarios": ["engine-filter-route", "engine-presentation-context", "engine-permission-decisions", "engine-provider-capture", "engine-recovery-capacity", "engine-context-bounds"], "exclusive": false},
   {"id": "combined-context", "suite": "workflow", "file": "tests/integration/combined-context.test.ts", "scenarios": ["combined-context"], "exclusive": false},
   {"id": "filesystem-tools", "suite": "workflow", "file": "tests/integration/filesystem-tools.test.ts", "scenarios": ["TOOL-01", "TOOL-03", "TOOL-04", "TOOL-05", "TOOL-19", "TOOL-20", "TOOL-21", "TOOL-24", "TOOL-15", "TOOL-16"], "exclusive": false},
@@ -205,7 +239,7 @@ export const testGroups: TestGroup[] = [
   {"id": "visibility-decisions-desktop", "suite": "desktop", "file": "tests/e2e/visibility.spec.ts", "scenarios": ["visibility-decisions-desktop"]},
   {"id": "visibility-desktop", "suite": "desktop", "file": "tests/e2e/visibility.spec.ts", "scenarios": ["visibility-desktop"]},
   {"id": "visibility-recording-recovery", "suite": "desktop", "file": "tests/e2e/visibility.spec.ts", "scenarios": ["visibility-recording-recovery"]},
-  {"id": "boundary", "suite": "boundary", "file": "tests/boundary/*.test.ts", "scenarios": ["boundary-paths", "boundary-locks", "boundary-environment", "boundary-process", "boundary-fingerprint", "verification-cli", "verification-evidence"]},
+  {"id": "boundary", "suite": "boundary", "file": "tests/boundary/*.test.ts", "scenarios": ["adapt-compiler-assets", "adapt-managed-protocol", "boundary-paths", "boundary-locks", "boundary-environment", "boundary-process", "boundary-fingerprint", "verification-cli", "verification-evidence"]},
 ];
 const membership = new Map<string, TestGroup>();
 for (const group of testGroups) for (const id of group.scenarios) {

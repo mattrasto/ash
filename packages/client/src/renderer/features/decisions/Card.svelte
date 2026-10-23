@@ -32,6 +32,7 @@
   const names: Record<string, string> = { 'filesystem.read': 'Read file', 'filesystem.list': 'List folder', 'filesystem.glob': 'Find files', 'filesystem.search': 'Search file contents', startLine: 'Starting line', maxLines: 'Maximum lines', maxResults: 'Maximum results' };
   const label = (key: string) => names[key] ?? (key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_.]/g, ' ').replace(/^./, c => c.toUpperCase()));
   const operation = $derived(decision.request.action?.operation ?? '');
+  const application=$derived(['ash.apply','ash.restore'].includes(operation));
   const actionTitle = $derived(names[operation] ?? label(operation.split('.').at(-1) ?? operation));
   const effectNames: Record<string, string> = { read: 'Read data', write: 'Change data', delete: 'Delete data', send: 'Send messages', publish: 'Publish public content', control: 'Control computer' };
   const consequences = $derived((decision.request.action?.effects ?? [])
@@ -75,10 +76,13 @@
 <article class="decision-card" data-testid="decision-card" use:surface><div class="surface-content">
   <div class="meta"><span>{decision.request.kind === 'permission' ? 'Permission request' : 'Question'}</span><time datetime={decision.createdAt} title={new Date(decision.createdAt).toLocaleString()}>{new Date(decision.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</time></div>
   <h3>{decision.request.question}</h3><p class="reason">{decision.request.reason}</p>
-  {#if decision.request.action}
-    <section class="action" aria-label="Action to approve"><h4>{actionTitle}</h4>
-      {#each decision.request.action.resources as resource}<p class="target">{resource.label || resource.id}{#if resource.label && resource.id !== resource.label}<span>{resource.id}</span>{/if}</p>{/each}
+  {#snippet actionContent()}
+      {#each decision.request.action?.resources??[] as resource}<p class="target">{resource.label || resource.id}{#if resource.label && resource.id !== resource.label}<span>{resource.id}</span>{/if}</p>{/each}
       {#if actionDetails.length || consequences.length}<dl>{#each actionDetails as [key, value]}<div><dt>{label(key)}</dt><dd>{display(value)}</dd></div>{/each}{#if consequences.length}<div><dt>Also</dt><dd>{consequences.join(', ')}</dd></div>{/if}</dl>{/if}
+  {/snippet}
+  {#if decision.request.action}
+    <section class="action" class:application aria-label="Action to approve">
+      {#if application}<details><summary>Version details</summary>{@render actionContent()}</details>{:else}<h4>{actionTitle}</h4>{@render actionContent()}{/if}
     </section>
   {/if}
   {#if decision.dueAt}<p class="due">Due {new Date(decision.dueAt).toLocaleString()}</p>{/if}
