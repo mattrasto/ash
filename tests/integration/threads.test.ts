@@ -293,7 +293,7 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
       await page.getByRole('heading',{name:'Renamed in sidebar',exact:true}).waitFor();
       await page.getByRole('button',{name:'Response details',exact:true}).click();await page.getByText('Outcome: completed',{exact:true}).waitFor();
       await page.getByRole('button',{name:'Inspect Ash response',exact:true}).click();await page.getByRole('heading',{name:'Artifact inspector',exact:true}).waitFor();
-      await page.keyboard.press('Escape');assert.equal(await page.getByRole('complementary',{name:'Artifact inspector',exact:true}).count(),0);
+      await page.keyboard.press('Escape');await page.locator('.inspector').waitFor({state:'detached'});assert.equal(await page.getByRole('complementary',{name:'Artifact inspector',exact:true}).count(),0);
       await page.screenshot({path:join(evidence,'chat-reconnected.png')});
       assert.deepEqual(errors,[]);
       }catch(error){

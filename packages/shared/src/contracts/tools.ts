@@ -5,6 +5,9 @@ export type ToolJson = null | boolean | number | string | ToolJson[] | { [key: s
 export const ToolJson: z.ZodType<ToolJson> = z.lazy(() => z.union([
   z.null(), z.boolean(), z.number().finite(), z.string(), z.array(ToolJson), z.record(ToolJson),
 ]));
+export const FeatureEvidence = z.object({
+  type: z.literal('feature_evidence'), feature: z.string().min(1).max(80), stage: z.string().min(1).max(100), data: ToolJson,
+}).strict();
 export const ToolResource = z.object({
   kind: z.string().min(1).max(80), id: z.string().min(1).max(4096), label: z.string().max(4096),
 }).strict();

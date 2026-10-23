@@ -3,6 +3,9 @@ import {svelte,vitePreprocess} from '@sveltejs/vite-plugin-svelte';
 import {realpathSync,existsSync} from 'node:fs';
 import {join,resolve,sep} from 'node:path';
 
+/** Read-only scene playback dependencies; preparation and server code stay outside the compiler. */
+export const sceneBrowserPaths=(checkout:string)=>['package.json','node_modules','src/browser','src/fixtures','src/contracts.ts','src/timing.ts','src/profile-defaults.ts'].map(path=>join(checkout,'packages/scenes',path));
+
 export function rendererConfig(checkout: string, output: string, trustedCheckout?:string): InlineConfig {
   const tsconfigRaw=JSON.stringify({compilerOptions:{target:'ES2022',useDefineForClassFields:true,verbatimModuleSyntax:true}});
   const preprocess=trustedCheckout?{name:'ash-protected-typescript',script:async({content,attributes,filename}:{content:string;attributes:Record<string,string|boolean>;filename?:string})=>attributes.lang==='ts'?transformWithEsbuild(content,filename??'component.ts',{loader:'ts',target:'esnext',tsconfigRaw}):undefined}:vitePreprocess({script:true});
@@ -15,7 +18,7 @@ export function rendererConfig(checkout: string, output: string, trustedCheckout
 }
 /** Applies before Vite's filesystem loader, including transitive imports and ?raw. */
 function rendererBoundary(candidate:string,trusted:string,output:string):import('vite').Plugin {
-  const roots=[join(candidate,'packages/client/src/renderer'),join(trusted,'node_modules'),join(trusted,'packages/shared'),join(output,'vite-cache')].map(path=>existsSync(path)?realpathSync(path):resolve(path));
+  const roots=[join(candidate,'packages/client/src/renderer'),join(trusted,'node_modules'),join(trusted,'packages/shared'),...sceneBrowserPaths(trusted),join(output,'vite-cache')].map(path=>existsSync(path)?realpathSync(path):resolve(path));
   const index=join(candidate,'packages/client/index.html');
   return {name:'ash-renderer-preview-boundary',enforce:'pre',configureServer(server){
     server.middlewares.use((request,response,next)=>{

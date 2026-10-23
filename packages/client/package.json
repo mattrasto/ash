@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "dependencies": {
+    "@ash/scenes": "workspace:*",
     "@ash/shared": "workspace:*",
     "marked": "18.0.2",
     "svelte": "5.55.7"

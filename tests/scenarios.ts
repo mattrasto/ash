@@ -37,6 +37,14 @@ const inventory: Omit<Scenario, 'group' | 'file'>[] = [
  {id:'adapt-local-startup-recovery',title:'Failed startup recovers the previous runnable version',suite:'workflow',requirements:['ADAPT-R13','ADAPT-V11'],fixture:'scratchpad'},
  {id:'adapt-local-approval-drift',title:'Changed installed version or build bytes reject stale application approval',suite:'workflow',requirements:['ADAPT-R11','ADAPT-V10'],fixture:'scratchpad'},
  {id:'adapt-local-interrupted-apply',title:'Process interruption after version switch recovers without replaying application',suite:'workflow',requirements:['ADAPT-R12','ADAPT-R13','ADAPT-V11'],fixture:'scratchpad'},
+ {id:'scene-event-workflow',title:'Scene events route into one normal Run and retain unapproved candidate evidence',suite:'workflow',requirements:['SCN-03','SCN-04','SCN-05','SCN-06','SCN-11','SCN-12','SCN-13'],fixture:'scratchpad / empty'},
+ {id:'scene-event-interruption',title:'Cancelled scene generation and explicit Retry never blindly repeat an unknown outcome',suite:'workflow',requirements:['SCN-02','SCN-10','SCN-12'],fixture:'scratchpad / empty'},
+ {id:'scene-unavailable',title:'Missing generator or pinned models fail before paid generation and preserve cached playback',suite:'workflow',requirements:['SCN-02','SCN-06','SCN-12'],fixture:'scratchpad / empty'},
+ {id:'scene-persistence',title:'Approved scene ownership, integrity and saved location survive backend restart',suite:'workflow',requirements:['SCN-02','SCN-11','SCN-13','SCN-15'],fixture:'scratchpad / empty'},
+ {id:'scene-desktop',title:'Cached scene, phase overrides, city selection and chat work together in Electron',suite:'desktop',requirements:['SCN-01','SCN-04','SCN-08','SCN-15'],fixture:'scratchpad'},
+ {id:'scene-replacement',title:'Complete scene swaps, rejected assets, lifecycle and fallback preserve playback',suite:'desktop',requirements:['SCN-06','SCN-07','SCN-11','SCN-13','SCN-15'],fixture:'scratchpad'},
+ {id:'scene-resolution',title:'Native artwork resolution and bounded effect/grading buffers survive lighting and resize',suite:'desktop',requirements:['SCN-04','SCN-07','SCN-13','SCN-15'],fixture:'scratchpad'},
+ {id:'scene-phase-motion',title:'Worker-prepared rotating lighting transitions release temporary native frames',suite:'desktop',requirements:['SCN-07','SCN-08','SCN-13','DS-R13'],fixture:'scratchpad'},
  {id:'design-reading',title:'Readable links and native nested editor scrolling at minimum window size',suite:'desktop',requirements:['DS-R01','DS-R03','DS-R11','DS-R12','DS-V07','DS-V10','DS-V11'],fixture:'scratchpad'},
  {id:'design-dismissal',title:'Outside dismissal preserves layer ownership and guarded drafts; close controls align',suite:'desktop',requirements:['DS-R03','DS-R04','DS-R10','DS-V04','DS-V05'],fixture:'scratchpad'},
  {id:'design-rails',title:'Sidebars animate layout while real overflow and live editing remain intact',suite:'desktop',requirements:['DS-R09','DS-R11','DS-R12','DS-R13','DS-V07','DS-V08'],fixture:'scratchpad'},
@@ -190,9 +198,9 @@ const inventory: Omit<Scenario, 'group' | 'file'>[] = [
 export interface TestGroup { id: string; suite: Suite; file: string; scenarios: string[]; exclusive?: boolean }
 export const testGroups: TestGroup[] = [
   {"id": "adapt-application", "suite": "workflow", "file": "tests/integration/adapt-application.test.ts", "scenarios": ["adapt-application-authority", "adapt-application-stale", "adapt-application-recovery"], "exclusive": false},
-  {"id": "adapt-parallel-apply", "suite": "workflow", "file": "tests/integration/adapt-parallel-apply.test.ts", "scenarios": ["adapt-parallel-apply", "adapt-parallel-conflict-apply"], "exclusive": false},
+  {"id": "adapt-parallel-apply", "suite": "workflow", "file": "tests/integration/adapt-parallel-apply.test.ts", "scenarios": ["adapt-parallel-apply", "adapt-parallel-conflict-apply"], "exclusive": true},
   {"id": "adapt-preview", "suite": "workflow", "file": "tests/integration/adapt-preview.test.ts", "scenarios": ["adapt-native-preview", "adapt-preview-protected-paths"], "exclusive": false},
-  {"id": "adapt-release", "suite": "workflow", "file": "tests/integration/adapt-release.test.ts", "scenarios": ["adapt-local-apply", "adapt-local-restore", "adapt-local-startup-recovery", "adapt-local-approval-drift", "adapt-local-interrupted-apply"], "exclusive": false},
+  {"id": "adapt-release", "suite": "workflow", "file": "tests/integration/adapt-release.test.ts", "scenarios": ["adapt-local-apply", "adapt-local-restore", "adapt-local-startup-recovery", "adapt-local-approval-drift", "adapt-local-interrupted-apply"], "exclusive": true},
   {"id": "adapt-routing-refresh", "suite": "workflow", "file": "tests/integration/adapt-routing-refresh.test.ts", "scenarios": ["adapt-auto-entry", "adapt-auto-recovery", "adapt-refresh-parallel", "adapt-refresh-conflicts"], "exclusive": false},
   {"id": "adapt", "suite": "workflow", "file": "tests/integration/adapt.test.ts", "scenarios": ["adapt-capture", "adapt-decisions-restart", "adapt-cancel-parallel", "adapt-recovery", "adapt-checkpoint-boundary", "adapt-preview-follow"], "exclusive": false},
   {"id": "adapt-desktop", "suite": "desktop", "file": "tests/e2e/adapt.spec.ts", "scenarios": ["adapt-desktop", "adapt-decision-timeline"]},
@@ -240,6 +248,9 @@ export const testGroups: TestGroup[] = [
   {"id": "visibility-desktop", "suite": "desktop", "file": "tests/e2e/visibility.spec.ts", "scenarios": ["visibility-desktop"]},
   {"id": "visibility-recording-recovery", "suite": "desktop", "file": "tests/e2e/visibility.spec.ts", "scenarios": ["visibility-recording-recovery"]},
   {"id": "boundary", "suite": "boundary", "file": "tests/boundary/*.test.ts", "scenarios": ["adapt-compiler-assets", "adapt-managed-protocol", "boundary-paths", "boundary-locks", "boundary-environment", "boundary-process", "boundary-fingerprint", "verification-cli", "verification-evidence"]},
+  {id:'scene-workflow',suite:'workflow',file:'tests/integration/scene-workflow.test.ts',scenarios:['scene-event-workflow','scene-event-interruption','scene-unavailable'],exclusive:false},
+  {id:'scenes',suite:'workflow',file:'tests/integration/scenes.test.ts',scenarios:['scene-persistence'],exclusive:false},
+  ...['scene-desktop','scene-replacement','scene-resolution','scene-phase-motion'].map(id=>({id,suite:'desktop' as const,file:'tests/e2e/scenes.spec.ts',scenarios:[id]})),
 ];
 const membership = new Map<string, TestGroup>();
 for (const group of testGroups) for (const id of group.scenarios) {

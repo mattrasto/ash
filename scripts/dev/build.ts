@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import {rendererConfig} from './renderer-config.ts';
 export {rendererConfig} from './renderer-config.ts';
 import { fileURLToPath } from 'node:url';
+import {cp,mkdir} from 'node:fs/promises';
 
 export async function buildMain(checkout: string, output: string) {
   await bundle({ entryPoints: [join(checkout, 'packages/client/src/main/index.ts')], outfile: join(output, 'main.cjs'),
@@ -13,6 +14,8 @@ export async function buildMain(checkout: string, output: string) {
   return join(output, 'main.cjs');
 }
 export async function buildAll(checkout: string, output: string) {
+  await mkdir(join(output,'scenes'),{recursive:true});
+  await cp(join(checkout,'packages/scenes/src/fixtures/assets'),join(output,'scenes/assets'),{recursive:true});
   await buildMain(checkout, output);
   const priorEnvironment = process.env.NODE_ENV;
   try { await viteBuild(rendererConfig(checkout, output)); }

@@ -22,7 +22,7 @@
     "verify": "node --import tsx scripts/dev/verify.ts",
     "db:generate": "pnpm --filter @ash/server exec prisma generate --schema prisma/schema.prisma",
     "postinstall": "pnpm db:generate",
-    "test:boundary": "node --import tsx --test tests/boundary/*.test.ts packages/server/src/modules/context/*.test.ts packages/server/src/modules/attachments/*.test.ts packages/server/src/platform/models/*.test.ts",
+    "test:boundary": "node --import tsx --test tests/boundary/*.test.ts packages/server/src/modules/context/*.test.ts packages/server/src/modules/attachments/*.test.ts packages/server/src/platform/models/*.test.ts packages/scenes/tests/*.test.ts packages/scenes/src/server/*.test.ts packages/scenes/src/server/preparation/*.test.ts",
     "test:desktop": "playwright test --config tests/playwright.config.ts"
   },
   "devDependencies": {
@@ -31,9 +31,11 @@
     "@sveltejs/vite-plugin-svelte": "5.1.1",
     "@types/node": "22.19.17",
     "electron": "42.11.3",
+    "fastify": "5.12.5",
     "esbuild": "0.28.1",
     "playwright": "1.58.2",
     "postgres": "3.4.8",
+    "sharp": "0.35.5",
     "svelte-check": "4.1.0",
     "tsx": "4.23.15",
     "typescript": "5.9.3",

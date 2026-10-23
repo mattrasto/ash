@@ -2,7 +2,7 @@ import { testGroups } from '../../tests/scenarios.ts';
 import { spawn } from 'node:child_process';
 import { readdir } from 'node:fs/promises';
 
-// Ordinary feature groups may overlap; infrastructure ownership journeys run alone.
+// Ordinary feature groups may overlap; renderer-release and infrastructure journeys run alone.
 const workers = Number(process.env.ASH_TEST_WORKERS ?? 1);
 if (![1, 2].includes(workers)) throw new Error('ASH_TEST_WORKERS must be 1 or 2');
 const selected = process.argv.slice(2);

@@ -45,6 +45,10 @@ test('chat-layout: Thread layout at normal and minimum window sizes', async ({ a
   const { page, app } = ash;
   // Static baselines exclude entry/stream animation timing; integration tests cover motion.
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.clock.setFixedTime(new Date('2026-10-22T19:00:00Z'));
+  await page.getByRole('combobox',{name:'Scene lighting'}).selectOption('day');
+  await expect(page.locator('[data-scene-status="ready"]')).toHaveCount(1);
+  await expect(page.locator('.scene-host canvas')).toHaveAttribute('data-cloud-state','ready');
   await page.getByLabel('Message', { exact: true }).fill('Hello Ash.');
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await expect(page.getByTestId('run-status')).toHaveText('completed');

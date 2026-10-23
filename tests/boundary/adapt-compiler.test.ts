@@ -17,10 +17,14 @@ test('Protected compiler asset reads',{timeout:60000},async t=>{
       await mkdir(renderer,{recursive:true});await writeFile(canary,secret);
       await writeFile(join(candidate,'packages/client/index.html'),'<div id="app"></div><script type="module" src="/src/renderer/main.ts"></script>');
       await writeFile(join(renderer,'main.ts'),'import {mount} from "svelte";import View from "./View.svelte";import "./style.css";mount(View,{target:document.getElementById("app")!});');
-      await writeFile(join(renderer,'View.svelte'),'<script lang="ts">let label:string="Protected renderer";</script><h1>{label}</h1><style>h1{color:blue}</style>');
+      await writeFile(join(renderer,'View.svelte'),'<script lang="ts">import {bundledScenes} from "@ash/scenes/browser";let label:string="Protected renderer";</script><h1>{label}</h1><p>{bundledScenes.length} scenes</p><style>h1{color:blue}</style>');
       await writeFile(join(renderer,'local.png'),'LOCAL_RENDERER_ASSET');await writeFile(join(renderer,'style.css'),'body {background-image:url("./local.png?inline")}');
       await git(candidate,['init','-q']);await git(candidate,['add','--all']);const base=await git(candidate,['write-tree']);await prepareRenderer(candidate,base,process.cwd());
       const valid=join(root,'valid');await buildProtectedRenderer(candidate,valid,process.cwd()).catch(async error=>{console.error(await readFile(join(valid,'compiler.log'),'utf8'));throw error;});assert.ok((await emitted(valid)).length);await noCanary(valid);
+      const view=await readFile(join(renderer,'View.svelte'),'utf8');
+      await writeFile(join(renderer,'View.svelte'),'<script>import {SceneService} from "@ash/scenes/server";</script><p>{SceneService.name}</p>');
+      const server=join(root,'scene-server');await assert.rejects(()=>buildProtectedRenderer(candidate,server,process.cwd()),/Protected renderer compilation failed/);await noCanary(server);
+      await writeFile(join(renderer,'View.svelte'),view);
       await writeFile(join(renderer,'style.css'),'body {background-image:url('+JSON.stringify('/@fs'+canary+'?inline')+')}');
       await git(candidate,['add','packages/client/src/renderer']);await prepareRenderer(candidate,base,process.cwd());
       const denied=join(root,'denied');await assert.rejects(()=>buildProtectedRenderer(candidate,denied,process.cwd()),/Protected renderer compilation failed/);assert.match(await readFile(join(denied,'compiler.log'),'utf8'),/permission: 'FileSystemRead'/);await noCanary(denied);

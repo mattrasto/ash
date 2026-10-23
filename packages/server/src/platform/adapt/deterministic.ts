@@ -17,7 +17,7 @@ export function deterministicCoding(root:string):CodingBinding{
       const id='env-'+key.replaceAll(':','-'),directory=join(root,id);await mkdir(directory,{recursive:true});
       try{await readFile(join(directory,'.git','HEAD'));}catch{
         const archive=join(root,id+'.tar.gz');await writeFile(archive,source.archive);await exec('tar',['-xzf',archive,'-C',directory]);
-        await git(directory,['init','-q']);await git(directory,['add','--all']);await git(directory,['-c','user.name=Ash','-c','user.email=fixture@localhost','commit','-qm','Fixture source']);
+        await git(directory,['init','-q']);await git(directory,['-c','core.compression=0','add','--all']);await git(directory,['-c','user.name=Ash','-c','user.email=fixture@localhost','commit','-qm','Fixture source']);
         if(checkpoint?.patch){await writeFile(join(directory,'.git','restore.patch'),checkpoint.patch);await git(directory,['apply','--index',join(directory,'.git','restore.patch')]);}
       }
       return {id,generation};

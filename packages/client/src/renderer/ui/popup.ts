@@ -10,7 +10,7 @@ export function popup(node:HTMLElement,options:PopupOptions){
   const mark=(anchor:HTMLElement)=>{anchor.dataset.ashPopupOwner=node.id;anchor.classList.add('ash-popup-trigger');anchor.setAttribute('aria-expanded','true');};
   const clear=(anchor:HTMLElement)=>{if(anchor.dataset.ashPopupOwner===node.id){anchor.removeAttribute('data-ash-popup-owner');anchor.setAttribute('aria-expanded','false');anchor.classList.remove('ash-popup-trigger');}};
   const before=document.activeElement as HTMLElement|null;
-  const closeOthers=(event:Event)=>{if((event as CustomEvent).detail!==node)current.onClose();};
+  const closeOthers=(event:Event)=>{const next=(event as CustomEvent).detail;if(next!==node&&!(next instanceof Node&&node.contains(next)))current.onClose();};
   if(!options.parent){document.dispatchEvent(new CustomEvent('ash:dismiss-popups',{detail:node}));document.addEventListener('ash:dismiss-popups',closeOthers);}
   if('showPopover' in node){node.setAttribute('popover','manual');node.showPopover();}
   if(current.anchor){mark(current.anchor);}
@@ -31,7 +31,7 @@ export function popup(node:HTMLElement,options:PopupOptions){
     document.dispatchEvent(new CustomEvent('ash:popup-position',{detail:node}));
   }
   const outside=(event:PointerEvent)=>{if(node.inert)return;const target=event.target as Node;if(!node.contains(target)&&!current.anchor?.contains(target)&&!current.chain?.().some(part=>part.contains(target))){popupDismissals.add(event);current.onClose();}};
-  const parentMoved=(event:Event)=>{if(current.parent===(event as CustomEvent).detail)position();};
+  const parentMoved=(event:Event)=>{const moved=(event as CustomEvent).detail;if(current.parent===moved||node.parentElement===moved)position();};
   const scroll=(event:Event)=>{if(!node.contains(event.target as Node))position();};
   const observer=new ResizeObserver(position);observer.observe(node);if(current.anchor)observer.observe(current.anchor);
   document.addEventListener('ash:popup-position',parentMoved);document.addEventListener('pointerdown',outside,true);document.addEventListener('scroll',scroll,true);window.addEventListener('resize',position);position();

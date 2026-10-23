@@ -23,7 +23,7 @@ export class AdaptSources {
       try{await git(this.checkout,['archive','--format=tar.gz','--output='+temporary,revision]);await rename(temporary,archivePath);}finally{await rm(temporary,{force:true});}
     }
     const archive=await readFile(archivePath);
-    if(archive.length>12*1024*1024)throw new Error('Source archive exceeds this adapter’s upload limit.');
+    if(archive.length>96*1024*1024)throw new Error('Source archive exceeds this adapter’s upload limit.');
     return {revision,tree,archive};
   }
   /** Git imports only; no candidate scripts, hooks, installs or processes execute here. */
@@ -32,7 +32,9 @@ export class AdaptSources {
     await mkdir(directory,{mode:0o700});
     try{
       await exec('tar',['-xzf',join(this.root,source.revision+'.tar.gz'),'-C',directory],{timeout:30_000});
-      await git(directory,['init','-q']);await git(directory,['add','--all']);
+      await git(directory,['init','-q']);
+      // Prepared PNGs are already compressed; avoid recompressing them in this disposable import.
+      await git(directory,['-c','core.compression=0','add','--all']);
       if(await git(directory,['write-tree'])!==source.tree)throw new Error('Source archive does not match its recorded Git tree.');
       await writeFile(join(directory,'.git','candidate.patch'),candidate.patch,{mode:0o600});
       if(candidate.patch)await git(directory,['apply','--index','--whitespace=nowarn',join(directory,'.git','candidate.patch')]);

@@ -1,7 +1,9 @@
 import { z } from 'zod';
+import { ToolJson } from './tools.ts';
 const uuid=z.string().uuid();
 export const IncomingSource=z.object({name:z.string().trim().min(1).max(100),eventId:z.string().trim().min(1).max(300),label:z.string().trim().min(1).max(160),url:z.string().url().max(2000).refine(value=>/^https?:/.test(value)).optional()}).strict();
-export const ReceiveItem=z.object({id:uuid,source:IncomingSource,text:z.string().min(1).max(8000).refine(value=>value.trim().length>0),occurredAt:z.string().datetime({offset:true}).optional(),targetThreadId:uuid.optional()}).strict();
+export const IncomingEvent=z.object({kind:z.string().regex(/^[a-z][a-z0-9_.]{0,79}$/),version:z.number().int().positive(),data:z.record(ToolJson)}).strict().refine(event=>JSON.stringify(event).length<=8000,'Structured event exceeds its capture limit.');
+export const ReceiveItem=z.object({id:uuid,source:IncomingSource,text:z.string().min(1).max(8000).refine(value=>value.trim().length>0),occurredAt:z.string().datetime({offset:true}).optional(),targetThreadId:uuid.optional(),event:IncomingEvent.optional()}).strict();
 export type ReceiveItem=z.infer<typeof ReceiveItem>;
 export const IncomingPayload=ReceiveItem.omit({id:true}).extend({type:z.literal('incoming_input')}).strict();
 export const EngineStage=z.enum(['filter','route','assess']);

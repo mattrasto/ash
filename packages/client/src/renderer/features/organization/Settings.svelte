@@ -1,4 +1,8 @@
 <script lang="ts">
+  import Search from '../../ui/Search.svelte';
+  import Popover from '../../ui/Popover.svelte';
+  import {debugMode,setDebugMode} from '../../app/preferences.ts';
+  import {LocationSettings,ScenePicker} from '@ash/scenes/browser';
   import {dialogDismiss} from '../../ui/dismiss.ts';
   import Icon from "../../ui/Icon.svelte";
   import Status from "../../ui/Status.svelte";
@@ -10,17 +14,19 @@
   import type { OwnedInstruction, ThreadView, TopicView, SavePermission } from '@ash/shared';
   import PermissionsEditor from '../permissions/Editor.svelte';
   type Api = <T>(path:string,body?:object)=>Promise<T>;
-  let {api,thread,threads,initialOwner='global:response',initialTab='instructions',initialRule,captureMic=true,onCaptureMic,onChanged,onClose}:{api:Api;thread:ThreadView|null;threads:ThreadView[];initialOwner?:string;initialTab?:'instructions'|'permissions';initialRule?:SavePermission;captureMic?:boolean;onCaptureMic?:(value:boolean)=>void;onChanged:()=>Promise<void>;onClose:()=>void}=$props();
+  const tabs=['general','appearance','instructions','permissions'] as const;
+  type SettingsTab=typeof tabs[number];
+  let {api,thread,threads,initialOwner='global:response',initialTab='instructions',initialRule,captureMic=true,onCaptureMic,onChanged,onClose}:{api:Api;thread:ThreadView|null;threads:ThreadView[];initialOwner?:string;initialTab?:SettingsTab;initialRule?:SavePermission;captureMic?:boolean;onCaptureMic?:(value:boolean)=>void;onChanged:()=>Promise<void>;onClose:()=>void}=$props();
   let dialog:HTMLDialogElement;
   let editorFrame:HTMLDivElement;
   let topics=$state<TopicView[]>([]);
   let ownerKey=$state('global:response'),saved=$state<OwnedInstruction|null>(null),text=$state('');
   let busy=$state(false),loading=$state(true),error=$state(''),notice=$state(''),conflict=$state(false);
   let pendingMove=$state<(()=>void)|null>(null);
-  let tab=$state<'instructions'|'permissions'>('instructions'),permissionDraft=$state(false),permissionBusy=$state(false);
+  let tab=$state<SettingsTab>('instructions'),permissionDraft=$state(false),permissionBusy=$state(false),sceneBusy=$state(false);
   let permissionEditor:{saveBeforeLeaving:()=>Promise<boolean>;discardDraft:()=>void}|undefined=$state();
   const dirty=$derived(!!saved && text !== (saved.document?.text??''));
-  const working=$derived(busy||permissionBusy);
+  const working=$derived(busy||permissionBusy||sceneBusy);
   const scope=$derived(ownerKey.split(':')[0]);
   const selectedTopic=$derived(topics.find(topic=>ownerKey===`topic:${topic.id}`));
   const selectedThread=$derived(threads.find(item=>ownerKey===`thread:${item.id}`));
@@ -35,7 +41,7 @@
   async function load(key:string){await replaceContent(editorFrame,()=>loadValue(key),{resize:false});}
   function move(action:()=>void) {if(working||loading)return;if(dirty||permissionDraft)pendingMove=action;else action();}
   async function saveMove(){if(working)return;if(tab==='instructions'){await save(true);return;}if(await permissionEditor?.saveBeforeLeaving()){const next=pendingMove;pendingMove=null;next?.();}}
-  function tabKey(event:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const next=event.key==='Home'?'instructions':event.key==='End'?'permissions':tab==='instructions'?'permissions':'instructions';move(()=>{tab=next;void tick().then(()=>document.getElementById(`settings-${next}`)?.focus());});}
+  function tabKey(event:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const index=tabs.indexOf(tab),next=event.key==='Home'?tabs[0]:event.key==='End'?tabs[tabs.length-1]:tabs[(index+(event.key==='ArrowLeft'?tabs.length-1:1))%tabs.length];move(()=>{tab=next;void tick().then(()=>document.getElementById(`settings-${next}`)?.focus());});}
   async function save(continueAfter=false) {
     if(!saved||busy)return false;
     busy=true;error='';notice='';
@@ -62,10 +68,10 @@
 
 <dialog bind:this={dialog} aria-label="Settings" oncancel={event=>{event.preventDefault();move(onClose);}} use:dialogDismiss={()=>move(onClose)} use:surface={{dense:true}} transition:mist={{role:"large"}}><div class="surface-content">
   <header><div><h2>Settings</h2></div><button class="ash-button ash-ghost ash-icon close ash-close" aria-label="Close Settings" disabled={working||loading} onclick={()=>move(onClose)}><Icon name="close"/></button></header>
-  <div class="tabs" role="tablist" aria-label="Settings views">{#each ['instructions','permissions'] as name}<button role="tab" id={`settings-${name}`} aria-controls="settings-content" aria-selected={tab===name} tabindex={tab===name?0:-1} disabled={working||loading||!!pendingMove} onkeydown={tabKey} onclick={()=>move(()=>tab=name as typeof tab)} class="ash-button">{name==='instructions'?'Instructions':'Permissions'}</button>{/each}</div>
+  <div class="tabs" role="tablist" aria-label="Settings views">{#each tabs as name}<button role="tab" id={`settings-${name}`} aria-controls="settings-content" aria-selected={tab===name} tabindex={tab===name?0:-1} disabled={working||loading||!!pendingMove} onkeydown={tabKey} onclick={()=>move(()=>tab=name)} class="ash-button">{name[0].toUpperCase()+name.slice(1)}</button>{/each}</div>
   <div use:scrollArea class="body">
     <div bind:this={editorFrame} role="tabpanel" id="settings-content" aria-labelledby={`settings-${tab}`}>
-    {#if tab==='permissions'}<PermissionsEditor bind:this={permissionEditor} bind:busy={permissionBusy} {api} {initialRule} {onChanged} onDraftChange={value=>permissionDraft=value}/>{:else}
+    {#if tab==='general'}<LocationSettings SearchField={Search} Suggestions={Popover} StatusDisplay={Status} replaceResults={replaceContent} bind:busy={sceneBusy}/><section class="debug-setting"><label><span>Debug Mode</span><input class="ash-choice" type="checkbox" role="switch" checked={$debugMode} onchange={event=>setDebugMode(event.currentTarget.checked)}/></label><p class="hint">Show scene controls for tuning lighting, clouds and water. Saved on this device.</p></section>{:else if tab==='appearance'}<ScenePicker StatusDisplay={Status} enhanceSelect={selectField} bind:busy={sceneBusy}/>{:else if tab==='permissions'}<PermissionsEditor bind:this={permissionEditor} bind:busy={permissionBusy} {api} {initialRule} {onChanged} onDraftChange={value=>permissionDraft=value}/>{:else}
     {#if error}<div class="error" role="alert"><Status announce={false} label="Action failed">{error}</Status></div>{/if}
     {#if notice}<p class="notice" role="status">{notice}</p>{/if}
       <label for="instruction-owner">Instruction owner</label>
@@ -91,6 +97,7 @@
 </div></dialog>
 
 <style>
+  .debug-setting{margin-top:28px;padding-top:20px;border-top:1px solid var(--divider)}.debug-setting label{display:flex;align-items:center;justify-content:space-between;gap:16px}.debug-setting input{margin:0}
   .tabs{display:flex;gap:24px;margin:0 28px;border-bottom:1px solid var(--divider);flex-shrink:0}.tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:12px 0}.tabs button[aria-selected=true]{border-bottom-color:var(--accent);font-weight:525}
   dialog{border:1px solid var(--divider);border-radius:16px;background:color-mix(in srgb,var(--control) 35%,transparent);color:var(--text);width:min(1080px,calc(100vw - 40px));height:min(860px,calc(100vh - 48px));max-height:calc(100vh - 48px);overflow:hidden;padding:0;box-shadow:0 20px 70px color-mix(in srgb,var(--shadow) 25%,transparent)}dialog[open]{display:flex;flex-direction:column}dialog::backdrop{background:#25302077;backdrop-filter:blur(3px)}header{flex-shrink:0;display:flex;justify-content:space-between;align-items:center;padding:22px 28px 14px}h2{font:525 1.4rem/1.25 var(--font);margin:5px 0 0}.close{font-size:26px;background:transparent;border:0;padding:0 8px}.body{flex:1;padding:20px 28px;overflow:auto;scrollbar-gutter:stable;min-height:0}label{display:block;font-size:.9rem;font-weight:525;margin-bottom:8px}button{border:1px solid var(--divider);background:color-mix(in srgb,var(--control) 35%,transparent);color:var(--text);border-radius:6px;padding:8px 12px;font-size:.9rem}.primary{background:color-mix(in srgb,var(--control) 35%,transparent);color:white;border-color:var(--divider)}select,textarea{border:1px solid var(--divider);border-radius:6px;background:color-mix(in srgb,var(--control) 35%,transparent);color:var(--text);padding:9px;font:inherit}select{width:100%;font-size:1rem}h3{font-size:15px;margin:22px 0 8px;font-weight:525;overflow-wrap:anywhere}.hint{font-size:.9rem;line-height:1.6;color:var(--text);margin:0 0 16px}textarea{width:100%;min-height:180px;height:200px;resize:vertical;font-size:1rem;line-height:1.65}.editor-meta{display:flex;justify-content:space-between;font-size:.8rem;color:var(--text);margin:8px 0 12px}.error{color:var(--danger);background:color-mix(in srgb,var(--control) 35%,transparent);padding:12px;border-radius:6px;font-size:.9rem}.notice{color:var(--text);font-size:.9rem}footer{flex-shrink:0;display:flex;justify-content:flex-end;gap:8px;padding:16px 28px;border-top:1px solid var(--divider);background:color-mix(in srgb,var(--control) 35%,transparent)}.unsaved{width:100%;font-size:1rem}.unsaved p{margin:0 0 12px}.unsaved button{margin-right:6px;margin-bottom:4px}details{margin-top:12px;font-size:.9rem}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;font-size:.9rem;background:color-mix(in srgb,var(--control) 35%,transparent);padding:12px}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}@media(max-width:760px){header,.body{padding-left:18px;padding-right:18px}footer{padding-left:18px;padding-right:18px}textarea{min-height:130px}.editor-meta{gap:12px}}
 </style>

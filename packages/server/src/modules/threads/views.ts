@@ -1,5 +1,5 @@
 import type { Artifact, Run } from '@prisma/client';
-import { ModelRoutingRequest, InputPayload, MessagePayload, RequestPayload, CodingRequest, CodingEvidence, AdaptPreparation, AdaptCandidateEvidence, AdaptApplicationEvidence, DescriptionPayload, ToolArtifact, VideoArtifact, EngineArtifact, PermissionEvaluation, RunState, RunError, RunStatus, type ArtifactView, type RunView } from '@ash/shared';
+import { ModelRoutingRequest, InputPayload, MessagePayload, RequestPayload, CodingRequest, CodingEvidence, AdaptPreparation, AdaptCandidateEvidence, AdaptApplicationEvidence, DescriptionPayload, ToolArtifact, VideoArtifact, EngineArtifact, FeatureEvidence, PermissionEvaluation, RunState, RunError, RunStatus, type ArtifactView, type RunView } from '@ash/shared';
 
 export function artifactView(row:Artifact):ArtifactView {
   const payload = row.layer === 'input' ? InputPayload.parse(row.payload) : row.layer === 'surface' ? MessagePayload.parse(row.payload)
@@ -7,6 +7,7 @@ export function artifactView(row:Artifact):ArtifactView {
     : (row.payload as {type?:string}).type === 'image_description' ? DescriptionPayload.parse(row.payload)
     : (row.payload as {type?:string}).type === 'permission_evaluation' ? PermissionEvaluation.parse(row.payload)
     : (row.payload as {type?:string}).type === 'model_routing_request' ? ModelRoutingRequest.parse(row.payload)
+    : (row.payload as {type?:string}).type === 'feature_evidence' ? FeatureEvidence.parse(row.payload)
     : (row.payload as {type?:string}).type === 'model_request' ? RequestPayload.parse(row.payload)
     : (row.payload as {type?:string}).type === 'coding_request' ? CodingRequest.parse(row.payload)
     : (row.payload as {type?:string}).type === 'coding_evidence' ? CodingEvidence.parse(row.payload)

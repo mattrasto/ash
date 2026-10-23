@@ -32,6 +32,7 @@ Sequencing is proposed. Source names refer to overview headings.
 | Notifications | Ash-originated notifications; snooze/dismiss/comment; device-aware delivery | Later | Notifications; Interfaces; G02, G09 |
 | Built-in apps | Canvas, drawing and file viewer; versioning, search/citation, links from threads | Later | Built-In Features / Apps; G06, G10 |
 | Desktop | Topics/threads, chat, feature/app panels, companion, shortcuts, context and artifact inspectors | Thread and minimal inspection first | Desktop App; G02 |
+| [Living scenes](features/scenes.md) | Quiet illustrated panoramas, automatic effects, scene/location settings and Debug Mode controls | Cached playback implemented; [generation and other follow-up deferred](features/scenes.md#deferred-work) | Accepted integration spec and refinements, 2026-10-22–23 |
 | Mobile and wearables | Mobile viewing/chat/features; quick capture; microphone and audio devices; device-aware responses | Later | Mobile App; Wearables; G02, G09 |
 | Computer and browser use | Control personal or separate environments, including away-from-computer use | Later; execution environment unresolved | Computer / Browser Use; G02, G08 |
 | Custom apps | User/Ash collaboration, versioned apps, isolated data/files/runtime and separate version control | Later | Self-Modding / Custom Apps; G10 |

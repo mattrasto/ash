@@ -2,6 +2,7 @@ import {mkdir,writeFile,realpath} from 'node:fs/promises';
 import {join} from 'node:path';
 import {exec,childEnvironment} from './io.ts';
 import {build} from 'esbuild';
+import {sceneBrowserPaths} from './renderer-config.ts';
 
 /** Candidate text is compiler input, never Node code. Restrict reads in Vite's
  * asset transforms too; those do not pass through its module-loading hooks. */
@@ -17,7 +18,7 @@ export async function buildProtectedRenderer(candidate:string,output:string,trus
       return {...resolved,external:true};
     });},
   }]});
-  const reads=[candidate,join(trusted,'node_modules'),join(trusted,'packages/client/node_modules'),join(trusted,'packages/shared'),output,
+  const reads=[candidate,join(trusted,'node_modules'),join(trusted,'packages/client/node_modules'),join(trusted,'packages/shared'),...sceneBrowserPaths(trusted),output,
     join(trusted,'package.json'),join(trusted,'tsconfig.json')];
   try{
     await exec(process.execPath,[Number(process.versions.node.split('.')[0])>=23?'--permission':'--experimental-permission','--allow-child-process','--allow-addons',
@@ -27,6 +28,6 @@ export async function buildProtectedRenderer(candidate:string,output:string,trus
   }catch(error){
     const result=error as {stdout?:string;stderr?:string};
     await writeFile(join(output,'compiler.log'),((result.stdout??'')+'\n'+(result.stderr??'')).slice(0,32000),{mode:0o600});
-    throw Error('Protected renderer compilation failed. Imports and assets must stay inside the renderer, shared contracts and trusted dependencies.');
+    throw Error('Protected renderer compilation failed. Imports and assets must stay inside the renderer, shared contracts, scene playback and trusted dependencies.');
   }
 }

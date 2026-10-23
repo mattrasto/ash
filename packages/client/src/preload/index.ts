@@ -1,4 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
+contextBridge.exposeInMainWorld('ashScenes',{
+  state:()=>ipcRenderer.invoke('scene:state'),
+  onChange:(callback:(state:unknown)=>void)=>{const listener=(_event:unknown,state:unknown)=>callback(state);ipcRenderer.on('scene:context',listener);return()=>ipcRenderer.removeListener('scene:context',listener);},
+});
 contextBridge.exposeInMainWorld('ashMedia',{
   copyText:(text:string):Promise<void>=>ipcRenderer.invoke('media:copy-text',text),
   openLink:(url:string):Promise<void>=>ipcRenderer.invoke('media:open-link',url),

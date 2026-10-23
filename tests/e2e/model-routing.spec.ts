@@ -2,6 +2,7 @@ import { test, expect } from '../support/fixtures.ts';
 
 test('model-routing-desktop: Routing Instruction and advanced Thread overrides preserve composer simplicity',async({ash},testInfo)=>{
  const {page}=ash;
+ await ash.app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setContentSize(740,650));
  // Exercise the live-model controls against a controlled API boundary; no paid calls.
  let rejectSave=false;
  let routing={version:0,upgraded:false,override:'auto'};
@@ -25,7 +26,10 @@ test('model-routing-desktop: Routing Instruction and advanced Thread overrides p
  await text.fill('Use Sol for architecture. Use Luna for simple formatting.');
  await dialog.getByRole('button',{name:'Save instructions',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('Instructions saved');
  await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();
- const summary=page.getByRole('button',{name:/^Model settings/});await expect(summary).toBeVisible();await summary.click();
+ const summary=page.getByRole('button',{name:/^Model settings/});await expect(summary).toBeVisible();
+ for(const control of [summary,page.getByRole('combobox',{name:'Scene lighting'}),page.getByRole('button',{name:'Adapt',exact:true}),page.getByRole('button',{name:'Processing',exact:true}),page.getByRole('button',{name:'Settings',exact:true})])await expect(control).toBeInViewport({ratio:1});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await summary.click();
  const model=page.getByLabel('Thread model',{exact:true});await expect(model).toHaveValue('auto');
  await model.selectOption('fast');await expect(model).toHaveValue('fast');await expect(summary).toContainText('override');
  await expect(page.getByRole('option',{name:'Private · not configured'})).toBeDisabled();

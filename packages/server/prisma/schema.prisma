@@ -5,6 +5,28 @@ datasource db {
   provider = "postgresql"
   url      = env("ASH_MIGRATION_DATABASE_URL")
 }
+model SceneBundle {
+  id           String   @id
+  manifest     Json     @db.JsonB
+  manifestText String   @map("manifest_text")
+  manifestHash String   @map("manifest_hash")
+  sizeBytes    Int      @map("size_bytes")
+  createdAt    DateTime @map("created_at") @db.Timestamptz(6)
+  activeStates SceneState[] @relation("active_scene")
+  previousStates SceneState[] @relation("previous_scene")
+  @@map("scene_bundles")
+}
+model SceneState {
+  id               String   @id
+  activeBundleId   String?  @map("active_bundle_id")
+  previousBundleId String?  @map("previous_bundle_id")
+  location         Json?    @db.JsonB
+  revision         Int      @default(0)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(6)
+  activeBundle     SceneBundle? @relation("active_scene", fields: [activeBundleId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  previousBundle   SceneBundle? @relation("previous_scene", fields: [previousBundleId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  @@map("scene_state")
+}
 model Topic {
   id            String       @id @db.Uuid
   name          String

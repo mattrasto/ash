@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "dependencies": {
+    "@ash/scenes": "workspace:*",
     "@ash/shared": "workspace:*",
     "@prisma/client": "6.19.3",
     "fastify": "5.12.5",

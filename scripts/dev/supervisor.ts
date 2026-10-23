@@ -202,7 +202,7 @@ try {
   state.controlUrl = `http://127.0.0.1:${address.port}`;
   await startServices();
   let debounce: ReturnType<typeof setTimeout>;
-  for (const path of ['packages/server/src', 'packages/shared/src', 'packages/client/src/main', 'packages/client/src/preload']) {
+  for (const path of ['packages/server/src', 'packages/shared/src', 'packages/scenes/src', 'packages/client/src/main', 'packages/client/src/preload']) {
     watchers.push(watch(join(instance.checkout, path), { recursive: true }, () => {
       clearTimeout(debounce);
       debounce = setTimeout(async () => {

@@ -52,6 +52,11 @@ test('design-rails: Real overflow and sidebar movement preserve the live workspa
   movedGradually(await samples(page.getByRole('button',{name:'Close inspector',exact:true}),'.main-column','width'));
   await resize(page,app,1040,830);const width=await page.locator('.main-column').evaluate(el=>el.getBoundingClientRect().width);
   const overlay=await samples(page.getByRole('button',{name:'Inspect Ash response',exact:true}),'.inspector-rail','x');expect(overlay.some(value=>value>overlay.at(-1)!+2)).toBe(true);expect(await page.locator('.main-column').evaluate(el=>el.getBoundingClientRect().width)).toBe(width);
+  // Source navigation can reopen the inspector while its shorter rail exit is in flight.
+  await page.getByRole('button',{name:'Close inspector',exact:true}).evaluate(button=>(button as HTMLButtonElement).click());
+  await page.getByRole('button',{name:'Inspect Ash response',exact:true}).evaluate(button=>(button as HTMLButtonElement).click());
+  await expect(page.getByRole('complementary',{name:'Artifact inspector'})).toHaveAttribute('data-forming','false');
+  await expect.poll(()=>page.locator('.inspector-rail').evaluate(el=>Math.abs(el.getBoundingClientRect().right-(innerWidth-12)))).toBeLessThan(1);
   await page.getByRole('button',{name:'Close inspector',exact:true}).click();await expect(page.getByRole('complementary',{name:'Artifact inspector'})).toHaveCount(0);
   expect(await live!.evaluate(el=>el===document.getElementById('message'))).toBe(true);await expect(message).toHaveValue('Keep this draft through every sidebar change');
   for(let i=0;i<3;i++){

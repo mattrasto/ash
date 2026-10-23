@@ -146,7 +146,7 @@ The popup shadow is `0 5px 18px`, shadow color at 10% opacity when fully formed.
 
 **Glass sheen** adds a 1px control-colored top highlight at 33% opacity and a 155° gradient from control fill at 18% to message tint at 21%. These rounded values approximate Final's sheen without its multiplier chain. Apply the treatment to the skin so sheen, frost, and content share the spatial reveal.
 
-The landscape is the visual anchor. The reference uses [landscape.png](../packages/client/src/renderer/ui/assets/landscape.png), centered and covering the viewport, under a light warm wash. Its optional procedural grain is set to 1px with 5% density; keep grain out of the UI. Scene generation and lighting schedules are [deferred](#deferred-extensions).
+The landscape is the visual anchor. The reference uses [landscape.png](../packages/client/src/renderer/ui/assets/landscape.png), centered and covering the viewport, under a light warm wash. Its optional procedural grain is set to 1px with 5% density; keep grain out of the UI. The [living-scene feature](features/scenes.md) replaces the static workspace background independently of these materials; scene-driven palette adaptation remains [deferred](#deferred-extensions).
 
 ## Interaction states
 
@@ -273,6 +273,6 @@ The following are acceptance targets for integration, not a claim of production 
 
 ## Deferred extensions
 
-Scene/daylight/weather adaptation should derive displayed colors and surface backing from the base palette intent, preserving action identity and local readability. It must not overwrite the reference colors. No adaptation algorithm, night palette, or scene schedule is approved here.
+Scene/daylight/weather adaptation should derive displayed colors and surface backing from the base palette intent, preserving action identity and local readability. It must not overwrite the reference colors. No UI adaptation algorithm or night palette is approved here. Scene lighting follows the separate [living-scene contract](features/scenes.md).
 
 Shape-aware creation/removal, a new code font, and touch density remain deferred. The [Ash integration](../docs/features/design-system.md) also needs rendered validation of the approved consolidations and the new status colors.

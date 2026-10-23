@@ -37,6 +37,8 @@ export async function migrateProduct(instance: Instance, cluster: Cluster) {
       await tx.unsafe("INSERT INTO instructions (id,key,name,text,created_at,updated_at) VALUES ($1,'image-description','Image description instructions',$2,now(),now()) ON CONFLICT (key) DO NOTHING", [IMAGE_INSTRUCTION_ID,IMAGE_INSTRUCTIONS]);
       await tx.unsafe(`GRANT SELECT ON topics, threads, thread_topics, artifacts, instructions, runs, attachments, artifact_attachments TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT INSERT ON threads, artifacts, runs TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT SELECT, INSERT, DELETE ON scene_bundles TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT SELECT, INSERT, UPDATE ON scene_state TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT SELECT, INSERT ON application_changes, thread_assessments, incoming_items TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT UPDATE (status,finished_at,result) ON thread_assessments TO "${instance.runtimeRole}"`);
       await tx.unsafe(`GRANT UPDATE (status,state,error,updated_at) ON incoming_items TO "${instance.runtimeRole}"`);

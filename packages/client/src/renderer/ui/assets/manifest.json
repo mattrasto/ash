@@ -34,10 +34,11 @@
         "help": "circle-help",
         "edit": "pencil",
         "grid": "grid-2x2",
-        "type": "type"
+        "type": "type",
+        "mountain": "mountain"
       },
       "catalog": "../icons.json",
-      "catalogIcons": 22,
+      "catalogIcons": 23,
       "catalogAliases": 0,
       "strokeWidth": 1
     }

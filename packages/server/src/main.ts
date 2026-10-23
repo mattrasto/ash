@@ -40,6 +40,7 @@ import { ImageStorage, AttachmentError } from './modules/attachments/storage.ts'
 import { attachmentRoutes } from './modules/attachments/routes.ts';
 import { filesystemRuntime, loadFilesystemConfig } from './modules/filesystem/runtime.ts';
 import { composeToolRuntimes } from './modules/tools/contract.ts';
+import { toolEvidenceHost } from './modules/tools/evidence-host.ts';
 import { topicRuntime } from './modules/context/tools.ts';
 import { TopicRetrieval } from './modules/context/retrieval.ts';
 import { Organization, OrganizationError } from './modules/organization/service.ts';
@@ -50,6 +51,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ServerConfig, ScratchChange } from '@ash/shared';
 import { previewSource } from './platform/preview.ts';
+import {SceneService,sceneRoutes,SceneError,createPrismaSceneRepository,ScenePreparer,SceneWorkflow,sceneRuntime,sceneExecutionHost} from '@ash/scenes/server';
+import {existsSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 
 const config = ServerConfig.parse(JSON.parse(await readFile(process.argv[2], 'utf8')));
 const { instance, token } = config;
@@ -98,7 +102,12 @@ const applications=config.candidatePreview?undefined:new AdaptApplications(produ
 const adapt=new Adapt(product,new AdaptSources(instance.checkout,join(instance.root,'adapt','sources')),codingBinding,decisions,imageStorage,config.candidatePreview?undefined:localPreview(instance),modelSession?async()=>{const info=await modelSession.info();if(info.session?.expiresAt){try{await modelSession.reserve();}catch{throw new ProviderFailure(false,'coding_session_unavailable','The bounded live session is expired or has used its job allowance. Start a new session.');}return Date.parse(info.session.expiresAt);}return null;}:undefined,applications);
 await ensureRoutingInstruction(product);
 const modelRouting=model.routingConfiguration?new ModelRouting(product,model,jevRouter(jevKey)):undefined;
-const threads = new Threads(product,model,true,imageStorage,composeToolRuntimes(...(config.candidatePreview?[]:[adaptRuntime(adapt)]),decisionRuntime(decisions),topicRuntime(new TopicRetrieval(product)),...(config.candidatePreview?[]:[filesystemRuntime(filesystemConfiguration,modelSessionId?'all':'offline-demo',true)]),videoRuntime(video)),undefined,decisions,permissions,modelRouting,adapt);
+const bundledSceneRoot=fileURLToPath(new URL('./scenes/',import.meta.url));
+const scenes=new SceneService({repository:createPrismaSceneRepository(product),storageRoot:instance.root,instanceId:instance.id,fixtureRoot:existsSync(bundledSceneRoot)?bundledSceneRoot:join(instance.checkout,'packages/scenes/src/fixtures')});
+await scenes.initialize();
+const sceneHost=sceneExecutionHost(toolEvidenceHost(product));
+const sceneWorkflow=new SceneWorkflow({scenes,instanceRoot:instance.root,host:sceneHost,preparer:new ScenePreparer()});
+const threads = new Threads(product,model,true,imageStorage,composeToolRuntimes(...(config.candidatePreview?[]:[adaptRuntime(adapt)]),decisionRuntime(decisions),topicRuntime(new TopicRetrieval(product)),...(config.candidatePreview?[]:[filesystemRuntime(filesystemConfiguration,modelSessionId?'all':'offline-demo',true)]),videoRuntime(video),...(config.candidatePreview?[]:[sceneRuntime(sceneWorkflow,sceneHost,instance.id)])),undefined,decisions,permissions,modelRouting,adapt);
 await threads.recover();
 const adaptTimer=setInterval(()=>{void adapt.pump(id=>threads.dispatch(id)).catch(()=>console.error('Coding reconciliation unavailable'));},2000);adaptTimer.unref();
 await ensureEngineInstructions(product);
@@ -114,6 +123,7 @@ const app = Fastify({ logger: false });
 app.addHook('onRequest', async (request, reply) => {
   if (request.headers.authorization !== `Bearer ${token}`) return reply.code(401).send({ error: 'Unauthorized' });
 });
+sceneRoutes(app,scenes,{workflow:sceneWorkflow,receive:receipt=>incoming.receive(receipt)});
 threadRoutes(app, threads);
 adaptRoutes(app,adapt);
 incomingRoutes(app,incoming);
@@ -151,6 +161,7 @@ app.patch('/api/state', async (request, reply) => {
   return state();
 });
 app.setErrorHandler((error, _request, reply) => {
+  if(error instanceof SceneError)return reply.code(error.status).send({error:error.message});
   if (error instanceof ZodError) return reply.code(400).send({error:'Invalid thread request.'});
   if (error instanceof ThreadError) return reply.code(error.status).send({error:error.message});
   if (error instanceof AdaptError) return reply.code(error.status).send({error:error.message});

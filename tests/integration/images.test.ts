@@ -178,6 +178,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       await page.getByRole('button',{name:'Copy text-only context',exact:true}).click();
       assert.match(await app.evaluate(()=>(globalThis as any).__textCopy),/attachmentId:/);
       await page.screenshot({path:join(evidence,'images-inspection.png')});await page.getByRole('button',{name:'Close inspector',exact:true}).click();
+      await page.locator('.inspector').waitFor({state:'detached'});
       await page.getByRole('button',{name:'Open screenshot.png',exact:true}).click({button:'right'});
       await page.getByRole('menuitem',{name:'Copy description',exact:true}).click();await page.getByText('Description copied',{exact:true}).waitFor();
       assert.match(await app.evaluate(()=>(globalThis as any).__textCopy),/Deterministic test description/);

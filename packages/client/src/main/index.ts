@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, ipcMain, clipboard, nativeImage, dialog, shell,Menu } from 'electron';
+import { app, BrowserWindow, session, ipcMain, clipboard, nativeImage, dialog, shell,Menu,powerMonitor } from 'electron';
 import { createServer } from 'node:http';
 import { readFileSync,writeFileSync,renameSync } from 'node:fs';
 import {createWriteStream} from 'node:fs';
@@ -55,6 +55,15 @@ function trusted(event:Electron.IpcMainInvokeEvent) {
   if(config.candidatePreview)throw new Error('Native bridge unavailable in renderer previews.');
   if(event.sender!==win.webContents || event.senderFrame!==win.webContents.mainFrame || new URL(event.senderFrame.url).origin!==new URL(config.url).origin)throw new Error('Invalid media request');
 }
+let sceneSuspended=false;
+const sceneContext=()=>({visible:config.background||win.isVisible()&&!win.isMinimized(),suspended:sceneSuspended,now:new Date().toISOString(),timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone});
+const sendSceneContext=()=>{if(!win.isDestroyed()&&!win.webContents.isDestroyed())win.webContents.send('scene:context',sceneContext());};
+ipcMain.handle('scene:state',event=>{trusted(event);return sceneContext();});
+const sceneSuspend=()=>{sceneSuspended=true;sendSceneContext();},sceneResume=()=>{sceneSuspended=false;sendSceneContext();};
+powerMonitor.on('suspend',sceneSuspend);powerMonitor.on('resume',sceneResume);
+win.on('show',sendSceneContext);win.on('hide',sendSceneContext);win.on('minimize',sendSceneContext);win.on('restore',sendSceneContext);win.on('focus',sendSceneContext);
+const sceneClock=setInterval(sendSceneContext,60000);sceneClock.unref();
+win.on('closed',()=>{clearInterval(sceneClock);powerMonitor.removeListener('suspend',sceneSuspend);powerMonitor.removeListener('resume',sceneResume);ipcMain.removeHandler('scene:state');});
 ipcMain.handle('media:copy-text',async(event,text:unknown)=>{
   trusted(event);if(typeof text!=='string'||text.length>100000)throw new Error('Invalid clipboard text');clipboard.writeText(text);
 });

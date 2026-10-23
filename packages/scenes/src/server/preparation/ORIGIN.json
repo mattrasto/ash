@@ -1,0 +1,43 @@
+{
+  "sourceRepository": "design_experiments/fieldnotes",
+  "sourceRevision": "abb4d21f3212c220c545963e00f8a2e542c8b745",
+  "files": [
+    {
+      "path": "scripts/scene-worker.mjs",
+      "sha256": "4a8e4752ef8060a9d4bcf0762fcfb0f8f832a596e48b234b10bc6ff5a0ebd1be"
+    },
+    {
+      "path": "scripts/sky-mask.mjs",
+      "sha256": "9e939ec1ccb102ab3bed5abae662c5ff134359fad1fff207c2b2b8578a91c4b1"
+    },
+    {
+      "path": "scripts/horizon-refinement.mjs",
+      "sha256": "da371a838a3ef9e1f08c014c1c89f4b41a03e38f356d81ea078e381ab3764e76"
+    },
+    {
+      "path": "scripts/scene-maps.mjs",
+      "sha256": "dd286a64d04e5a19bd4077025bfa5542a53b4f789b758b29966dd43bf68cae3f"
+    },
+    {
+      "path": "scripts/surface-refinement.mjs",
+      "sha256": "1b5ee69d2f393788ec39532120cb5c00a8706f8995f98a6a70a5b26510307c1c"
+    }
+  ],
+  "modelPins": {
+    "idsRecorded": true,
+    "revisionsRecorded": false,
+    "hashesRecorded": false
+  },
+  "runtimeDependencies": [
+    {
+      "name": "@huggingface/transformers",
+      "version": "4.3.1",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "sharp",
+      "version": "0.35.5",
+      "license": "Apache-2.0"
+    }
+  ]
+}

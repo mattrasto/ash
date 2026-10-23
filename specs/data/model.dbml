@@ -273,3 +273,21 @@ Table adapt_executions {
 Ref: adapt_workspaces.thread_id > threads.id [delete: restrict, update: no action]
 Ref: adapt_executions.run_id > runs.id [delete: restrict, update: no action]
 Ref: adapt_executions.workspace_id > adapt_workspaces.id [delete: restrict, update: no action]
+Table scene_bundles {
+ id text [pk, not null, note: 'Immutable bundle identity; versioned independently of Threads.']
+ manifest jsonb [not null, note: 'Immutable validated asset hashes, profile, framing, provenance and verification metadata.']
+ manifest_text text [not null, note: 'Canonical exact serialized manifest used for hashes and reads; avoids JSON transport precision loss. JSONB is its query projection.']
+ manifest_hash text [not null, note: 'SHA-256 of the serialized immutable manifest; checked before playback or activation.']
+ size_bytes integer [not null, note: 'Total immutable file bytes; positive and checked against storage limits.']
+ created_at timestamptz(6) [not null, note: 'Publication time; immutable.']
+}
+Table scene_state {
+ id text [pk, not null, note: 'Instance scene state key; currently default.']
+ active_bundle_id text [note: 'Current approved bundle; null until initialized. Changed atomically with previous and revision.']
+ previous_bundle_id text [note: 'Previous approved bundle retained for fallback; null without a predecessor.']
+ location jsonb [note: 'Saved city, coordinates and timezone. Null uses the San Francisco default.']
+ revision integer [not null, default: 0, note: 'Monotonic compare-and-swap revision for scene activation and saved location changes.']
+ updated_at timestamptz(6) [not null, note: 'Latest scene state or location change.']
+}
+Ref: scene_state.active_bundle_id > scene_bundles.id [delete: restrict, update: no action]
+Ref: scene_state.previous_bundle_id > scene_bundles.id [delete: restrict, update: no action]

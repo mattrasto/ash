@@ -25,7 +25,8 @@ test('visibility-decisions-desktop',async({ash},testInfo)=>{
  }
  await page.keyboard.press('Escape');await expect(message).toHaveValue('A draft kept while waiting');
  await expect(page.getByTestId('run-status').filter({hasText:'waiting'})).toHaveCount(1);
- await page.getByRole('article',{name:'Ash response'}).last().scrollIntoViewIfNeeded();
+ // A response can exceed the narrow viewport; showing its center does not expose its end.
+ await page.getByRole('article',{name:'Ash response'}).last().evaluate(element=>element.scrollIntoView({block:'end'}));
  await expect.poll(()=>page.evaluate(async id=>(await (await fetch(`/api/threads/${id}`)).json()).thread.unread,id)).toBe(false);
 });
 test('visibility-desktop',async({ash,instance},testInfo)=>{
@@ -131,7 +132,7 @@ test('visibility-desktop',async({ash,instance},testInfo)=>{
  await expect(page.getByRole('button',{name:'Send message',exact:true})).toBeEnabled();
  await page.getByRole('button',{name:'Actions for VIS_TEST_DUE Draft protection',exact:true}).click();await page.getByRole('menuitem',{name:'Visibility and naming',exact:true}).click();
  await expect(panel).toContainText('A saved draft keeps this Thread visible');expect((await state()).isArchived).toBe(false);
- await page.getByRole('button',{name:'Close visibility'}).click();await page.getByRole('button',{name:'Remove draft-hold.png',exact:true}).click();
+ await page.getByRole('button',{name:'Close visibility'}).click();await expect(panel).toHaveCount(0);await page.getByRole('button',{name:'Remove draft-hold.png',exact:true}).click();
  await expect.poll(async()=>(await state()).isArchived,{timeout:10000}).toBe(true);
  expect(await page.evaluate(async id=>(await (await fetch(`/api/threads/${id}/assessments`)).json()).length,drafted)).toBe(count);
  await expect(page.getByRole('heading',{name:'VIS_TEST_DUE Draft protection',exact:true})).toBeVisible();

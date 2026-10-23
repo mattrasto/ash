@@ -35,7 +35,8 @@ export function selectField(select:HTMLSelectElement){
     const content=document.createElement('div');content.className='surface-content';panel.append(content);
     let group:Element|null=null;
     options.forEach((option,index)=>{if(option.parentElement instanceof HTMLOptGroupElement&&option.parentElement!==group){group=option.parentElement;const title=document.createElement('div');title.className='ash-option-group';title.textContent=(group as HTMLOptGroupElement).label;content.append(title);}const row=document.createElement('div');row.className='ash-menu-row';row.role='option';row.id=`${ids}-${index}`;row.dataset.index=String(index);row.ariaDisabled=String(!enabled(index));const check=document.createElement('span');check.ariaHidden='true';check.innerHTML=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">${icons.check}</svg>`;check.className='ash-option-check';check.style.opacity=option.selected?'1':'0';row.append(check,document.createTextNode(option.label));row.addEventListener('pointermove',()=>{if(enabled(index)){active=index;mark();}});row.addEventListener('pointerdown',e=>e.preventDefault());row.addEventListener('click',()=>commit(index));content.append(row);});
-    (select.closest('dialog')??document.body).append(panel);skin=surface(panel,{material:'popup'});panel.style.minWidth=`${Math.min(select.offsetWidth,innerWidth-16)}px`;
+    const parent=select.closest<HTMLElement>('.ash-surface[data-material="popup"]')??undefined;
+    (parent??select.closest('dialog')??document.body).append(panel);skin=surface(panel,{material:'popup'});panel.style.minWidth=`${Math.min(select.offsetWidth,innerWidth-16)}px`;
     placement=popup(panel,{anchor:select,onClose:()=>close()});select.setAttribute('aria-controls',ids);select.setAttribute('aria-expanded','true');
     progress=0;animate(1);mark();
   }

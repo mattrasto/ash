@@ -38,7 +38,7 @@ Run from the checkout root. Docker and an awake, unlocked graphical macOS sessio
 | `pnpm test:boundary`, `pnpm test:workflow`, `pnpm test:desktop` | Direct suite commands for debugging; `pnpm test` aliases the boundary suite. Use `verify` for an aggregate report. |
 | `pnpm dev:verify --fixture scratchpad --deterministic` | Fresh offline disposable app for exploration/manual checks; Ctrl+C stops and disposes it. For live exploration, use the [bounded model options](features/threads.md#openai-mode). |
 
-Selection expands a scenario or requirement to its complete execution group, preserving ordered setup. Comma-separated scenario/requirement IDs and group names select their union. Independent desktop scenarios each have their own group. `tests/scenarios.ts` owns group membership, files and exclusive lifecycle groups. Reports distinguish selected groups from full verification; missing results, unexpected results, skips and failed attempts fail the run. Shared runtime, schema, dependency or verification changes still require full verification. Automatic diff-based selection remains deferred.
+Selection expands a scenario or requirement to its complete execution group, preserving ordered setup. Comma-separated scenario/requirement IDs and group names select their union. Independent desktop scenarios each have their own group. `tests/scenarios.ts` owns group membership, files and exclusive groups. Renderer-release journeys run alone because they concurrently build/check multiple full-artwork apps; ordinary feature groups retain bounded concurrency. Reports distinguish selected groups from full verification; missing results, unexpected results, skips and failed attempts fail the run. Shared runtime, schema, dependency or verification changes still require full verification. Automatic diff-based selection remains deferred.
 
 The verifier defaults to two workers and records its worker count and timing profile. Direct suite commands default to one worker and normal timing. Accelerated timing is admitted only in disposable `test` instances using the deterministic model. It shortens synthetic visibility deadlines, debounce and scheduler intervals; assertion timeouts retain their normal margin. Preview/verification instances use normal timing. The controlled OpenAI protocol group explicitly uses normal timing because it exercises live-session configuration. Deadline boundary integration tests retain their injected clock. See the [improvement plan](plans/testing-improvements.md) for measurement targets and evidence.
 
@@ -56,7 +56,7 @@ The verifier defaults to two workers and records its worker count and timing pro
 | `tests/e2e/`, `tests/playwright.config.ts` | Playwright Test scenarios against Electron; bounded file concurrency, no automatic retries. |
 | `tests/baselines/` | Versioned screenshot expectations. |
 | `scripts/dev/verify.ts` | Selection, progress, command execution, source validation, recovery cleanup and aggregate evidence. |
-| `scripts/dev/test-workflow.ts` | Bounded feature concurrency followed by exclusive lifecycle groups. |
+| `scripts/dev/test-workflow.ts` | Bounded feature concurrency followed by exclusive renderer-release and lifecycle groups. |
 | `scripts/dev/telemetry.ts` | Phase/scenario events and ownership records for disposable resources. |
 | `tests/support/ui.ts`, `tests/support/electron.ts` | Polling-safe route teardown, reload fixtures, live inspector controls and tracked Electron launches. |
 

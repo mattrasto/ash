@@ -93,6 +93,9 @@ test('Topic search and read through the shared dispatcher, provider and desktop'
       const firstRequestId=accepted.state.request_artifact_id;
       const finalRound=page.getByRole('region',{name:'Execution steps'}).locator(':scope > details').nth(2);
       const requestPath=`**/api/artifacts/${firstRequestId}`;
+      // Register interception after scene startup and retain it until the page closes.
+      await page.locator('[data-scene-status="ready"]').waitFor();
+      await page.locator('.scene-host canvas[data-cloud-state="ready"]').waitFor();
       let resume!:()=>void,arrived!:()=>void,heldCompleted!:()=>void,holding=true,started=false;
       const held=new Promise<void>(resolve=>resume=resolve),ready=new Promise<void>(resolve=>arrived=resolve),handled=new Promise<void>(resolve=>heldCompleted=resolve);
       await app.network.add(requestPath,async route=>{if(!holding){await route.continue();return;}started=true;try{const response=await route.fetch();arrived();await held;await route.fulfill({response});}finally{heldCompleted();}});
