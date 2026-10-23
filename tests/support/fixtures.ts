@@ -54,7 +54,7 @@ export const test = base.extend<{ instance: Instance; ash: Desktop }>({
           await ash.app.context().tracing.stop({ path: trace });
           await testInfo.attach('trace', { path: trace, contentType: 'application/zip' });
         }
-      } finally { if (!ash.page.isClosed()) await ash.app.close(); }
+      } finally { if (!ash.page.isClosed()) await ash.close(); }
       expect(ash.errors, 'Unexpected renderer errors').toEqual([]);
     }
   },

@@ -5,14 +5,14 @@ test('model-routing-desktop: Routing Instruction and advanced Thread overrides p
  // Exercise the live-model controls against a controlled API boundary; no paid calls.
  let rejectSave=false;
  let routing={version:0,upgraded:false,override:'auto'};
- await page.route('**/api/info',async route=>{const response=await route.fetch();const value=await response.json();value.model.routingEnabled=true;await route.fulfill({response,json:value});});
- await page.route('**/api/threads/*',async route=>{
+ await ash.network.add('**/api/info',async route=>{const response=await route.fetch();const value=await response.json();value.model.routingEnabled=true;await route.fulfill({response,json:value});});
+ await ash.network.add('**/api/threads/*',async route=>{
    if(route.request().method()!=='GET'){await route.continue();return;}
    const response=await route.fetch();const value=await response.json();
    if(value.thread?.lifecycle)value.thread.lifecycle.modelRouting=routing;
    await route.fulfill({response,json:value});
  });
- await page.route('**/api/threads/*/model-routing',async route=>{
+ await ash.network.add('**/api/threads/*/model-routing',async route=>{
    if(rejectSave){await route.fulfill({status:503,json:{error:'Could not save the model override.'}});return;}
    const command=route.request().postDataJSON();expect(command.expectedVersion).toBe(routing.version);
    routing={...routing,version:routing.version+1,override:command.override};await route.fulfill({json:{}});
@@ -40,7 +40,5 @@ test('model-routing-desktop: Routing Instruction and advanced Thread overrides p
  await dialog.getByLabel('Instruction owner').selectOption('global:model-routing');await expect(text).toHaveValue('Use Sol for architecture. Use Luna for simple formatting.');
  await page.keyboard.press('Escape');
  await testInfo.attach('routing-controls',{body:await page.screenshot(),contentType:'image/png'});
- // Stop the polling document before removing interception; changing it during a refresh can fail that request.
- await page.goto('about:blank');
- await page.unrouteAll({behavior:'wait'});
+ // The fixture stops polling before removing its network routes.
 });

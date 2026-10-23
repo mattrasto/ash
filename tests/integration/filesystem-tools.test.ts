@@ -1,3 +1,4 @@
+import { launchElectron } from '../support/electron.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -5,7 +6,7 @@ import { mkdtemp, mkdir, writeFile, readFile, realpath, symlink, rm, rename } fr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { _electron, type ElectronApplication } from 'playwright';
+import { type ElectronApplication } from 'playwright';
 import { DEFAULT_TOOL_LIMITS, ServerConfig, ToolArtifact, RunState, type ToolCall, type RequestPayload, type ToolResult, type ToolLimits } from '../../packages/shared/src/index.ts';
 import { Threads } from '../../packages/server/src/modules/threads/service.ts';
 import { deterministicModel } from '../../packages/server/src/platform/models/deterministic.ts';
@@ -20,7 +21,6 @@ import { workspace, createInstance } from '../../scripts/dev/workspace.ts';
 import { startInstance, stopInstance, disposeInstance } from '../../scripts/dev/lifecycle.ts';
 import { buildMain } from '../../scripts/dev/build.ts';
 import { devRoot, json, atomic, childEnvironment, exec } from '../../scripts/dev/io.ts';
-import { makeWorktree } from '../helpers/worktree.ts';
 import { sse, successEvents } from '../helpers/openai.ts';
 
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -36,8 +36,7 @@ function scripted(round: (request: RequestPayload, signal: AbortSignal) => Promi
 const batchModel = (calls: ToolCall[]) => scripted(request => request.tools!.previousOutputIds.length ? 'Finished from saved evidence.' : { kind: 'output', calls });
 
 test('Filesystem tools: scoped observations and desktop inspection', { timeout: 240000 }, async t => {
-  const base = await realpath(await mkdtemp(join(tmpdir(), 'ash-tools-'))), source = process.cwd(), checkout = join(base, 'checkout');
-  await makeWorktree(source, checkout);
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'ash-tools-'))), source = process.cwd(), checkout = source;
   const root = join(base, 'source'), outside = join(base, 'outside');
   await mkdir(join(root, 'src'), { recursive: true }); await mkdir(join(root, 'private')); await mkdir(outside);
   await writeFile(join(root, 'src/a.ts'), 'export function cancel() {\n  return "first";\n}\n');
@@ -275,7 +274,7 @@ test('Filesystem tools: scoped observations and desktop inspection', { timeout: 
       const running = await startInstance(ws, instance.id, { headless: true });
       const entry = await buildMain(checkout, join(instance.root, 'build')), path = join(instance.root, 'tools-client.json');
       await atomic(path, { root: instance.root, label: instance.label, instanceId: instance.id, url: running.webUrl, windowed: true, background: true });
-      app = await _electron.launch({ executablePath: require('electron'), args: [entry], cwd: checkout, env: { ...childEnvironment(join(instance.root, 'tmp')), ASH_CLIENT_CONFIG: path } as Record<string, string> });
+      app = await launchElectron({ executablePath: require('electron'), args: [entry], cwd: checkout, env: { ...childEnvironment(join(instance.root, 'tmp')), ASH_CLIENT_CONFIG: path } as Record<string, string> });
       const page = await app.firstWindow(); const pageErrors:string[]=[];page.on('pageerror',error=>pageErrors.push(error.message));
       await page.getByTestId('connection').filter({ hasText: 'Connected' }).waitFor().catch(async error=>{throw new Error(`${error.message}\n${pageErrors.join('\n')}\n${(await page.locator('body').innerText()).slice(0,2000)}`);});
       await page.getByTitle('New Thread · ⌘N', { exact: true }).click();
@@ -332,6 +331,6 @@ test('Filesystem tools: scoped observations and desktop inspection', { timeout: 
     await app?.close(); await stopInstance(ws, instance.id);
     for (const value of services) await value.stop();
     await db.$disconnect(); await disposeInstance(ws, instance.id);
-    await exec('git', ['worktree', 'remove', '--force', checkout], { cwd: source }); await rm(base, { recursive: true, force: true });
+     await rm(base, { recursive: true, force: true });
   }
 });

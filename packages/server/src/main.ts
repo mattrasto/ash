@@ -1,3 +1,4 @@
+import { deterministicForTiming } from './platform/models/test-timing.ts';
 import { ModelRouting } from './modules/threads/model-routing.ts';
 import { jevRouter } from './platform/models/jev-router.ts';
 import { ensureRoutingInstruction } from './modules/instructions/model-routing.ts';
@@ -57,8 +58,10 @@ if (!owner.acquired) { ownership.release(); await ownerDb.end(); await db.end();
 ownsDatabase = true;
 const product = connectProduct(config.databaseUrl);
 const modelSessionId = process.argv[3];
+const accelerated = config.testTiming === 'accelerated';
+if (accelerated && modelSessionId) throw new Error('Accelerated timing requires the deterministic test model');
 const modelSession=modelSessionId?await openSession(instance,modelSessionId):undefined;
-const model = modelSession ? openAIModel({...modelSession,apiKey:await readOpenAIKey(instance.checkout)}) : deterministicModel;
+const model = modelSession ? openAIModel({...modelSession,apiKey:await readOpenAIKey(instance.checkout)}) : deterministicForTiming(accelerated);
 const imageStorage=new ImageStorage(instance.root);
 await imageStorage.prepare();
 const video=new VideoAnalysis(product,imageStorage,modelSession?geminiVideoProvider({readKey:()=>readGeminiKey(instance.checkout),reserve:()=>modelSession.reserve()}):deterministicVideoProvider);
@@ -91,8 +94,8 @@ const incomingTimer=setInterval(()=>{void incoming.pump().catch(()=>console.erro
 await attachments.recover();await attachments.cleanup();
 const cleanupTimer=setInterval(()=>{void attachments.cleanup().catch(()=>console.error('Image cleanup failed'));},60*60*1000);cleanupTimer.unref();
 await ensureVisibilityInstructions(product);
-const visibility=new ThreadVisibility(product,model);await visibility.recover();
-const visibilityTimer=setInterval(()=>{void visibility.pump().catch(()=>console.error('Thread assessment scheduling unavailable'));},5000);visibilityTimer.unref();
+const visibility=new ThreadVisibility(product,model,undefined,accelerated?{debounceMs:300,maxWaitMs:2000,reassessmentMs:1000}:undefined);await visibility.recover();
+const visibilityTimer=setInterval(()=>{void visibility.pump().catch(()=>console.error('Thread assessment scheduling unavailable'));},accelerated?200:5000);visibilityTimer.unref();
 const app = Fastify({ logger: false });
 app.addHook('onRequest', async (request, reply) => {
   if (request.headers.authorization !== `Bearer ${token}`) return reply.code(401).send({ error: 'Unauthorized' });

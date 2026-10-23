@@ -1,6 +1,8 @@
+import { clearDraftBeforeReload } from '../support/ui.ts';
 import {test,expect} from '../support/fixtures.ts';
 import {request} from '../support/desktop.ts';
 import {screenshotFixture} from '../../packages/server/test/fixtures/images.ts';
+const deadlineMargin=process.env.ASH_TEST_TIMING==='accelerated'?400:5500;
 test('visibility-decisions-desktop',async({ash},testInfo)=>{
  const {page,app}=ash,message=page.getByLabel('Message',{exact:true});
  await page.evaluate(()=>{Object.defineProperty(document,'hasFocus',{configurable:true,value:()=>true});Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});});
@@ -61,14 +63,23 @@ test('visibility-desktop',async({ash,instance},testInfo)=>{
  await expect(page.getByTestId('thread-event').filter({hasText:'Thread unarchived after new activity'})).toHaveCount(1);
  await expect.poll(()=>page.evaluate(async id=>Object.values((await (await fetch(`/api/threads/${id}`)).json()).thread.lifecycle.drafts).some((draft:any)=>draft.present),id)).toBe(false);
  await page.evaluate(()=>Object.defineProperty(document,'hasFocus',{configurable:true,value:()=>false}));
- const incoming=async(text:string)=>page.evaluate(async({id,text})=>{const response=await fetch('/api/incoming',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:crypto.randomUUID(),targetThreadId:id,text,source:{name:'synthetic',eventId:crypto.randomUUID(),label:'Synthetic inbox'}})});if(!response.ok)throw new Error('Synthetic intake failed');},{id,text});
+ const incoming=async(text:string)=>{
+  const inputId=await page.evaluate(async({id,text})=>{const response=await fetch('/api/incoming',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:crypto.randomUUID(),targetThreadId:id,text,source:{name:'synthetic',eventId:crypto.randomUUID(),label:'Synthetic inbox'}})});if(!response.ok)throw new Error('Synthetic intake failed');return(await response.json()).id as string;},{id,text});
+  // Source presentation precedes intake completion; settle the producer before read/unread assertions.
+  await expect.poll(()=>page.evaluate(async inputId=>{const item=await(await fetch(`/api/incoming/${inputId}`)).json();return{status:item.status,error:item.error};},inputId)).toEqual({status:'completed',error:null});
+ };
  await incoming('Useful unseen source update');await expect(page.getByRole('article',{name:'Source entry'})).toHaveCount(1);
  await page.getByRole('article',{name:'Source entry'}).last().scrollIntoViewIfNeeded();
  await expect.poll(()=>page.evaluate(async id=>(await (await fetch(`/api/threads/${id}`)).json()).thread.unread,id)).toBe(true);
  await page.evaluate(()=>{Object.defineProperty(document,'hasFocus',{configurable:true,value:()=>true});window.dispatchEvent(new Event('focus'));});
  await expect.poll(()=>page.evaluate(async id=>(await (await fetch(`/api/threads/${id}`)).json()).thread.unread,id)).toBe(false);
  await page.getByRole('main').evaluate(element=>element.scrollTo(0,0));
- await incoming('Another useful source update outside the current view');await expect(page.getByRole('article',{name:'Source entry'})).toHaveCount(2);
+ await incoming('Another useful source update outside the current view');
+ try{await expect(page.getByRole('article',{name:'Source entry'})).toHaveCount(2);}
+ catch(error){
+  const state=await page.evaluate(async id=>({incoming:await(await fetch('/api/incoming')).json(),thread:await(await fetch(`/api/threads/${id}`)).json()}),id);
+  await testInfo.attach('incoming-state',{body:Buffer.from(JSON.stringify(state)),contentType:'application/json'});throw error;
+ }
  await expect.poll(()=>page.evaluate(async id=>(await (await fetch(`/api/threads/${id}`)).json()).thread.unread,id)).toBe(true);
  await page.getByRole('article',{name:'Source entry'}).last().scrollIntoViewIfNeeded();await expect.poll(()=>page.evaluate(async id=>(await (await fetch(`/api/threads/${id}`)).json()).thread.unread,id)).toBe(false);
  await page.getByRole('button',{name:'Actions for Synthetic visibility journey',exact:true}).click();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();await page.getByLabel('Thread title',{exact:true}).fill('My stable name');await page.getByRole('button',{name:'Save title',exact:true}).click();
@@ -89,21 +100,30 @@ test('visibility-desktop',async({ash,instance},testInfo)=>{
  await expect(page.getByRole('complementary',{name:'Thread inspector'})).toContainText('Recorded change');
  await expect(page.getByRole('alert')).toHaveCount(0);
  await page.getByRole('button',{name:'Close inspector'}).click();
+ await page.evaluate(()=>Object.defineProperty(document,'hasFocus',{configurable:true,value:()=>false}));
  await page.getByRole('button',{name:'New Thread',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Untitled',exact:true})).toBeVisible();
+ await expect(page.getByLabel('Message',{exact:true})).toHaveValue('');
  await page.getByLabel('Message',{exact:true}).fill('VIS_TEST_DUE Draft protection');await page.getByRole('button',{name:'Send message',exact:true}).click();
  await expect(page.getByTestId('run-status')).toHaveText('completed');
  const drafted=await page.evaluate(()=>localStorage.getItem('ash-chat-selected')!);
  const state=()=>page.evaluate(async id=>(await (await fetch(`/api/threads/${id}`)).json()).thread,drafted);
- // Read the response, then retain a draft across the actual model-set deadline and reload.
+ // Establish draft protection before acknowledging the response, then cross the real deadline.
+ await page.getByLabel('Message',{exact:true}).fill('Do not archive while this draft exists.');
+ await expect.poll(async()=>Object.values((await state()).lifecycle.drafts).some((draft:any)=>draft.present)).toBe(true);
  await page.evaluate(()=>{Object.defineProperty(document,'hasFocus',{configurable:true,value:()=>true});window.dispatchEvent(new Event('focus'));});
  await expect.poll(async()=>(await state()).unread).toBe(false);
- await page.getByLabel('Message',{exact:true}).fill('Do not archive while this draft exists.');
  await expect.poll(async()=>(await state()).lifecycle.kind,{timeout:25000}).toBe('until');
  const due=Date.parse((await state()).lifecycle.deadline);
  await page.getByRole('button',{name:'Synthetic visibility journey',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Synthetic visibility journey',exact:true})).toBeVisible();
+ await expect(page.getByLabel('Message',{exact:true})).toHaveValue('A persistent draft');
  await page.getByRole('button',{name:'VIS_TEST_DUE Draft protection',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'VIS_TEST_DUE Draft protection',exact:true})).toBeVisible();
+ await expect(page.getByLabel('Message',{exact:true})).toHaveValue('Do not archive while this draft exists.');
+ await expect.poll(()=>page.evaluate(()=>localStorage.getItem('ash-chat-selected'))).toBe(drafted);
  await page.reload();await expect(page.getByLabel('Message',{exact:true})).toHaveValue('Do not archive while this draft exists.');
- await expect.poll(()=>Date.now()>due+5500,{timeout:20000}).toBe(true);expect((await state()).isArchived).toBe(false);
+ await expect.poll(()=>Date.now()>due+deadlineMargin,{timeout:20000}).toBe(true);expect((await state()).isArchived).toBe(false);
  const count=await page.evaluate(async id=>(await (await fetch(`/api/threads/${id}/assessments`)).json()).length,drafted);
  await page.getByLabel('Choose images or videos',{exact:true}).setInputFiles({name:'draft-hold.png',mimeType:'image/png',buffer:await screenshotFixture('DRAFT HOLD')});
  await expect(page.getByTestId('draft-image')).toHaveCount(1);
@@ -137,14 +157,15 @@ test('visibility-desktop',async({ash,instance},testInfo)=>{
 test('visibility-recording-recovery',async({ash},testInfo)=>{
  test.setTimeout(90000);
  const {page,app}=ash;
- await page.evaluate(()=>{Object.defineProperty(document,'hasFocus',{configurable:true,value:()=>true});Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});});
+ await page.evaluate(()=>{Object.defineProperty(document,'hasFocus',{configurable:true,value:()=>false});Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});});
  await page.getByLabel('Message',{exact:true}).fill('VIS_TEST_DUE Recover recording');await page.getByRole('button',{name:'Send message',exact:true}).click();
  await expect(page.getByTestId('run-status')).toHaveText('completed');
  const id=await page.evaluate(()=>localStorage.getItem('ash-chat-selected')!);
  const state=()=>page.evaluate(async id=>(await (await fetch(`/api/threads/${id}`)).json()).thread,id);
- await expect.poll(async()=>(await state()).unread).toBe(false);
  await page.getByLabel('Message',{exact:true}).fill('Temporary recovery fixture');
  await expect.poll(async()=>Object.values((await state()).lifecycle.drafts).some((draft:any)=>draft.present)).toBe(true);
+ await page.evaluate(()=>{Object.defineProperty(document,'hasFocus',{configurable:true,value:()=>true});window.dispatchEvent(new Event('focus'));});
+ await expect.poll(async()=>(await state()).unread).toBe(false);
  // At the native boundary, simulate an interrupted recording whose journal loads late.
  // Its persisted presence exists, but no text/attachment draft has been restored yet.
  await app.evaluate(({ipcMain},threadId)=>{
@@ -154,12 +175,12 @@ test('visibility-recording-recovery',async({ash},testInfo)=>{
   ipcMain.removeHandler('recording:discard');ipcMain.handle('recording:discard',()=>{});
  },id);
  // Clear the saved text before the next app boots; the old document may save its in-memory draft while reloading.
- await page.addInitScript(id=>{const drafts=JSON.parse(localStorage.getItem('ash-chat-drafts')??'{}');delete drafts[id];localStorage.setItem('ash-chat-drafts',JSON.stringify(drafts));},id);
+ await clearDraftBeforeReload(page,id);
  await page.reload();await expect(page.getByTestId('connection')).toContainText('Connected');
  await expect(page.getByLabel('Message',{exact:true})).toHaveValue('');
  await expect.poll(async()=>(await state()).lifecycle.kind,{timeout:25000}).toBe('until');
  const due=Date.parse((await state()).lifecycle.deadline);
- await expect.poll(()=>Date.now()>due+5500,{timeout:25000}).toBe(true);
+ await expect.poll(()=>Date.now()>due+deadlineMargin,{timeout:25000}).toBe(true);
  expect((await state()).isArchived).toBe(false);
  expect(Object.values((await state()).lifecycle.drafts).some((draft:any)=>draft.present)).toBe(true);
  await app.evaluate(()=>{(globalThis as any).releaseRecovery();});

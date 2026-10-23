@@ -1,3 +1,4 @@
+import { launchElectron } from '../support/electron.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
@@ -6,7 +7,7 @@ import {mkdtemp,mkdir,readFile,writeFile,rm,readdir,chmod} from 'node:fs/promise
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createRequire} from 'node:module';
-import {_electron,type ElectronApplication} from 'playwright';
+import {type ElectronApplication} from 'playwright';
 import {ServerConfig,RequestPayload,isVideoAttachment,modelContentText,type AttachmentView,type ThreadDetail,type RunView} from '../../packages/shared/src/index.ts';
 import {mediaCommand} from '../../packages/server/src/modules/attachments/video.ts';
 import {ImageStorage} from '../../packages/server/src/modules/attachments/storage.ts';
@@ -20,15 +21,13 @@ import {workspace,createInstance} from '../../scripts/dev/workspace.ts';
 import {startInstance,disposeInstance,runtime} from '../../scripts/dev/lifecycle.ts';
 import {buildMain} from '../../scripts/dev/build.ts';
 import {connectProduct} from '../../packages/server/src/platform/db/client.ts';
-import {makeWorktree} from '../helpers/worktree.ts';
 import {TopicRetrieval} from '../../packages/server/src/modules/context/retrieval.ts';
 import {scenarioStep} from '../support/node-scenarios.ts';
 
 async function until<T>(read:()=>Promise<T>,accept:(value:T)=>boolean,timeout=30000){const end=Date.now()+timeout;do{const value=await read();if(accept(value))return value;await sleep(50);}while(Date.now()<end);throw Error('Timed out waiting for video state.');}
 test('video attachments and synthetic recording lifecycle without provider or device access',{timeout:240000},async t=>{
-  const source=process.cwd(),base=await mkdtemp(join(tmpdir(),'ash-videos-')),checkout=join(base,'checkout');
-  t.after(async()=>{await exec('git',['worktree','remove','--force',checkout],{cwd:source});await rm(base,{recursive:true,force:true});});
-  await makeWorktree(source,checkout);
+  const source=process.cwd(),base=await mkdtemp(join(tmpdir(),'ash-videos-')),checkout=source;
+  t.after(async()=>{await rm(base,{recursive:true,force:true});});
   const ws=await workspace(checkout,await devRoot()),instance=await createInstance(ws,'test','empty');
   const cfg=ServerConfig.parse(await json(join(instance.root,'server.json'))),db=connectProduct(cfg.databaseUrl);
   const evidence=process.env.ASH_TEST_EVIDENCE??join(ws.devRoot,'evidence',id());await mkdir(evidence,{recursive:true});
@@ -72,7 +71,7 @@ test('video attachments and synthetic recording lifecycle without provider or de
     });
     const live=(await runtime(instance))!,entry=await buildMain(checkout,join(instance.root,'build')),configPath=join(instance.root,'video-test-client.json');
     await atomic(configPath,{root:instance.root,label:instance.label,instanceId:instance.id,url:live.webUrl,windowed:true,background:true});
-    const launch=()=>_electron.launch({executablePath:createRequire(join(checkout,'package.json'))('electron'),args:[entry],cwd:checkout,env:{...childEnvironment(join(instance.root,'tmp')),ASH_CLIENT_CONFIG:configPath} as Record<string,string>,timeout:30000});
+    const launch=()=>launchElectron({executablePath:createRequire(join(checkout,'package.json'))('electron'),args:[entry],cwd:checkout,env:{...childEnvironment(join(instance.root,'tmp')),ASH_CLIENT_CONFIG:configPath} as Record<string,string>,timeout:30000});
     app=await launch();let page=await app.firstWindow();const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
     await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
     await scenarioStep(t,'videos-desktop',async()=>{
@@ -108,6 +107,8 @@ test('video attachments and synthetic recording lifecycle without provider or de
       await until(()=>page.getByRole('button',{name:'Extend by 10 minutes',exact:true}).count(),n=>n===0);
       await app!.evaluate(()=>{(globalThis as any).__recordingOffset=19*60*1000;});await page.getByRole('button',{name:'Extend by 10 minutes',exact:true}).waitFor();await page.getByRole('button',{name:'Extend by 10 minutes',exact:true}).click();
       await page.getByRole('button',{name:'New Thread',exact:true}).first().click();await until(()=>page.locator('h1').innerText(),value=>value==='Untitled');
+      await until(()=>page.getByLabel('Message',{exact:true}).inputValue(),value=>value==='');
+      await until(()=>page.getByTestId('draft-image').count(),count=>count===0);
       await app!.evaluate(()=>{(globalThis as any).__recordingOffset=30*60*1000;});await page.getByText('Recording stopped at its deadline and was saved to the draft.',{exact:true}).waitFor();
       assert.equal(await page.getByTestId('draft-image').count(),0);
       // The recording stays bound to its Thread even if automatic naming changes its title.

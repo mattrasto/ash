@@ -11,7 +11,7 @@ type Capture={activity:number;controls:number;context:string;messages:number;sou
 export class ThreadVisibility {
  private jobs=new Map<string,{controller:AbortController;promise:Promise<void>}>();
  private pumping=false;private stopping=false;
- constructor(readonly db:PrismaClient,private model:ModelAdapter,private clock:()=>Date=()=>new Date()){}
+ constructor(readonly db:PrismaClient,private model:ModelAdapter,private clock:()=>Date=()=>new Date(),private timing={debounceMs:10000,maxWaitMs:60000,reassessmentMs:60000}){}
  private async scope(tx:Prisma.TransactionClient,id:string,kind:Kind){
   const thread=await tx.thread.findUniqueOrThrow({where:{id}});
   const topics=await tx.threadTopic.findMany({where:{threadId:id,topic:{deletedAt:null}},include:{topic:{include:{instruction:true}}},orderBy:{topicId:'asc'}});
@@ -61,7 +61,7 @@ export class ThreadVisibility {
  }
  private async prepare(id:string,kind:Kind){return this.db.$transaction(async tx=>{
   const thread=await lockThread(tx,id),v=ThreadLifecycle.parse(thread.lifecycle),now=this.clock(),ms=now.getTime();
-  const due=kind==='visibility'?!!v.pendingAt&&ms-Math.min(Date.parse(v.changedAt??v.pendingAt)+10000,Date.parse(v.pendingAt)+60000)>=0&&(!v.attemptedAt||ms-Date.parse(v.attemptedAt)>=60000):v.titleMode==='automatic'&&(v.namedCount<0||fibonacciThreshold(v.messages)>fibonacciThreshold(v.namedCount));
+  const due=kind==='visibility'?!!v.pendingAt&&ms-Math.min(Date.parse(v.changedAt??v.pendingAt)+this.timing.debounceMs,Date.parse(v.pendingAt)+this.timing.maxWaitMs)>=0&&(!v.attemptedAt||ms-Date.parse(v.attemptedAt)>=this.timing.reassessmentMs):v.titleMode==='automatic'&&(v.namedCount<0||fibonacciThreshold(v.messages)>fibonacciThreshold(v.namedCount));
   if(!due||(!v.sourceId&&!v.changeId)||await activeWork(tx,id)||await tx.threadAssessment.findFirst({where:{threadId:id,kind,status:'running'}}))return null;
   const scope=await this.scope(tx,id,kind),capture:Capture={activity:v.activity,controls:v.controls,context:hash(scope),messages:v.messages,sourceId:v.sourceId,changeId:v.changeId};
   const eligible:Prisma.ArtifactWhereInput={threadId:id,OR:[{layer:'surface'},{payload:{path:['type'],equals:'tool_result'}},{payload:{path:['type'],equals:'route_result'}},{payload:{path:['type'],equals:'model_output'},run:{artifacts:{none:{layer:'surface'}}}}]};

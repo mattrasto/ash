@@ -55,7 +55,10 @@ export class Incoming {
  dispatch(id:string){if(this.stopping||this.jobs.has(id))return;const controller=new AbortController();const promise=this.process(id,controller.signal).finally(()=>this.jobs.delete(id));this.jobs.set(id,{controller,promise});void promise.catch(()=>console.error(JSON.stringify({event:'incoming-worker-error',inputId:id})));}
  async idle(){await Promise.all([...this.jobs.values()].map(j=>j.promise));}
  private async fail(id:string,code:string,message:string,interrupted=false,output?:string){await this.db.$transaction(async tx=>{await tx.$queryRaw`SELECT id FROM incoming_items WHERE id=${id}::uuid FOR UPDATE`;const row=await tx.incomingItem.findUniqueOrThrow({where:{id}});if(!['queued','processing','waiting_capacity'].includes(row.status))return;const state=IntakeState.parse(row.state);const artifact=await this.record(tx,state.currentRequestId??state.parentId,state.stage==='filter'?'filter':state.stage==='route'?'route':'act',{type:'engine_error',stage:state.stage,code,message,...(output?{output:output.slice(0,16000)}:{})},state.threadId);state.parentId=artifact.id;await tx.incomingItem.update({where:{id},data:{status:interrupted?'interrupted':'failed',state:json(state),error:message,updatedAt:new Date()}});});}
- private async prepare(id:string){return this.db.$transaction(async tx=>{
+ private async prepare(id:string){
+  // A concurrent Thread update can abort the capture's foreign-key check under this snapshot.
+  // Retry only aborted database preparation; model execution starts after this commits.
+  for(let attempt=0;;attempt++)try{return await this.db.$transaction(async tx=>{
   await tx.$queryRaw`SELECT id FROM incoming_items WHERE id=${id}::uuid FOR UPDATE`;
   const row=await tx.incomingItem.findUniqueOrThrow({where:{id}}),state=IntakeState.parse(row.state);if(row.status!=='processing')return null;
   if(state.currentRequestId)return EngineRequest.parse((await tx.artifact.findUniqueOrThrow({where:{id:state.currentRequestId}})).payload);
@@ -85,6 +88,11 @@ export class Incoming {
   const artifact=await this.record(tx,state.parentId,stage==='assess'?'act':stage,capture,state.threadId);state.currentRequestId=artifact.id;
   await tx.incomingItem.update({where:{id},data:{state:json(state),updatedAt:new Date()}});return capture;
  },{isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead});}
+  catch(error){
+   const retryable=error instanceof Prisma.PrismaClientKnownRequestError&&(error.code==='P2034'||error.code==='P2010'&&['40001','40P01'].includes(String(error.meta?.code)));
+   if(!retryable||attempt===4)throw error;
+  }
+ }
  private async process(id:string,signal:AbortSignal){
   if(!(await this.db.incomingItem.updateMany({where:{id,status:{in:['queued','waiting_capacity']}},data:{status:'processing',updatedAt:new Date()}})).count)return;
   let output='';

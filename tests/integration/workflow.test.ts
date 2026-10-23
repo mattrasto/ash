@@ -8,7 +8,7 @@ import postgres from 'postgres';
 import type { ElectronApplication } from 'playwright';
 import { devRoot, exec, atomic, json, exists, id, alive, sleep } from '../../scripts/dev/io.ts';
 import { workspace, createInstance, instancePath, type Workspace } from '../../scripts/dev/workspace.ts';
-import { startInstance, stopInstance, resetInstance, disposeInstance, runtime } from '../../scripts/dev/lifecycle.ts';
+import { startInstance, stopInstance, resetInstance, disposeInstance, recoverRecordedInstance, runtime } from '../../scripts/dev/lifecycle.ts';
 import { desktop, request } from '../support/desktop.ts';
 import { scenarioStep } from '../support/node-scenarios.ts';
 import { ServerConfig, type Instance, type PreviewInfo } from '../../packages/shared/src/index.ts';
@@ -179,6 +179,12 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       const check = connect(cluster);
       try { assert.equal((await check`SELECT 1 FROM pg_roles WHERE rolname IN (${disposable.ownerRole}, ${disposable.runtimeRole})`).length, 0); }
       finally { await check.end(); }
+      const racing = await createInstance(wa, 'verify'); instances.push({ws:wa,id:racing.id});
+      const disposing = disposeInstance(wa,racing.id);
+      const lock = join(root,'locks',`instance-${racing.id}`,'owner.json');
+      for(let n=0;n<100&&!await exists(lock);n++)await sleep(5);
+      await Promise.all([disposing,recoverRecordedInstance(racing)]);
+      assert.equal(await exists(racing.root),false,'Verifier recovery cooperates with fixture disposal');
     });
     await scenarioStep(t, 'workflow-config', async () => {
       await Promise.all([stopInstance(wa, a.id), stopInstance(wb, b.id), stopInstance(wa, verify.id)]);

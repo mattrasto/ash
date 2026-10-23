@@ -1,3 +1,4 @@
+import { closeInspector } from '../support/ui.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -70,23 +71,31 @@ test('Topic search and read through the shared dispatcher, provider and desktop'
 
       // Render the real saved workflow in hidden Electron and follow its original source.
       app=await desktop(instance);const page=app.page;
+      // Feature tests omit the HMR wrapper: one close must produce one completed rail exit.
+      await page.evaluate(()=>{(globalThis as any).__topicRailExits=0;document.addEventListener('outroend',event=>{if((event.target as HTMLElement).matches('.inspector-rail'))(globalThis as any).__topicRailExits++;},true);});
       await page.getByRole('button',{name:'Insurance follow-up',exact:true}).click();
       await page.getByRole('link',{name:'Earlier discussion',exact:true}).click();
       const readResult=observed[2].tools!.results.at(-1)!.artifactId;
       await page.getByTestId('inspected-identity').filter({hasText:readResult}).waitFor();
       assert.equal(await page.getByRole('region',{name:'Execution steps'}).locator('details[open] > summary').filter({hasText:'topic.read · completed'}).count(),1);
-      await page.getByRole('button',{name:'Close inspector',exact:true}).click();await page.getByRole('button',{name:'Inspect Ash response',exact:true}).click();
+      await closeInspector(page);
+      assert.equal(await page.evaluate(()=>(globalThis as any).__topicRailExits),1,'One rail exit per completed close');
+      await page.getByRole('button',{name:'Inspect Ash response',exact:true}).click();
       const context=page.getByRole('region',{name:'Retrieved Topic context'});await context.waitFor();
       assert.equal(await context.locator('.excerpt').filter({hasText:'The homeowners deductible is $500.'}).count(),2);
-      await context.getByRole('button',{name:'Open original message'}).last().click();await page.getByRole('heading',{name:'Earlier homeowners insurance',exact:true}).waitFor();
-      await page.getByRole('button',{name:'Close inspector',exact:true}).click();await page.getByRole('button',{name:'Insurance follow-up',exact:true}).click();await page.getByRole('button',{name:'Inspect Ash response',exact:true}).click();
+      const original=context.getByRole('button',{name:'Open original message'}).last();
+      const originalId=await original.evaluate(button=>button.nextElementSibling!.textContent!);
+      await original.click();await page.getByRole('heading',{name:'Earlier homeowners insurance',exact:true}).waitFor();
+      // Navigation first changes the heading, then finishes opening this source's inspector.
+      await page.getByTestId('inspected-identity').filter({hasText:originalId}).waitFor();
+      await closeInspector(page);await page.getByRole('button',{name:'Insurance follow-up',exact:true}).click();await page.getByRole('button',{name:'Inspect Ash response',exact:true}).click();
       // A delayed inspection refresh must not undo a newer manual expansion.
       const firstRequestId=accepted.state.request_artifact_id;
       const finalRound=page.getByRole('region',{name:'Execution steps'}).locator(':scope > details').nth(2);
       const requestPath=`**/api/artifacts/${firstRequestId}`;
       let resume!:()=>void,arrived!:()=>void,heldCompleted!:()=>void,holding=true,started=false;
       const held=new Promise<void>(resolve=>resume=resolve),ready=new Promise<void>(resolve=>arrived=resolve),handled=new Promise<void>(resolve=>heldCompleted=resolve);
-      await page.route(requestPath,async route=>{if(!holding){await route.continue();return;}started=true;try{const response=await route.fetch();arrived();await held;await route.fulfill({response});}finally{heldCompleted();}});
+      await app.network.add(requestPath,async route=>{if(!holding){await route.continue();return;}started=true;try{const response=await route.fetch();arrived();await held;await route.fulfill({response});}finally{heldCompleted();}});
       try {
         await page.getByRole('region',{name:'Execution steps'}).getByText('Model call 1 · completed',{exact:true}).click();await page.getByRole('button',{name:'Inspect captured request',exact:true}).first().click();
         await ready;
@@ -100,7 +109,7 @@ test('Topic search and read through the shared dispatcher, provider and desktop'
       await finalRound.getByRole('button',{name:'Inspect captured request',exact:true}).click();await context.waitFor();
       const evidence=process.env.ASH_TEST_EVIDENCE??join(ws.devRoot,'evidence','topic-context');await mkdir(evidence,{recursive:true});await context.scrollIntoViewIfNeeded();await page.screenshot({path:join(evidence,'topic-retrieval.png')});
       assert.equal(await app.app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().some(w=>w.isVisible()||w.isFocusable()||w.isFocused())),false);
-      assert.deepEqual(app.errors,[]);await app.app.close();app=undefined;
+      assert.deepEqual(app.errors,[]);await app.close();app=undefined;
 
       // The real OpenAI adapter is HTTP-mocked; inspect the provider's actual requests.
       const bodies:any[]=[];
@@ -140,5 +149,5 @@ test('Topic search and read through the shared dispatcher, provider and desktop'
       await stopInstance(ws,instance.id);await startInstance(ws,instance.id,{headless:true});assert.equal(JSON.stringify(await runArtifacts(accepted.id)),beforeRetry);
       app=await desktop(instance);await app.page.getByRole('button',{name:'Insurance follow-up',exact:true}).click();await app.page.getByRole('button',{name:'Inspect Ash response',exact:true}).first().click();await app.page.getByRole('region',{name:'Retrieved Topic context'}).waitFor();assert.deepEqual(app.errors,[]);
     });
-  } finally {if(app)await app.app.close();for(const service of services)await service.stop();await db.$disconnect();await disposeInstance(ws,instance.id);}
+  } finally {if(app)await app.close();for(const service of services)await service.stop();await db.$disconnect();await disposeInstance(ws,instance.id);}
 });

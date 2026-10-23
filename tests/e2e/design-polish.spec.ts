@@ -54,9 +54,16 @@ test('design-rails: Real overflow and sidebar movement preserve the live workspa
   const overlay=await samples(page.getByRole('button',{name:'Inspect Ash response',exact:true}),'.inspector-rail','x');expect(overlay.some(value=>value>overlay.at(-1)!+2)).toBe(true);expect(await page.locator('.main-column').evaluate(el=>el.getBoundingClientRect().width)).toBe(width);
   await page.getByRole('button',{name:'Close inspector',exact:true}).click();await expect(page.getByRole('complementary',{name:'Artifact inspector'})).toHaveCount(0);
   expect(await live!.evaluate(el=>el===document.getElementById('message'))).toBe(true);await expect(message).toHaveValue('Keep this draft through every sidebar change');
-  for(let i=0;i<3;i++){await message.fill(`More content ${i+1}`);await message.press('Enter');await expect(page.getByTestId('run-status').last()).toHaveText('completed');}
+  for(let i=0;i<3;i++){
+    const before=await page.getByTestId('run-status').count();await message.fill(`More content ${i+1}`);await message.press('Enter');
+    await expect(page.getByTestId('run-status')).toHaveCount(before+1);await expect(page.getByTestId('run-status').last()).toHaveText('completed');
+  }
   await expect(bar).toHaveAttribute('data-visible','true');
-  await page.emulateMedia({reducedMotion:'reduce'});await page.getByRole('button',{name:'Hide sidebar',exact:true}).click();await expect(page.getByRole('complementary',{name:'Thread sidebar'})).toHaveCount(0);await page.getByRole('button',{name:'Show sidebar',exact:true}).click();expect(await page.locator('.ash-rail').evaluateAll(nodes=>nodes.flatMap(node=>node.getAnimations()).length)).toBe(0);
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await expect.poll(()=>page.evaluate(()=>matchMedia('(prefers-reduced-motion:reduce)').matches)).toBe(true);
+  await page.getByRole('button',{name:'Hide sidebar',exact:true}).click();await expect(page.getByRole('complementary',{name:'Thread sidebar'})).toHaveCount(0);await page.getByRole('button',{name:'Show sidebar',exact:true}).click();
+  const animations=await page.locator('.ash-rail').evaluateAll(nodes=>nodes.flatMap(node=>node.getAnimations().map(animation=>({duration:animation.effect?.getComputedTiming().duration,playState:animation.playState,node:node.className}))));
+  expect(animations).toEqual([]);
 });
 
 test('design-reading: Links stay readable and nested editors retain wheel scrolling',async({ash})=>{

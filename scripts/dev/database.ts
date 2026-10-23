@@ -1,3 +1,4 @@
+import { measure, recordResource } from './telemetry.ts';
 import postgres from 'postgres';
 import { migrateProduct } from './product-database.ts';
 import { join } from 'node:path';
@@ -33,6 +34,7 @@ export async function ensureCluster(root: string, checkout: string): Promise<Clu
     const registered = await exists(path);
     const cluster: Cluster = registered ? await json<Cluster>(path) : { id: id(), password: secret(), port: 0 };
     if (!registered) await atomic(path, cluster);
+    if (!registered && process.env.ASH_TEST_EVIDENCE && root.startsWith(join(process.env.ASH_TEST_EVIDENCE,'tmp') + '/')) recordResource('clusters',cluster.id,{id:cluster.id,root});
     const name = `ash-dev-${cluster.id}`;
     const composeHash = createHash('sha256').update(await readFile(join(checkout, 'compose.yaml'))).digest('hex');
     let container = await inspectContainer(name);
@@ -114,9 +116,9 @@ export async function provision(instance: Instance, cluster: Cluster) {
     await db.unsafe(`GRANT SELECT ON dev_meta, dev_scratch TO ${ident(instance.runtimeRole)}`);
     await db.unsafe(`GRANT UPDATE ON dev_scratch TO ${ident(instance.runtimeRole)}`);
   } finally { await db.end(); }
-  await migrateProduct(instance, cluster);
+  await measure('database.migrate', () => migrateProduct(instance, cluster), instance.id);
   await writeFile(join(instance.root, 'files/note.txt'), '', { mode: 0o600 });
-  await atomic(join(instance.root, 'server.json'), { instance, databaseUrl: databaseUrl(cluster, instance.database, instance.runtimeRole, password), token: secret() });
+  await atomic(join(instance.root, 'server.json'), { instance, databaseUrl: databaseUrl(cluster, instance.database, instance.runtimeRole, password), token: secret(), ...(instance.profile === 'test' && process.env.ASH_TEST_TIMING === 'accelerated' ? {testTiming:'accelerated'} : {}) });
 }
 export async function dropDatabase(instance: Instance, cluster: Cluster) {
   const databaseExists = await assertDatabaseOwner(instance, cluster);
@@ -130,4 +132,22 @@ export async function dropDatabase(instance: Instance, cluster: Cluster) {
     }
     for (const role of roles) await db.unsafe(`DROP ROLE ${ident(role.rolname)}`);
   } finally { await db.end(); }
+}
+
+// Recovery for a separately owned disposable cluster; the caller validates its session root.
+export async function disposeTestCluster(clusterId: string) {
+  if (!/^[a-f0-9]{24}$/.test(clusterId)) throw new Error('Invalid cluster identity');
+  const name = `ash-dev-${clusterId}`;
+  const container = await inspectContainer(name);
+  if (container) {
+    if (container.owner !== clusterId) throw new Error('Test cluster ownership mismatch');
+    await exec('docker',['rm','-f',name]);
+  }
+  try {
+    const label = (await exec('docker',['volume','inspect','--format','{{index .Labels "dev.ash.cluster"}}',name])).stdout.trim();
+    if (label !== clusterId) throw new Error('Test volume ownership mismatch');
+    await exec('docker',['volume','rm',name]);
+  } catch (error) {
+    if (!(error as {stderr?:string}).stderr?.toLowerCase().includes('no such volume')) throw error;
+  }
 }

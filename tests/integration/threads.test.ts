@@ -1,13 +1,14 @@
+import { launchElectron } from '../support/electron.ts';
 import { scenarioStep } from '../support/node-scenarios.ts';
 import test from 'node:test';
 import { checkStreaming } from '../helpers/streaming.ts';
 import { checkDiagram } from '../helpers/schema.ts';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, copyFile } from 'node:fs/promises';
+import { mkdir, readFile, copyFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { _electron, type ElectronApplication } from 'playwright';
+import { type ElectronApplication } from 'playwright';
 import { ServerConfig, modelContentText, type ThreadView, type Instance, type ThreadDetail, type RunView, type InspectionView, type RequestPayload } from '../../packages/shared/src/index.ts';
 import { devRoot, json, id, atomic, childEnvironment, sleep, exec } from '../../scripts/dev/io.ts';
 import { workspace, createInstance } from '../../scripts/dev/workspace.ts';
@@ -208,9 +209,10 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
       const entry=await buildMain(instance.checkout,join(instance.root,'build'));
       const path=join(instance.root,'chat-test-client.json');
       await atomic(path,{root:instance.root,label:instance.label,instanceId:instance.id,url:running.webUrl,windowed:true,background:true});
-      const launch=()=>_electron.launch({executablePath:require('electron'),args:[entry],cwd:instance.checkout,env:{...childEnvironment(join(instance.root,'tmp')),ASH_CLIENT_CONFIG:path} as Record<string,string>,timeout:30000});
+      const launch=()=>launchElectron({executablePath:require('electron'),args:[entry],cwd:instance.checkout,env:{...childEnvironment(join(instance.root,'tmp')),ASH_CLIENT_CONFIG:path} as Record<string,string>,timeout:30000});
       app=await launch();let page=await app.firstWindow();
       const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+      try{
       await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
       await page.getByRole('button',{name:'New Thread',exact:true}).first().click();
       await page.getByRole('button',{name:'Actions for Untitled',exact:true}).first().click();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
@@ -227,8 +229,11 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
       await page.getByRole('button',{name:'Close inspector'}).click();
       await page.getByLabel('Message',{exact:true}).fill('Keep this draft');
       await page.getByRole('navigation',{name:'Threads'}).getByRole('button',{name:'Persisted repair checklist',exact:true}).click();
+      await page.getByRole('heading',{name:'Persisted repair checklist',exact:true}).waitFor();
+      await until(()=>page.getByLabel('Message',{exact:true}).inputValue(),value=>value==='');
       await page.getByRole('navigation',{name:'Threads'}).getByRole('button',{name:'Desktop thread',exact:true}).click();
-      assert.equal(await page.getByLabel('Message',{exact:true}).inputValue(),'Keep this draft');
+      await page.getByRole('heading',{name:'Desktop thread',exact:true}).waitFor();
+      await until(()=>page.getByLabel('Message',{exact:true}).inputValue(),value=>value==='Keep this draft');
       await page.getByText('Test response settings',{exact:true}).click();await page.getByLabel('Response behavior').selectOption('slow');
       await page.getByLabel('Message',{exact:true}).fill('Finish while the client is closed');await page.getByRole('button',{name:'Send message',exact:true}).click();
       await page.getByRole('button',{name:'Stop response',exact:true}).waitFor();
@@ -264,14 +269,20 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
       // The destination draft and reading position restore after the outgoing composition exits.
       await until(()=>page.getByTestId('message').count(),count=>count===9);
       await until(()=>page.locator('.transcript').evaluate(el=>el.scrollTop),top=>top<5,1500);
+      // Hover hides the activity indicator to make room for actions; keep the pointer off the row.
+      await page.mouse.move(1,1);
       await page.locator('.row').filter({has:page.getByRole('button',{name:'Automatically named thread',exact:true})}).getByLabel('Unread response',{exact:true}).waitFor();
       await page.getByRole('button',{name:'Automatically named thread',exact:true}).click();await page.getByRole('heading',{name:'Automatically named thread',exact:true}).waitFor();
       await page.getByRole('button',{name:'Archive Automatically named thread',exact:true}).click();
+      await until(()=>page.getByRole('heading',{name:'Automatically named thread',exact:true}).count(),count=>count===0);
       await page.getByRole('button',{name:/Archived \(1\)/}).click();
       await page.getByRole('button',{name:'Automatically named thread',exact:true}).click();
       await page.getByRole('heading',{name:'Automatically named thread',exact:true}).waitFor();
       assert.equal(await page.getByTestId('message').count(),2);
+      await page.getByText('Archived',{exact:true}).waitFor();
       await page.getByRole('button',{name:'Unarchive Automatically named thread',exact:true}).click();
+      await until(()=>page.getByText('Archived',{exact:true}).count(),count=>count===0);
+      await until(()=>page.getByRole('button',{name:'Unarchive Automatically named thread',exact:true}).count(),count=>count===0);
       await page.getByRole('button',{name:'Actions for Automatically named thread',exact:true}).click();
       await page.getByRole('menuitem',{name:'Rename',exact:true}).click();await page.getByLabel('Thread title').fill('Renamed in sidebar');
       await page.getByRole('button',{name:'Save title',exact:true}).click();await page.getByRole('heading',{name:'Renamed in sidebar',exact:true}).waitFor();
@@ -285,6 +296,11 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
       await page.keyboard.press('Escape');assert.equal(await page.getByRole('complementary',{name:'Artifact inspector',exact:true}).count(),0);
       await page.screenshot({path:join(evidence,'chat-reconnected.png')});
       assert.deepEqual(errors,[]);
+      }catch(error){
+        await page.screenshot({path:join(evidence,'chat-desktop-failure.png')}).catch(()=>{});
+        await page.locator('body').innerText().then(body=>writeFile(join(evidence,'chat-desktop-failure.txt'),body)).catch(()=>{});
+        throw error;
+      }
     });
   } finally {
     await app?.close();await db.$disconnect();await copyFile(join(instance.root,'logs/server.log'),join(evidence,'chat-server.log')).catch(()=>{});await disposeInstance(ws,instance.id);

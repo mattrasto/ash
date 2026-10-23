@@ -88,6 +88,8 @@ async function startServices() {
   // Keep the browser-storage origin stable. Only a new instance may choose another port.
   for (let attempt = 0; attempt < 12; attempt++) {
     vite = await createViteServer({ ...rendererConfig(instance.checkout, join(instance.root, 'build')), server: {
+      // Feature tests need production transition semantics, not the pinned Svelte HMR wrapper.
+      hmr: instance.profile !== 'test',
       host: '127.0.0.1', port: frontendPort ?? randomInt(20000, 60000), strictPort: true, cors: false,
       fs: { strict: true, allow: [join(instance.checkout, 'packages'), join(instance.checkout, 'node_modules'), join(instance.root, 'build/vite-cache')] },
       proxy: { '/api': { target: state.serverUrl, headers: { authorization: `Bearer ${config.token}` } } },

@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit && svelte-check --workspace packages/client --tsconfig ../../tsconfig.json",
     "build": "node --import tsx scripts/dev/build.ts",
     "test": "pnpm test:boundary",
-    "test:workflow": "node --import tsx --test --test-concurrency=1 tests/integration/*.test.ts",
+    "test:workflow": "node --import tsx scripts/dev/test-workflow.ts",
     "verify": "node --import tsx scripts/dev/verify.ts",
     "db:generate": "pnpm --filter @ash/server exec prisma generate --schema prisma/schema.prisma",
     "postinstall": "pnpm db:generate",

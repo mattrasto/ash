@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { atomic } from '../../scripts/dev/io.ts';
+import { testEvent } from '../../scripts/dev/telemetry.ts';
 import { scenario } from '../scenarios.ts';
 
 export interface Attempt {
@@ -25,11 +26,14 @@ export async function writeResult(result: ScenarioResult) {
 export async function recordScenario(id: string, action: () => Promise<unknown> | unknown) {
   scenario(id);
   const start = Date.now();
+  testEvent({ id, kind: 'scenario', name: id, status: 'started', at: start });
   try {
     await action();
     await writeResult({ id, attempts: [{ status: 'passed', durationMs: Date.now() - start }] });
+    testEvent({ id, kind: 'scenario', name: id, status: 'passed', at: Date.now(), durationMs: Date.now() - start });
   } catch (error) {
     await writeResult({ id, attempts: [{ status: 'failed', durationMs: Date.now() - start, error: redact(String(error)) }] });
+    testEvent({ id, kind: 'scenario', name: id, status: 'failed', at: Date.now(), durationMs: Date.now() - start });
     throw error;
   }
 }

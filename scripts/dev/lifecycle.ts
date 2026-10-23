@@ -1,3 +1,4 @@
+import { measure } from './telemetry.ts';
 import { migrateProduct } from './product-database.ts';
 import { spawn } from 'node:child_process';
 import { open, rm } from 'node:fs/promises';
@@ -41,7 +42,7 @@ async function recover(instance: Instance, state: Runtime) {
   }
 }
 export async function startInstance(ws: Workspace, instanceId: string, options: { headless?: boolean; windowed?: boolean; background?: boolean; modelSessionId?: string } = {}) {
-  return withLock(ws.devRoot, `instance-${instanceId}`, async () => {
+  return measure('services.ready', () => withLock(ws.devRoot, `instance-${instanceId}`, async () => {
     const instance = await readInstance(ws, instanceId);
     if (options.modelSessionId) await readSession(instance,options.modelSessionId);
     const cluster = await ensureCluster(ws.devRoot, ws.checkout);
@@ -71,7 +72,7 @@ export async function startInstance(ws: Workspace, instanceId: string, options: 
       await stopUnlocked(instance);
     }
     if (prior) await recover(instance, prior);
-    await migrateProduct(instance, cluster);
+    await measure('database.migrate', () => migrateProduct(instance, cluster), instance.id);
     const log = await open(join(instance.root, 'logs/supervisor.log'), 'a', 0o600);
     const require = createRequire(join(ws.checkout, 'package.json'));
     const child = spawn(process.execPath, ['--import', require.resolve('tsx'), join(ws.checkout, 'scripts/dev/supervisor.ts'), join(instance.root, 'instance.json'),
@@ -89,7 +90,7 @@ export async function startInstance(ws: Workspace, instanceId: string, options: 
     }
     await stopProcess(ref, true);
     throw new Error(`Startup timed out; see ${join(instance.root, 'logs/supervisor.log')}`);
-  });
+  }), instanceId);
 }
 async function stopUnlocked(instance: Instance) {
   const state = await runtime(instance);
@@ -122,12 +123,23 @@ export async function resetInstance(ws: Workspace, instanceId = ws.previewId, fi
   });
 }
 export async function disposeInstance(ws: Workspace, instanceId = ws.previewId) {
-  return withLock(ws.devRoot, `instance-${instanceId}`, async () => {
+  return measure('instance.cleanup', () => withLock(ws.devRoot, `instance-${instanceId}`, async () => {
     const instance = await readInstance(ws, instanceId);
     const cluster = await checkedCluster(instance);
     await assertDatabaseOwner(instance, cluster);
     await stopUnlocked(instance);
     await dropDatabase(instance, cluster);
     await rm(instance.root, { recursive: true });
-  });
+  }), instanceId);
+}
+
+// A verifier may race the fixture's own teardown or recover after its checkout was removed.
+export async function recoverRecordedInstance(instance: Instance) {
+  if (!await exists(instance.root)) return;
+  const ws = await json<Workspace>(join(instance.devRoot, 'registry', `${instance.workspaceId}.json`));
+  if (ws.version !== 1 || ws.id !== instance.workspaceId || ws.checkout !== instance.checkout || ws.devRoot !== instance.devRoot) throw new Error('Workspace registry mismatch during recovery');
+  try { await disposeInstance(ws, instance.id); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || await exists(instance.root)) throw error;
+  }
 }

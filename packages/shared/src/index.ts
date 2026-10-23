@@ -18,6 +18,9 @@ export type Fixture = z.infer<typeof Fixture>;
 
 export const ServerConfig = z.object({
   instance: Instance, databaseUrl: z.string().url(), token: z.string().min(32),
+  testTiming: z.literal('accelerated').optional(),
+}).superRefine((value, context) => {
+  if (value.testTiming && value.instance.profile !== 'test') context.addIssue({ code: z.ZodIssueCode.custom, message: 'Accelerated timing requires a disposable test instance' });
 });
 export type ServerConfig = z.infer<typeof ServerConfig>;
 

@@ -12,7 +12,7 @@ An `incoming_items` row owns delivery identity and processing checkpoint, not a 
 
 ## Verification
 
-`tests/integration/artifacts.test.ts` exercises AE01–11 against real PostgreSQL with synthetic text and controlled provider outputs: receipt identity, targeting and ambiguity, captured guidance, presentation choices, tool authorization, provider limits, dense routing context, busy Threads, failure and explicit retry. `tests/e2e/artifacts.spec.ts` checks source-only and internal-work journeys, inspection, reload, draft preservation and read markers after internal work. Desktop exploration also checked the engine instruction editor; the header baselines include the Processing control at both supported sizes.
+`tests/integration/artifacts.test.ts` exercises AE01–11 against real PostgreSQL with synthetic text and controlled provider outputs: receipt identity, targeting and ambiguity, captured guidance, presentation choices, tool authorization, provider limits, dense routing context, busy Threads, failure, explicit retry and a real snapshot conflict before model dispatch. `tests/e2e/artifacts.spec.ts` checks source-only and internal-work journeys, inspection, reload, draft preservation and read markers after internal work. Desktop exploration also checked the engine instruction editor; the header baselines include the Processing control at both supported sizes.
 
 A capped live check with seven model calls also passed spam filtering, existing rent-Thread placement and new-matter creation; both useful items selected source-only presentation. This is a small synthetic sample. Broader placement quality still needs evaluation before connecting real incoming sources. Full verification uses the unchanged-source workflow in [Testing](../testing.md).
 
@@ -25,6 +25,8 @@ Use Ash's existing quiet green surfaces and typography. A compact Processing con
 ## Implementation
 
 `service.ts` accepts receipts and checkpoints each stage. `context.ts` selects up to 16 candidates from 80 recently active and 40 title-matched Threads, with three 700-character excerpts each; Route captures up to 20 relevant Topic instruction documents. Assessment receives six destination excerpts of up to 1,000 characters. Each stage captures at most 42,000 characters, accepts at most 16,000 output characters and has a 65-second deadline. OpenAI stage requests use the configured model, at most 2,048 output tokens and a 60-second provider timeout. Up to two intake workers run concurrently; each successful untargeted item uses three assessment calls before any optional Act Run. Explicit targets skip the Route model call. No model is called to display inspection.
+
+`Incoming.prepare` makes at most five transaction attempts for database serialization/deadlock conflicts. The request capture commits before model dispatch. Model and validation errors retain the explicit retry behavior in [ART-R15](../../specs/features/artifacts.md#incoming-item-slice).
 
 To fit the stage budget, omit older excerpts from lower-ranked routing candidates first, or older destination history during assessment. Captured scope records included and additionally omitted excerpt counts. Inputs, candidate identities and selected instruction text remain intact; oversized guidance fails before dispatch.
 

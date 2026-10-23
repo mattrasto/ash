@@ -1,3 +1,4 @@
+import { launchElectron } from '../support/electron.ts';
 import { scenarioStep } from '../support/node-scenarios.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -6,7 +7,7 @@ import { mkdir, copyFile, rm, readdir, readFile, writeFile, mkdtemp, chmod } fro
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { _electron, type ElectronApplication } from 'playwright';
+import { type ElectronApplication } from 'playwright';
 import { ServerConfig, type ThreadDetail, type RunView, type RequestPayload, type InspectionView } from '../../packages/shared/src/index.ts';
 import { devRoot, json, id, atomic, childEnvironment, sleep, exec } from '../../scripts/dev/io.ts';
 import { workspace, createInstance } from '../../scripts/dev/workspace.ts';
@@ -41,6 +42,8 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
   const instance=await createInstance(ws,'test','empty');
   const evidence=process.env.ASH_TEST_EVIDENCE ?? join(ws.devRoot,'evidence',id());await mkdir(evidence,{recursive:true});
   const cfg=ServerConfig.parse(await json(join(instance.root,'server.json')));
+  // This group deliberately exercises a live-session configuration with a controlled provider.
+  delete cfg.testTiming;await atomic(join(instance.root,'server.json'),cfg);
   const db=connectProduct(cfg.databaseUrl);
   const session:Session={version:1,id:id(),workspaceId:ws.id,instanceId:instance.id,model:'test-openai-model',
     options:{api:'responses',store:false,maxOutputTokens:1024,timeoutMs:60000},maxCalls:4,callsUsed:0,expiresAt:new Date(Date.now()-1000).toISOString()};
@@ -119,7 +122,7 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
       const entry=await buildMain(instance.checkout,join(instance.root,'build'));
       const path=join(instance.root,'openai-test-client.json');
       await atomic(path,{root:instance.root,label:instance.label,instanceId:instance.id,url:running.webUrl,windowed:true,background:true});
-      app=await _electron.launch({executablePath:require('electron'),args:[entry],cwd:instance.checkout,env:{...childEnvironment(join(instance.root,'tmp')),ASH_CLIENT_CONFIG:path} as Record<string,string>,timeout:30000});
+      app=await launchElectron({executablePath:require('electron'),args:[entry],cwd:instance.checkout,env:{...childEnvironment(join(instance.root,'tmp')),ASH_CLIENT_CONFIG:path} as Record<string,string>,timeout:30000});
       const page=await app.firstWindow();const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
       await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
       assert.ok((await page.locator('.model-banner').innerText()).includes('test-openai-model'));
@@ -196,7 +199,7 @@ test('OpenAI protocol through persisted Runs and desktop inspection (no external
         const entry=await buildMain(preview.checkout,join(preview.root,'build'));
         const path=join(preview.root,'interactive-test-client.json');
         await atomic(path,{root:preview.root,label:preview.label,instanceId:preview.id,url:running.webUrl,windowed:true,background:true});
-        app=await _electron.launch({executablePath:require('electron'),args:[entry],cwd:preview.checkout,env:{...childEnvironment(join(preview.root,'tmp')),ASH_CLIENT_CONFIG:path} as Record<string,string>,timeout:30000});
+        app=await launchElectron({executablePath:require('electron'),args:[entry],cwd:preview.checkout,env:{...childEnvironment(join(preview.root,'tmp')),ASH_CLIENT_CONFIG:path} as Record<string,string>,timeout:30000});
         const page=await app.firstWindow();
         await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
         const banner=await page.locator('.model-banner').innerText();

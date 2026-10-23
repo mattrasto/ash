@@ -1,6 +1,8 @@
 # Testing
 
-Approach accepted, 2026-10-09 · Scenario harness and persisted-chat checks implemented · Autonomous promotion deferred
+Approach accepted, 2026-10-09 · Group selection, phase timing and disposable test timing implemented · Autonomous promotion deferred
+
+Implementation and measurement: [testing improvement plan](plans/testing-improvements.md).
 
 Verify observable behavior at stable boundaries and through real user journeys. Repository commands own execution and evidence so Codex and, later, Ash can use the same workflow. Reports are agent diagnostics; the human receives a concise outcome and targeted manual checks when their judgment is needed.
 
@@ -21,19 +23,24 @@ Choose acceptance criteria before implementation. Each scenario references stabl
 
 ## Commands
 
-Run from the checkout root. Docker and a graphical macOS session are required for workflow and desktop suites; quick checks need neither Docker nor Electron. Process inspection and writes to the development evidence directory still require appropriate host permissions.
+Run from the checkout root. Docker and an awake, unlocked graphical macOS session are required for workflow and desktop suites; quick checks need neither Docker nor Electron. Process inspection and writes to the development evidence directory still require appropriate host permissions.
 
 | Command | Scope |
 | --- | --- |
 | `pnpm verify` | Full: types, isolated build, boundary checks, real-worktree lifecycle checks and desktop scenarios. Required before integration. |
 | `pnpm verify --profile quick` | Types and boundary checks for iteration; reported as partial verification. |
-| `pnpm verify --scenario chat-layout` | Build and the complete desktop suite. |
-| `pnpm verify --scenario DEV-07` | Build and all suites containing checks linked to DEV-07. |
-| `pnpm verify --list` | JSON scenario inventory; combine with profile/scenario selection. No resources are provisioned. |
+| `pnpm verify --scenario chat-layout` | Types, build and only the independent layout scenario. |
+| `pnpm verify --group model-routing --scenario model-routing-desktop` | Types, build, the ordered routing integration group and its desktop scenario. |
+| `pnpm verify --scenario DEV-07` | Types, build and complete execution groups containing checks linked to DEV-07. |
+| `pnpm verify --workers 1` | Serialize feature groups and desktop files for diagnosis or comparison; lifecycle groups always run alone. |
+| `pnpm verify --timing normal` | Use normal scheduling in disposable test instances for comparison. |
+| `pnpm verify --list` | JSON scenario inventory with group/file expansion; combine with profile/scenario/group selection. No resources are provisioned. |
 | `pnpm test:boundary`, `pnpm test:workflow`, `pnpm test:desktop` | Direct suite commands for debugging; `pnpm test` aliases the boundary suite. Use `verify` for an aggregate report. |
 | `pnpm dev:verify --fixture scratchpad --deterministic` | Fresh offline disposable app for exploration/manual checks; Ctrl+C stops and disposes it. For live exploration, use the [bounded model options](features/threads.md#openai-mode). |
 
-Selection expands to whole suites because the lifecycle checks share ordered setup. The selected scope is explicit in output and reports. Unknown IDs, including unimplemented product scenarios, fail instead of running zero tests. Full verification is never inferred from a selected run. Shared runtime, schema, dependency or verification changes require full verification; automatic diff-based selection is deferred.
+Selection expands a scenario or requirement to its complete execution group, preserving ordered setup. Comma-separated scenario/requirement IDs and group names select their union. Independent desktop scenarios each have their own group. `tests/scenarios.ts` owns group membership, files and exclusive lifecycle groups. Reports distinguish selected groups from full verification; missing results, unexpected results, skips and failed attempts fail the run. Shared runtime, schema, dependency or verification changes still require full verification. Automatic diff-based selection remains deferred.
+
+The verifier defaults to two workers and records its worker count and timing profile. Direct suite commands default to one worker and normal timing. Accelerated timing is admitted only in disposable `test` instances using the deterministic model. It shortens synthetic visibility deadlines, debounce and scheduler intervals; assertion timeouts retain their normal margin. Preview/verification instances use normal timing. The controlled OpenAI protocol group explicitly uses normal timing because it exercises live-session configuration. Deadline boundary integration tests retain their injected clock. See the [improvement plan](plans/testing-improvements.md) for measurement targets and evidence.
 
 ## Infrastructure
 
@@ -46,13 +53,18 @@ Selection expands to whole suites because the lifecycle checks share ordered set
 | `tests/support/playwright-reporter.ts` | Playwright outcomes, attempts and artifact references, including fixture failures. |
 | `tests/boundary/` | Fast ownership invariants and verification CLI contract checks. |
 | `tests/integration/workflow.test.ts` | Ordered lifecycle journey across real detached worktrees and isolated infrastructure. |
-| `tests/e2e/`, `tests/playwright.config.ts` | Playwright Test scenarios against Electron; serial initially, no automatic retries. |
+| `tests/e2e/`, `tests/playwright.config.ts` | Playwright Test scenarios against Electron; bounded file concurrency, no automatic retries. |
 | `tests/baselines/` | Versioned screenshot expectations. |
-| `scripts/dev/verify.ts` | Selection, command execution, source validation and aggregate evidence. |
+| `scripts/dev/verify.ts` | Selection, progress, command execution, source validation, recovery cleanup and aggregate evidence. |
+| `scripts/dev/test-workflow.ts` | Bounded feature concurrency followed by exclusive lifecycle groups. |
+| `scripts/dev/telemetry.ts` | Phase/scenario events and ownership records for disposable resources. |
+| `tests/support/ui.ts`, `tests/support/electron.ts` | Polling-safe route teardown, reload fixtures, live inspector controls and tracked Electron launches. |
 
 Reuse the [instance lifecycle and data isolation](development.md#workspace-and-instance-identity). Test instances never reset the persistent preview. Ordinary desktop tests dispose their own instances while retaining the shared development database service. The infrastructure lifecycle suite owns and removes its separate temporary cluster.
 
-Keep network fault-injection routes installed during polling scenarios and switch their response behavior. Toggling Electron request interception can abort unrelated requests in flight and turn a simulated failure into a test-harness failure.
+Disposable `test` instances disable hot reload. Svelte 5.55.7's HMR wrapper can collect the same transition twice, leaving a reopened inspector outside the viewport; [upstream fix](https://github.com/sveltejs/svelte/pull/18655). Feature checks retain real motion and pointer actions. Preview/verification profiles retain hot reload, exercised by the exclusive lifecycle group. Revisit this configuration when upgrading Svelte.
+
+Keep network fault-injection routes installed during polling scenarios and switch their response behavior. Toggling Electron request interception can abort unrelated requests in flight and turn a simulated failure into a test-harness failure. After navigation or archive commands, await the destination, restored draft and settled archive state before using the new controls.
 
 Desktop scenarios assert that hidden windows remain invisible and non-focusable through interaction, resize and reload, then exercise keyboard message submission, persisted threads, drafts, sidebar preferences and Artifact inspection after reopening, plus thread screenshots at 1040×830 and 740×650 content sizes. Workflow checks retain database/file isolation, reset, crash recovery, hot reload and disposal coverage. The thread, image and mocked OpenAI integration checks are registered in the scenario inventory; boundary checks also run the existing context, storage and model tests.
 
@@ -80,7 +92,7 @@ Electron automation is [experimental](https://playwright.dev/docs/api/class-elec
 
 Each verification session prints an evidence directory outside disposable state. It retains `report.json`, `checks.log`, scenario records, screenshots, action traces, cleanup diagnostics and, when relevant, `manual-plan.md`. Direct desktop runs use ignored `out/verification` output relative to the test configuration and may replace previous direct-run artifacts.
 
-Reports identify source commit and content fingerprint, lockfile, runtime versions, fixtures/schema, model mode, selected scope and command/scenario outcomes. The fingerprint covers code, tests, baselines, specs, engineering docs and workflow configuration, including uncommitted additions/deletions. A changed source invalidates the session even if tests pass; verification does not freeze files or detect every transient edit reverted before the final fingerprint. Keep source unchanged while verifying. Recheck the integrated revision after merge.
+Reports identify source commit and content fingerprint, lockfile, runtime versions, fixtures/schema, model mode, selected scope and command/scenario outcomes. Version 2 adds end-to-end duration, worker/timing configuration, timestamped phase/scenario events and recovery cleanup outcomes. Phase spans may nest or overlap; use timestamps rather than adding them to infer elapsed time. Progress streams as scenarios and setup phases execute. Resource recovery uses recorded instance ownership, process start identities and session-scoped checkouts/clusters; cleanup failure still fails verification. The fingerprint covers code, tests, baselines, specs, engineering docs and workflow configuration, including uncommitted additions/deletions. A changed source invalidates the session even if tests pass; verification does not freeze files or detect every transient edit reverted before the final fingerprint. Keep source unchanged while verifying. Recheck the integrated revision after merge.
 
 Missing selected results are blocked; omitted scenarios are not-selected; failed attempts remain failures even if a retry passes. Cleanup failure fails its suite. Human checks remain pending and agent review remains unrecorded until separately performed; an automated pass makes no claim about either. Reports are local diagnostics, not tamper-resistant attestations.
 

@@ -20,7 +20,6 @@ import { connectProduct } from '../../packages/server/src/platform/db/client.ts'
 import { workspace, createInstance } from '../../scripts/dev/workspace.ts';
 import { startInstance, stopInstance, disposeInstance, runtime } from '../../scripts/dev/lifecycle.ts';
 import { devRoot, json, exec } from '../../scripts/dev/io.ts';
-import { makeWorktree } from '../helpers/worktree.ts';
 import { scenarioStep } from '../support/node-scenarios.ts';
 import { crmPermissionPrompt, permissionAuthoringCases } from '../fixtures/permission-authoring.ts';
 const pause=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -29,7 +28,7 @@ const call=(name:string,args:unknown):ToolCall=>({name,arguments:JSON.stringify(
 const scripted=(calls:ToolCall[]):ModelAdapter=>({...deterministicModel,async *stream(request){if(request.tools?.previousOutputIds.length)yield 'Completed from the saved answers and evidence.';else yield {kind:'output' as const,calls};}});
 
 test('Permissions and Decisions: durable policy, immutable answers and resumption',{timeout:240000},async t=>{
-  const base=await realpath(await mkdtemp(join(tmpdir(),'ash-decisions-'))),source=process.cwd(),checkout=join(base,'checkout');await makeWorktree(source,checkout);
+  const base=await realpath(await mkdtemp(join(tmpdir(),'ash-decisions-'))),source=process.cwd(),checkout=source;
   const ws=await workspace(checkout,await devRoot()),instance=await createInstance(ws,'test','empty');
   const config=ServerConfig.parse(await json(join(instance.root,'server.json'))),db=connectProduct(config.databaseUrl);
   const files=join(base,'files');await exec('mkdir',['-p',files]);await writeFile(join(files,'a.ts'),'function one() {}\n');await writeFile(join(files,'b.ts'),'function two() {}\n');
@@ -508,5 +507,5 @@ test('Permissions and Decisions: durable policy, immutable answers and resumptio
         const retried=await consumer.retry(initial.run.id,randomUUID(),'normal');await wait(retried.id,'completed');assert.equal(executions,outcome==='none'?2:1);assert.equal((await decisions.list(initial.thread)).filter(d=>d.status==='pending').length,0);await permissions.remove(retryRule.id);
       }
     });
-  }finally{for(const value of services)await value.stop();await db.$disconnect();await disposeInstance(ws,instance.id);await exec('git',['worktree','remove','--force',checkout],{cwd:source});await rm(base,{recursive:true,force:true});}
+  }finally{for(const value of services)await value.stop();await db.$disconnect();await disposeInstance(ws,instance.id);await rm(base,{recursive:true,force:true});}
 });

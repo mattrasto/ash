@@ -3,12 +3,14 @@ export interface Scenario {
   id: string;
   title: string;
   suite: Suite;
+  group: string;
+  file: string;
   requirements: string[];
   fixture: 'none' | 'scratchpad' | 'scratchpad / empty';
 }
 
 // Product rules stay in specs/. These IDs identify executable checks, not new requirements.
-export const scenarios: Scenario[] = [
+const inventory: Omit<Scenario, 'group' | 'file'>[] = [
  {id:'design-reading',title:'Readable links and native nested editor scrolling at minimum window size',suite:'desktop',requirements:['DS-R01','DS-R03','DS-R11','DS-R12','DS-V07','DS-V10','DS-V11'],fixture:'scratchpad'},
  {id:'design-dismissal',title:'Outside dismissal preserves layer ownership and guarded drafts; close controls align',suite:'desktop',requirements:['DS-R03','DS-R04','DS-R10','DS-V04','DS-V05'],fixture:'scratchpad'},
  {id:'design-rails',title:'Sidebars animate layout while real overflow and live editing remain intact',suite:'desktop',requirements:['DS-R09','DS-R11','DS-R12','DS-R13','DS-V07','DS-V08'],fixture:'scratchpad'},
@@ -158,20 +160,87 @@ export const scenarios: Scenario[] = [
   { id: 'chat-layout', title: 'Thread layout at normal and minimum window sizes', suite: 'desktop', requirements: ['DEV-11','DS-R03','DS-R04','DS-R05','DS-R07','DS-R12','DS-V10'], fixture: 'scratchpad' },
 ];
 
+
+export interface TestGroup { id: string; suite: Suite; file: string; scenarios: string[]; exclusive?: boolean }
+export const testGroups: TestGroup[] = [
+  {"id": "artifacts", "suite": "workflow", "file": "tests/integration/artifacts.test.ts", "scenarios": ["engine-filter-route", "engine-presentation-context", "engine-permission-decisions", "engine-provider-capture", "engine-recovery-capacity", "engine-context-bounds"], "exclusive": false},
+  {"id": "combined-context", "suite": "workflow", "file": "tests/integration/combined-context.test.ts", "scenarios": ["combined-context"], "exclusive": false},
+  {"id": "filesystem-tools", "suite": "workflow", "file": "tests/integration/filesystem-tools.test.ts", "scenarios": ["TOOL-01", "TOOL-03", "TOOL-04", "TOOL-05", "TOOL-19", "TOOL-20", "TOOL-21", "TOOL-24", "TOOL-15", "TOOL-16"], "exclusive": false},
+  {"id": "images", "suite": "workflow", "file": "tests/integration/images.test.ts", "scenarios": ["images-snapshot", "visibility-media-locks", "images-boundaries", "images-description-retry", "images-cleanup", "images-desktop"], "exclusive": false},
+  {"id": "model-routing", "suite": "workflow", "file": "tests/integration/model-routing.test.ts", "scenarios": ["model-routing-execution", "model-routing-recovery"], "exclusive": false},
+  {"id": "openai", "suite": "workflow", "file": "tests/integration/openai.test.ts", "scenarios": ["openai-credentials", "openai-capture", "openai-outcomes", "openai-desktop", "openai-budget", "openai-interactive"], "exclusive": false},
+  {"id": "permissions-decisions", "suite": "workflow", "file": "tests/integration/permissions-decisions.test.ts", "scenarios": ["permissions-defaults", "permissions-filesystem-authoring", "permissions-policy", "permissions-reviewed-overrides", "permissions-policy-migration", "permissions-traversal-boundaries", "permissions-review-authoring", "permissions-authoring-priorities", "permissions-change-sets", "decisions-lifecycle", "decisions-chat-race", "decisions-scheduling-wake", "permissions-default-code", "permissions-decisions-stretch", "decisions-resumption"], "exclusive": false},
+  {"id": "threads", "suite": "workflow", "file": "tests/integration/threads.test.ts", "scenarios": ["chat-schema", "chat-organization", "chat-delivery", "chat-context", "chat-cancellation", "chat-retries", "chat-concurrency", "chat-restart", "chat-limits", "chat-ownership", "chat-instructions", "chat-desktop"], "exclusive": false},
+  {"id": "tools", "suite": "workflow", "file": "tests/integration/tools.test.ts", "scenarios": ["TOOL-02", "TOOL-23", "TOOL-06", "TOOL-07", "TOOL-08", "TOOL-09", "TOOL-10", "TOOL-11", "TOOL-12", "TOOL-13", "TOOL-14", "TOOL-17", "TOOL-22", "TOOL-18"], "exclusive": false},
+  {"id": "topic-tools", "suite": "workflow", "file": "tests/integration/topic-tools.test.ts", "scenarios": ["topic-tool-integration"], "exclusive": false},
+  {"id": "topics-context", "suite": "workflow", "file": "tests/integration/topics-context.test.ts", "scenarios": ["topics-organization", "instructions-editing", "instructions-applicability", "context-snapshots", "topic-retrieval", "topic-isolation", "context-limits", "context-compatibility"], "exclusive": false},
+  {"id": "video-understanding", "suite": "workflow", "file": "tests/integration/video-understanding.test.ts", "scenarios": ["video-background-context", "video-tools-scope-evidence", "video-processing-bounds", "video-recovery-failure", "video-understanding-desktop"], "exclusive": false},
+  {"id": "video", "suite": "workflow", "file": "tests/integration/video.test.ts", "scenarios": ["videos-storage", "videos-thread", "videos-desktop", "recording-lifecycle", "recording-startup-cancel", "recording-upload-recovery", "recording-viewer-retry"], "exclusive": false},
+  {"id": "visibility-decisions", "suite": "workflow", "file": "tests/integration/visibility-decisions.test.ts", "scenarios": ["visibility-waiting-decisions", "visibility-combined-upgrades"], "exclusive": false},
+  {"id": "visibility", "suite": "workflow", "file": "tests/integration/visibility.test.ts", "scenarios": ["visibility-migration", "visibility-lifecycle", "visibility-naming-conflicts", "visibility-history", "visibility-recovery-context", "visibility-migrated-controls"], "exclusive": false},
+  {"id": "workflow", "suite": "workflow", "file": "tests/integration/workflow.test.ts", "scenarios": ["workflow-setup", "workflow-isolation", "workflow-restart", "workflow-port", "workflow-desktop", "workflow-reset", "workflow-crash", "workflow-identity", "workflow-native", "workflow-disposal", "workflow-config", "workflow-recreate", "workflow-cleanup"], "exclusive": true},
+  {"id": "engine-desktop", "suite": "desktop", "file": "tests/e2e/artifacts.spec.ts", "scenarios": ["engine-desktop"]},
+  {"id": "engine-internal-desktop", "suite": "desktop", "file": "tests/e2e/artifacts.spec.ts", "scenarios": ["engine-internal-desktop"]},
+  {"id": "chat-persistence", "suite": "desktop", "file": "tests/e2e/chat.spec.ts", "scenarios": ["chat-persistence"]},
+  {"id": "chat-layout", "suite": "desktop", "file": "tests/e2e/chat.spec.ts", "scenarios": ["chat-layout"]},
+  {"id": "desktop-background", "suite": "desktop", "file": "tests/e2e/chat.spec.ts", "scenarios": ["desktop-background"]},
+  {"id": "design-dismissal", "suite": "desktop", "file": "tests/e2e/design-polish.spec.ts", "scenarios": ["design-dismissal"]},
+  {"id": "design-rails", "suite": "desktop", "file": "tests/e2e/design-polish.spec.ts", "scenarios": ["design-rails"]},
+  {"id": "design-reading", "suite": "desktop", "file": "tests/e2e/design-polish.spec.ts", "scenarios": ["design-reading"]},
+  {"id": "design-controls", "suite": "desktop", "file": "tests/e2e/design-system.spec.ts", "scenarios": ["design-controls"]},
+  {"id": "design-presence", "suite": "desktop", "file": "tests/e2e/design-system.spec.ts", "scenarios": ["design-presence"]},
+  {"id": "design-replacement", "suite": "desktop", "file": "tests/e2e/design-system.spec.ts", "scenarios": ["design-replacement"]},
+  {"id": "model-routing-desktop", "suite": "desktop", "file": "tests/e2e/model-routing.spec.ts", "scenarios": ["model-routing-desktop"]},
+  {"id": "decisions-response-retry-desktop", "suite": "desktop", "file": "tests/e2e/permissions-decisions-failures.spec.ts", "scenarios": ["decisions-response-retry-desktop"]},
+  {"id": "permissions-save-navigation-desktop", "suite": "desktop", "file": "tests/e2e/permissions-decisions-failures.spec.ts", "scenarios": ["permissions-save-navigation-desktop"]},
+  {"id": "permissions-suggestions-desktop", "suite": "desktop", "file": "tests/e2e/permissions-decisions.spec.ts", "scenarios": ["permissions-suggestions-desktop"]},
+  {"id": "permissions-changes-desktop", "suite": "desktop", "file": "tests/e2e/permissions-decisions.spec.ts", "scenarios": ["permissions-changes-desktop"]},
+  {"id": "permissions-crm-desktop", "suite": "desktop", "file": "tests/e2e/permissions-decisions.spec.ts", "scenarios": ["permissions-crm-desktop"]},
+  {"id": "permissions-form-desktop", "suite": "desktop", "file": "tests/e2e/permissions-decisions.spec.ts", "scenarios": ["permissions-form-desktop"]},
+  {"id": "permissions-decisions-desktop", "suite": "desktop", "file": "tests/e2e/permissions-decisions.spec.ts", "scenarios": ["permissions-decisions-desktop"]},
+  {"id": "decisions-navigation-desktop", "suite": "desktop", "file": "tests/e2e/permissions-decisions.spec.ts", "scenarios": ["decisions-navigation-desktop"]},
+  {"id": "permissions-overrides-desktop", "suite": "desktop", "file": "tests/e2e/permissions-decisions.spec.ts", "scenarios": ["permissions-overrides-desktop"]},
+  {"id": "topics-settings-desktop", "suite": "desktop", "file": "tests/e2e/topics.spec.ts", "scenarios": ["topics-settings-desktop"]},
+  {"id": "context-inspection-desktop", "suite": "desktop", "file": "tests/e2e/topics.spec.ts", "scenarios": ["context-inspection-desktop"]},
+  {"id": "visibility-decisions-desktop", "suite": "desktop", "file": "tests/e2e/visibility.spec.ts", "scenarios": ["visibility-decisions-desktop"]},
+  {"id": "visibility-desktop", "suite": "desktop", "file": "tests/e2e/visibility.spec.ts", "scenarios": ["visibility-desktop"]},
+  {"id": "visibility-recording-recovery", "suite": "desktop", "file": "tests/e2e/visibility.spec.ts", "scenarios": ["visibility-recording-recovery"]},
+  {"id": "boundary", "suite": "boundary", "file": "tests/boundary/*.test.ts", "scenarios": ["boundary-paths", "boundary-locks", "boundary-environment", "boundary-process", "boundary-fingerprint", "verification-cli", "verification-evidence"]},
+];
+const membership = new Map<string, TestGroup>();
+for (const group of testGroups) for (const id of group.scenarios) {
+  if (membership.has(id)) throw new Error(`Scenario ${id} belongs to multiple groups`);
+  membership.set(id, group);
+}
+export const scenarios: Scenario[] = inventory.map(item => {
+  const group = membership.get(item.id);
+  if (!group || group.suite !== item.suite) throw new Error(`Missing or incompatible execution group for ${item.id}`);
+  membership.delete(item.id);
+  return { ...item, group: group.id, file: group.file };
+});
+if (membership.size) throw new Error(`Groups reference unknown scenarios: ${[...membership.keys()].join(', ')}`);
+
 export function scenario(id: string) {
   const found = scenarios.find(s => s.id === id);
   if (!found) throw new Error(`Unknown scenario: ${id}`);
   return found;
 }
 
-export function selectScenarios(profile: string, requested?: string) {
+export function selectScenarios(profile: string, requested?: string, requestedGroups?: string) {
   if (!['quick', 'full'].includes(profile)) throw new Error(`Unknown profile: ${profile}; use quick or full`);
-  if (!requested) return scenarios.filter(s => profile === 'full' || s.suite === 'boundary');
-  const matched = scenarios.filter(s => s.id === requested || s.requirements.includes(requested));
-  if (!matched.length) throw new Error(`No implemented scenario matches ${requested}; use --list`);
-  // Stateful suites share ordered setup. Selection deliberately expands to the whole suite.
-  const suites = new Set(matched.map(s => s.suite));
-  return scenarios.filter(s => suites.has(s.suite));
+  if (requested === '' || requestedGroups === '') throw new Error('No implemented scenario or group selected; use --list');
+  if (!requested && !requestedGroups) return scenarios.filter(s => profile === 'full' || s.suite === 'boundary');
+  const groups = new Set<string>();
+  for (const token of requested?.split(',') ?? []) {
+    const matched = scenarios.filter(s => s.id === token || s.requirements.includes(token));
+    if (!matched.length) throw new Error(`No implemented scenario matches ${token}; use --list`);
+    for (const item of matched) groups.add(item.group);
+  }
+  for (const token of requestedGroups?.split(',') ?? []) {
+    if (!testGroups.some(group => group.id === token)) throw new Error(`Unknown group ${token}; use --list`);
+    groups.add(token);
+  }
+  return scenarios.filter(s => groups.has(s.group));
 }
 
 export const manualChecks = [{

@@ -1,3 +1,4 @@
+import { measure, recordResource } from './telemetry.ts';
 import { mkdir, realpath } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { Instance, Fixture, SCHEMA_VERSION } from '../../packages/shared/src/index.ts';
@@ -54,7 +55,8 @@ export async function createInstance(ws: Workspace, profile: 'preview' | 'verify
       clusterId: cluster.id, schemaVersion: SCHEMA_VERSION, generation: id() };
     await directories(root);
     await atomic(join(root, 'instance.json'), instance);
-    await provision(instance, cluster);
+    recordResource('instances', instance.id, instance);
+    await measure('database.provision', () => provision(instance, cluster), instance.id);
     return instance;
   });
 }

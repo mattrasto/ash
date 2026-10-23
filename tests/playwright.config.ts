@@ -4,7 +4,7 @@ import { join } from 'node:path';
 export default defineConfig({
   testDir: './e2e',
   outputDir: join(process.env.ASH_TEST_EVIDENCE ?? 'out/verification', 'desktop'),
-  workers: 1,
+  workers: Number(process.env.ASH_TEST_WORKERS ?? 1),
   fullyParallel: false,
   retries: 0,
   forbidOnly: true,

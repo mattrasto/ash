@@ -1,3 +1,4 @@
+import { launchElectron } from '../support/electron.ts';
 import { scenarioStep } from '../support/node-scenarios.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,15 +20,13 @@ import { ImageStorage } from '../../packages/server/src/modules/attachments/stor
 import { deterministicModel } from '../../packages/server/src/platform/models/deterministic.ts';
 import { ModelFailure } from '../../packages/server/src/platform/models/adapter.ts';
 import { screenshotFixture,orientedFixture } from '../../packages/server/test/fixtures/images.ts';
-import { makeWorktree } from '../helpers/worktree.ts';
 
 async function until<T>(read:()=>Promise<T>,accept:(value:T)=>boolean,timeout=15000):Promise<T>{
   const deadline=Date.now()+timeout;do{const value=await read();if(accept(value))return value;await sleep(50);}while(Date.now()<deadline);throw new Error('Timed out waiting for image test state');
 }
 test('persisted images, description Runs and desktop workflow (no external calls)',{timeout:240000},async t=>{
-  const source=process.cwd(),base=await mkdtemp(join(tmpdir(),'ash-images-')),checkout=join(base,'checkout');
-  t.after(async()=>{await exec('git',['worktree','remove','--force',checkout],{cwd:source});await rm(base,{recursive:true,force:true});});
-  await makeWorktree(source,checkout);
+  const source=process.cwd(),base=await mkdtemp(join(tmpdir(),'ash-images-')),checkout=source;
+  t.after(async()=>{await rm(base,{recursive:true,force:true});});
   const ws=await workspace(checkout,await devRoot()),instance=await createInstance(ws,'test','empty');
   const cfg=ServerConfig.parse(await json(join(instance.root,'server.json'))),db=connectProduct(cfg.databaseUrl),storage=new ImageStorage(instance.root);
   const images=new Attachments(db,storage,deterministicModel,false),threads=new Threads(db,deterministicModel,false,storage);
@@ -136,7 +135,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       const live=(await runtime(instance))!,entry=await buildMain(instance.checkout,join(instance.root,'build')),path=join(instance.root,'images-test-client.json');
       await atomic(path,{root:instance.root,label:instance.label,instanceId:instance.id,url:live.webUrl,windowed:true,background:true});
       const require=createRequire(join(instance.checkout,'package.json'));
-      const launch=()=>_electron.launch({executablePath:require('electron'),args:[entry],cwd:instance.checkout,env:{...childEnvironment(join(instance.root,'tmp')),ASH_CLIENT_CONFIG:path} as Record<string,string>,timeout:30000});
+      const launch=()=>launchElectron({executablePath:require('electron'),args:[entry],cwd:instance.checkout,env:{...childEnvironment(join(instance.root,'tmp')),ASH_CLIENT_CONFIG:path} as Record<string,string>,timeout:30000});
       app=await launch();let page=await app.firstWindow();const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
       await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
       await page.getByRole('button',{name:'New Thread',exact:true}).first().click();

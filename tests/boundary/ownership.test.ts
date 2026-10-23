@@ -1,3 +1,4 @@
+import { ServerConfig } from '../../packages/shared/src/index.ts';
 import { scenarioTest } from '../support/node-scenarios.ts';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, symlink, rm, realpath, writeFile } from 'node:fs/promises';
@@ -34,6 +35,12 @@ scenarioTest('boundary-environment', () => {
     const env = childEnvironment('/tmp/ash-test');
     assert.equal(env.OPENAI_API_KEY, undefined); assert.equal(env.DATABASE_URL, undefined); assert.equal(env.NODE_OPTIONS, undefined);
     assert.equal(env.TMPDIR, '/tmp/ash-test');
+    const instance={version:1,id:'a'.repeat(24),workspaceId:'b'.repeat(24),checkout:'/tmp/test',label:'fixture',profile:'test',fixture:'empty',root:'/tmp/test-state',devRoot:'/tmp/test-root',database:'fixture',runtimeRole:'fixture',ownerRole:'fixture',clusterId:'c'.repeat(24),schemaVersion:1,generation:'d'.repeat(24)};
+    const config={instance,databaseUrl:'postgresql://fixture:fixture@localhost/fixture',token:'x'.repeat(32),testTiming:'accelerated'};
+    assert.ok(ServerConfig.safeParse(config).success);
+    for(const profile of ['preview','verify']) assert.equal(ServerConfig.safeParse({...config,instance:{...instance,profile}}).success,false);
+    assert.ok(ServerConfig.safeParse({...config,testTiming:undefined,instance:{...instance,profile:'preview'}}).success);
+
   } finally { process.env = before; }
 });
 scenarioTest('boundary-process', async () => {

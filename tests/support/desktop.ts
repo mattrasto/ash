@@ -1,6 +1,8 @@
+import { launchElectron } from './electron.ts';
+import { PollingRoutes } from './ui.ts';
+import { measure } from '../../scripts/dev/telemetry.ts';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { _electron } from 'playwright';
 import { buildMain } from '../../scripts/dev/build.ts';
 import { atomic, childEnvironment, json } from '../../scripts/dev/io.ts';
 import { runtime } from '../../scripts/dev/lifecycle.ts';
@@ -17,6 +19,9 @@ export async function request(instance: Instance, path: string, body?: object, t
 }
 
 export async function desktop(instance: Instance) {
+  return measure('desktop.ready', () => launchDesktop(instance), instance.id);
+}
+async function launchDesktop(instance: Instance) {
   const running = await runtime(instance);
   const entry = await buildMain(instance.checkout, join(instance.root, 'build'));
   const configPath = join(instance.root, 'test-client.json');
@@ -24,7 +29,7 @@ export async function desktop(instance: Instance) {
   const require = createRequire(join(instance.checkout, 'package.json'));
   // A per-process Cocoa preference keeps native scrollbar geometry stable without changing user defaults.
   const args = [entry, ...(process.platform === 'darwin' ? ['-AppleShowScrollBars','Always'] : [])];
-  const app = await _electron.launch({ executablePath: require('electron'), args, cwd: instance.checkout,
+  const app = await launchElectron({ executablePath: require('electron'), args, cwd: instance.checkout,
     env: { ...childEnvironment(join(instance.root, 'tmp')), ASH_CLIENT_CONFIG: configPath } as Record<string, string>, timeout: 30_000 });
   try {
     const page = await app.firstWindow();
@@ -32,6 +37,8 @@ export async function desktop(instance: Instance) {
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     await page.getByTestId('connection').filter({ hasText: 'Connected' }).waitFor({ timeout: 15_000 });
-    return { app, page, errors };
+    const network = new PollingRoutes(page);
+    const close = async () => { try { await network.dispose(); } finally { await app.close(); } };
+    return { app, page, errors, network, close };
   } catch (error) { await app.close(); throw error; }
 }

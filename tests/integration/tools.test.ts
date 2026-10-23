@@ -16,7 +16,6 @@ import { retrievalTool } from '../support/retrieval-tool.ts';
 import { workspace, createInstance } from '../../scripts/dev/workspace.ts';
 import { startInstance, stopInstance, disposeInstance } from '../../scripts/dev/lifecycle.ts';
 import { devRoot, json, exec } from '../../scripts/dev/io.ts';
-import { makeWorktree } from '../helpers/worktree.ts';
 import { providerResponse, sse, successEvents } from '../helpers/openai.ts';
 
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -33,8 +32,7 @@ const batchModel = (calls: ToolCall[]) => scripted(request => request.tools!.pre
 const fixtureRuntime = (tools: ToolRuntime['tools']): ToolRuntime => ({tools,resources:async()=>[{kind:'fixture',id:'scope',label:'fixture'}],authorize:async()=>({outcome:'allowed',code:'fixture',message:'Fixture scope',configurationRevision:'1',evaluator:'not-performed'})});
 
 test('Inspectable tools: real persistence, dispatch and provider protocol', { timeout: 240000 }, async t => {
-  const base = await realpath(await mkdtemp(join(tmpdir(), 'ash-tools-'))), source = process.cwd(), checkout = join(base, 'checkout');
-  await makeWorktree(source, checkout);
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'ash-tools-'))), source = process.cwd(), checkout = source;
   const defaultRuntime = fixtureRuntime([retrievalTool(async (_run, query) => success(query))]);
   const ws = await workspace(checkout, await devRoot()), instance = await createInstance(ws, 'test', 'empty');
   const cfg = ServerConfig.parse(await json(join(instance.root, 'server.json'))), db = connectProduct(cfg.databaseUrl);
@@ -298,6 +296,6 @@ test('Inspectable tools: real persistence, dispatch and provider protocol', { ti
     await stopInstance(ws, instance.id);
     for (const value of services) await value.stop();
     await db.$disconnect(); await disposeInstance(ws, instance.id);
-    await exec('git', ['worktree', 'remove', '--force', checkout], { cwd: source }); await rm(base, { recursive: true, force: true });
+     await rm(base, { recursive: true, force: true });
   }
 });

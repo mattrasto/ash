@@ -126,6 +126,23 @@ test('incoming Filter Route Act Surface with real persistence', {timeout:180000}
    assert.ok((await prep.threads.readThread(target)).artifacts.some(a=>a.id===retained.state.sourceSurfaceId));failAction=false;await prep.intake.retry(retained.id);prep.intake.dispatch(retained.id);await prep.intake.idle();const dispatched=await prep.intake.get(retained.id);assert.equal(dispatched.status,'completed');assert.equal(dispatched.state.sourceSurfaceId,retained.state.sourceSurfaceId);await settle(dispatched.state.runId!);assert.equal((await prep.threads.inspect(retained.id)).artifacts.filter(a=>a.payload.type==='message'&&a.payload.speaker==='source').length,1);
    const invalid:ModelAdapter={...deterministicModel,async *stream(req,signal){if(req.purpose==='engine_route'){yield JSON.stringify({destination:'existing',threadId:randomUUID(),title:'Invented',reason:'Unknown',assumption:'',ambiguous:false});return;}yield* deterministicModel.stream(req,signal);}};const bad=service(invalid);assert.equal((await ingest(item('Invalid candidate selection'),bad.intake)).status,'failed');
    const same=await Promise.all([ingest(item('First duplicate-name independent source')),ingest(item('Second duplicate-name independent source'))]);assert.equal(same.length,2);
+   // Force a real snapshot conflict at the capture's Thread foreign key, before model work.
+   let preparing=false,locked=false,filterCalls=0;
+   const contendedModel:ModelAdapter={...deterministicModel,configuration(mode,previous){preparing=true;return deterministicModel.configuration(mode,previous);},async *stream(req,signal){if(req.purpose==='engine_filter')filterCalls++;yield* deterministicModel.stream(req,signal);}};
+   const contended=service(contendedModel),receipt=await contended.intake.receive(item('Source-only serialization check',target));
+   const changing=db.$transaction(async tx=>{
+    await tx.$queryRaw`SELECT id FROM threads WHERE id=${target}::uuid FOR UPDATE`;locked=true;
+    await until(async()=>preparing,value=>value);
+    await tx.thread.update({where:{id:target},data:{updatedAt:new Date()}});
+   },{timeout:15000});
+   await until(async()=>locked,value=>value);contended.intake.dispatch(receipt.id);
+   await Promise.all([changing,contended.intake.idle()]);
+   const prepared=await contended.intake.get(receipt.id);assert.equal(prepared.status,'completed',prepared.error??'Snapshot conflict must not fail intake');
+   assert.equal(filterCalls,1,'Aborted preparation never calls the model');
+   const preparedChain=await contended.threads.inspect(receipt.id);
+   assert.equal(preparedChain.artifacts.filter(a=>a.payload.type==='engine_request'&&a.payload.stage==='filter').length,1);
+   assert.equal(preparedChain.artifacts.filter(a=>a.payload.type==='message'&&a.payload.speaker==='source').length,1);
+
   });
   await scenarioStep(t,'engine-context-bounds',async()=>{
    // A realistic full candidate window must fit even with the largest accepted input.

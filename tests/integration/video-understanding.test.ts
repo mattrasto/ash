@@ -23,15 +23,13 @@ import {mediaCommand} from '../../packages/server/src/modules/attachments/video.
 import {devRoot,json,exec,sleep} from '../../scripts/dev/io.ts';
 import {workspace,createInstance} from '../../scripts/dev/workspace.ts';
 import {startInstance,disposeInstance,runtime} from '../../scripts/dev/lifecycle.ts';
-import {makeWorktree} from '../helpers/worktree.ts';
 import {desktop} from '../support/desktop.ts';
 import {scenarioStep} from '../support/node-scenarios.ts';
 async function until<T>(read:()=>Promise<T>,accept:(v:T)=>boolean,timeout=30000){const end=Date.now()+timeout;do{const v=await read();if(accept(v))return v;await sleep(25);}while(Date.now()<end);throw Error('Video understanding fixture timed out.');}
 const call=(name:string,args:unknown):ToolCall=>({name,callId:randomUUID(),arguments:JSON.stringify(args)});
 test('video understanding persists background context, shared tools and inspectable evidence without external calls',{timeout:240000},async t=>{
-  const source=process.cwd(),base=await mkdtemp(join(tmpdir(),'ash-video-understanding-')),checkout=join(base,'checkout');
-  t.after(async()=>{await exec('git',['worktree','remove','--force',checkout],{cwd:source});await rm(base,{recursive:true,force:true});});
-  await makeWorktree(source,checkout);
+  const source=process.cwd(),base=await mkdtemp(join(tmpdir(),'ash-video-understanding-')),checkout=source;
+  t.after(async()=>{await rm(base,{recursive:true,force:true});});
   const ws=await workspace(checkout,await devRoot()),instance=await createInstance(ws,'test','empty');
   const cfg=ServerConfig.parse(await json(join(instance.root,'server.json'))),db=connectProduct(cfg.databaseUrl),storage=new ImageStorage(instance.root);
   await storage.prepare();
