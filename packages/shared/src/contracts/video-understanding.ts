@@ -25,7 +25,7 @@ export const VideoPlan=z.object({type:z.literal('video_analysis'),attachmentId:i
 export type VideoPlan=z.infer<typeof VideoPlan>;
 export const VideoModelRequest=z.object({type:z.literal('video_model_request'),attachmentId:id,provider:z.enum(['google','deterministic']),
   model:z.string().max(200),operation:z.enum(['caption','describe','question','combine-caption']),prompt:z.string().max(100000),
-  responseSchema:z.record(ToolJson),
+  responseSchema:z.record(z.string(), ToolJson),
   media:z.object({file:VideoFile,sourceOffset:z.number().nonnegative(),start:z.number().nonnegative(),end:z.number().positive(),
     fps:z.union([z.literal(1),z.literal(5)]),resolution:z.literal('high'),transform:z.enum(['playback','clip-v1'])}).strict().nullable(),
   options:z.object({api:z.literal('interactions'),store:z.literal(false),thinkingLevel:z.literal('low'),maxOutputTokens:z.number().int().positive(),

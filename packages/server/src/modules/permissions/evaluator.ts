@@ -20,7 +20,7 @@ export class JevEvaluator implements Evaluator {
         if(Buffer.byteLength(JSON.stringify(body))>50000)throw new Error('evaluation_packet_limit');
         const response=await this.transport('https://api.typesafe.ai/v1/systemone',{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',Authorization:`Bearer ${this.key}`},body:JSON.stringify(body),signal:AbortSignal.any([signal,AbortSignal.timeout(15000)])});
         if(!response.ok){await response.body?.cancel();throw new Error('evaluator_unavailable');}
-        const top=z.object({model:z.string().min(1).max(100),answers:z.record(z.unknown()),usage:z.object({input_tokens:z.number().int().nonnegative(),output_tokens:z.number().int().nonnegative()})}).parse(await response.json());model=top.model;
+        const top=z.object({model:z.string().min(1).max(100),answers:z.record(z.string(), z.unknown()),usage:z.object({input_tokens:z.number().int().nonnegative(),output_tokens:z.number().int().nonnegative()})}).parse(await response.json());model=top.model;
         for(const q of batch){
           const a=z.object({type:z.literal('choice'),choice:z.enum(['applies','does_not_apply','insufficient_evidence']),probabilities}).parse(top.answers[q.id]);
           if(a.probabilities[a.choice]<Math.max(...Object.values(a.probabilities))-1e-6)throw new Error('invalid_choice');

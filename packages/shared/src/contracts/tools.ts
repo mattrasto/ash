@@ -3,7 +3,7 @@ import { z } from 'zod';
 // Provider-neutral, JSON-only records. Opaque provider continuation never belongs here.
 export type ToolJson = null | boolean | number | string | ToolJson[] | { [key: string]: ToolJson };
 export const ToolJson: z.ZodType<ToolJson> = z.lazy(() => z.union([
-  z.null(), z.boolean(), z.number().finite(), z.string(), z.array(ToolJson), z.record(ToolJson),
+  z.null(), z.boolean(), z.number().finite(), z.string(), z.array(ToolJson), z.record(z.string(), ToolJson),
 ]));
 export const FeatureEvidence = z.object({
   type: z.literal('feature_evidence'), feature: z.string().min(1).max(80), stage: z.string().min(1).max(100), data: ToolJson,
@@ -18,7 +18,7 @@ export const ToolAvailabilityIssue = z.object({
 export type ToolAvailabilityIssue = z.infer<typeof ToolAvailabilityIssue>;
 export const ToolDefinition = z.object({
   name: z.string().regex(/^[a-z][a-z0-9_.]{0,79}$/), version: z.number().int().positive(),
-  description: z.string().min(1).max(8000), inputSchema: z.record(ToolJson),
+  description: z.string().min(1).max(8000), inputSchema: z.record(z.string(), ToolJson),
   effects: z.array(z.string().min(1).max(80)).max(32),
   concurrency: z.enum(['independent', 'exclusive']), repeatability: z.enum(['safe', 'reconcile']),
   limits: z.object({ timeoutMs: z.number().int().positive(), resultBytes: z.number().int().min(512) }).strict(),
@@ -27,7 +27,7 @@ export type ToolDefinition = z.infer<typeof ToolDefinition>;
 export const ToolAction = z.object({
   operation: z.string().min(1).max(100), resources: z.array(ToolResource).max(256),
   effects: z.array(z.string().min(1).max(80)).max(32),
-  facts: z.record(ToolJson).optional(),
+  facts: z.record(z.string(), ToolJson).optional(),
 }).strict();
 export type ToolAction = z.infer<typeof ToolAction>;
 export const ToolAuthorization = z.object({
@@ -42,7 +42,7 @@ export const ToolReference = z.object({
   citationId: ToolCitationId.optional(),
   observedAt: z.string().datetime(), contentHash: z.string().max(256).optional(),
   // Each resource kind owns its location shape (e.g. file/lines or Artifact/offset).
-  location: z.record(ToolJson),
+  location: z.record(z.string(), ToolJson),
 }).strict();
 export type ToolReference = z.infer<typeof ToolReference>;
 export const ToolContent = z.discriminatedUnion('type', [
@@ -97,7 +97,7 @@ export type ToolCallState = z.infer<typeof ToolCallState>;
 export const ToolRound = z.object({
   requestId: ToolId, outputId: ToolId.optional(), status: z.enum(['queued', 'running', 'completed', 'interrupted']),
   commentary: z.string(), startedAt: z.string().datetime().optional(), endedAt: z.string().datetime().optional(),
-  model: z.record(ToolJson).optional(),
+  model: z.record(z.string(), ToolJson).optional(),
 }).strict();
 export const ToolWorkflow = z.object({
   version: z.literal(1), checkpoint: z.number().int().nonnegative(), rounds: z.array(ToolRound), calls: z.array(ToolCallState),

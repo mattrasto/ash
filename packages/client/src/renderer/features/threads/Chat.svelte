@@ -151,7 +151,8 @@
   });
   class ApiError extends Error { constructor(message:string, public status?:number) { super(message); } }
   async function api<T>(path:string, body?:object):Promise<T> {
-    const response = await fetch(`/api/${path}`, {method:body ? 'POST' : 'GET', headers:{'content-type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {}), signal:AbortSignal.timeout(path.endsWith('/frames')?120000:['permissions/formalize','permissions/review'].includes(path)?40000:10000)});
+    const timeoutMs=path.endsWith('/frames')?120000:path.endsWith('/workspace/refresh')?70000:['permissions/formalize','permissions/review'].includes(path)?40000:10000;
+    const response = await fetch(`/api/${path}`, {method:body ? 'POST' : 'GET', headers:{'content-type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {}), signal:AbortSignal.timeout(timeoutMs)});
     if (!response.ok) { const data = await response.json().catch(() => ({})); throw new ApiError(data.error ?? 'The request failed.',response.status); }
     return response.json();
   }

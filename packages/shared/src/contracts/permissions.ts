@@ -70,10 +70,10 @@ export function permissionForReview(rule:CapturedSavePermission):SavePermission 
 export const Verdict = z.enum(['applies','does_not_apply','insufficient_evidence']);
 export const PermissionEvaluation = z.object({
   type:z.literal('permission_evaluation'),action:ToolAction,binding:z.string(),
-  rules:z.array(CapturedPermissionView),matches:z.record(Verdict),
+  rules:z.array(CapturedPermissionView),matches:z.record(z.string(), Verdict),
   outcome:z.enum(['allowed','denied','needs-input','blocked']),reasons:z.array(z.string()),
-  sensitivity:Verdict,coverage:Verdict,answers:z.record(ToolJson),model:z.string(),
-  context:z.record(ToolJson).default({}),questions:z.array(z.object({id:z.string(),instructions:z.string()}).strict()).default([]),
+  sensitivity:Verdict,coverage:Verdict,answers:z.record(z.string(), ToolJson),model:z.string(),
+  context:z.record(z.string(), ToolJson).default({}),questions:z.array(z.object({id:z.string(),instructions:z.string()}).strict()).default([]),
   configuration:z.object({evaluator:z.string(),threshold:z.number().nullable()}).strict().default({evaluator:'not-captured',threshold:null}),
   scopes:z.array(z.object({target:z.string(),ruleIds:z.array(z.string().uuid())})).default([]),
   overrides:z.array(z.object({ruleId:z.string().uuid(),broaderId:z.string().uuid(),target:z.string()})).default([]),

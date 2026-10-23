@@ -9,7 +9,8 @@ export function localApplication(instance:Instance):ApplicationController{
   const invoke=<T=AdaptApplicationView>(action:string,input:unknown):Promise<T>=>new Promise((resolve,reject)=>{
     const require=createRequire(join(instance.checkout,'package.json'));
     const child=spawn(process.execPath,['--import',require.resolve('tsx'),join(instance.checkout,'scripts/dev/adapt-release-cli.ts'),action,join(instance.root,'instance.json')],{cwd:instance.checkout,stdio:['pipe','pipe','pipe'],env:{PATH:process.env.PATH,HOME:process.env.HOME,TMPDIR:join(instance.root,'tmp')}});
-    let output='',error='';const timer=setTimeout(()=>{child.kill();reject(new AdaptError(503,'Application control timed out; its saved state will be reconciled.'));},8000);
+    const timeoutMs=action==='refresh'?60000:8000;
+    let output='',error='';const timer=setTimeout(()=>{child.kill();reject(new AdaptError(503,'Application control timed out; its saved state will be reconciled.'));},timeoutMs);
     child.stdout.on('data',chunk=>{output+=chunk;if(output.length>64000)child.kill();});child.stderr.on('data',chunk=>{error+=chunk;if(error.length>32000)child.kill();});
     child.on('error',e=>{clearTimeout(timer);reject(e);});child.on('close',code=>{clearTimeout(timer);if(code!==0)return reject(new AdaptError(409,error.trim().slice(0,1500)||'Application control unavailable.'));try{resolve(JSON.parse(output));}catch{reject(new AdaptError(503,'Application status unavailable.'));}});
     child.stdin.end(JSON.stringify(input));

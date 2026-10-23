@@ -28,7 +28,7 @@ export const ModelExecution = z.object({
 }).strict();
 export type ModelExecution = z.infer<typeof ModelExecution>;
 export const RunState = z.object({ request_artifact_id: Uuid, response_artifact_id: Uuid.nullable(), model: ModelExecution.optional(), tools: ToolWorkflow.optional(), adapt:AdaptProgress.optional(), decisions:z.array(DecisionDependency).max(4096).refine(items=>new Set(items.map(d=>`${d.decisionId}:${d.stepKey}`)).size===items.length,'Duplicate Decision dependency.').optional() }).strict();
-export const RunError = z.object({ code: z.string(), message: z.string(), details: z.record(z.unknown()).optional() }).strict();
+export const RunError = z.object({ code: z.string(), message: z.string(), details: z.record(z.string(), z.unknown()).optional() }).strict();
 export const InputPayload = z.discriminatedUnion('type',[
   IncomingPayload,
   z.object({ type: z.literal('text_input'), text: z.string() }).strict(),
@@ -80,7 +80,7 @@ export type CodingRequest = z.infer<typeof CodingRequest>;
 export const CodingEvidence = z.object({type:z.literal('coding_evidence'),workspaceId:Uuid,checkpointId:Uuid,baseRevision:z.string(),tree:z.string(),patch:z.string().max(2*1024*1024),checks:z.string().max(32000),refresh:z.object({version:z.string(),fromCheckpointId:Uuid}).strict().optional()}).strict();
 export type MessagePayload = z.infer<typeof MessagePayload>;
 export const VideoArtifact=z.union([VideoPlan,VideoModelRequest,VideoModelResponse,VideoUnderstandingPayload]);
-export const EngineRequest=z.object({type:z.literal('engine_request'),stage:EngineStage,request:RequestPayload,scope:z.record(z.unknown())}).strict();
+export const EngineRequest=z.object({type:z.literal('engine_request'),stage:EngineStage,request:RequestPayload,scope:z.record(z.string(), z.unknown())}).strict();
 export const EngineArtifact=z.union([EngineRequest,EngineOutcome,z.object({type:z.literal('engine_response'),text:z.string().max(16000),model:ModelExecution.optional()}).strict()]);
 export type ArtifactPayload = z.infer<typeof FeatureEvidence> | z.infer<typeof ModelRoutingRequest> |  z.infer<typeof EngineArtifact> | z.infer<typeof InputPayload> | MessagePayload | RequestPayload | CodingRequest | z.infer<typeof CodingEvidence> | AdaptPreparation | AdaptCandidateEvidence | AdaptApplicationEvidence | z.infer<typeof DescriptionPayload> | ToolArtifact | PermissionEvaluation | z.infer<typeof VideoArtifact>;
 export interface ThreadView {

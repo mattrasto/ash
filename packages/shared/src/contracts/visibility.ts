@@ -40,7 +40,7 @@ export const VisibilityChoice=z.discriminatedUnion('kind',[
   z.object({kind:z.literal('until'),deadline:instant,reason:z.string().min(1)}).strict(),
 ]);
 export const NameChoice=z.object({title:z.string().trim().min(1).max(160),reason:z.string().min(1)}).strict();
-export const AssessmentResult=z.object({type:z.literal('thread_assessment_result'),kind:z.enum(['visibility','naming']),status:z.enum(['applied','discarded','failed','interrupted']),output:z.string(),reason:z.string(),model:z.record(z.unknown()).optional()}).strict();
+export const AssessmentResult=z.object({type:z.literal('thread_assessment_result'),kind:z.enum(['visibility','naming']),status:z.enum(['applied','discarded','failed','interrupted']),output:z.string(),reason:z.string(),model:z.record(z.string(), z.unknown()).optional()}).strict();
 export interface AssessmentView {id:string;kind:string;status:string;createdAt:string;finishedAt:string|null}
 export function fibonacciThreshold(count:number){let a=1,b=2,last=0;while(a<=count){last=a;[a,b]=[b,a+b];}return last;}
 
