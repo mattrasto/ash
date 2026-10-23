@@ -8,7 +8,7 @@ This develops the delegated-change slice in the [self-modification plan](self-mo
 
 ## Implemented workflow
 
-[Adapt implementation](../features/adapt.md) owns the code map, operating procedure and verification coverage for Thread handoff, managed coding, isolated renderer previews, protected local installation and parallel Workspace refresh. Recording uses the existing [feedback workflow](../../specs/features/recording-feedback.md); video reaches the coding harness as its captured caption/transcript.
+[Adapt implementation](../features/adapt.md) owns the code map, operating procedure and verification coverage for Thread handoff, managed coding, isolated renderer previews, protected local installation and parallel Workspace refresh. Recording uses the existing [feedback workflow](../../specs/features/recording-feedback.md). The [visual recording extension](recording-visual-context.md) supplies timestamped frames, captured narration and further inspection; that plan owns its validation status.
 
 ## Product shape
 

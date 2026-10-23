@@ -1,5 +1,5 @@
 import type { AttachmentView } from '@ash/shared';
-export interface DraftImage {id:string;filename:string;size:number;status:'uploading'|'ready'|'error';progress:number;error?:string;preview?:string;kind?:'image'|'video';captureId?:string;incomplete?:boolean;attachment?:AttachmentView;recordingDraft?:'pending'|'inserted'|'empty'|'error';recordingDraftError?:string}
+export interface DraftImage {id:string;filename:string;size:number;status:'uploading'|'ready'|'error';progress:number;error?:string;preview?:string;kind?:'image'|'video';captureId?:string;incomplete?:boolean;attachment?:AttachmentView;recordingDraft?:'pending'|'inserted'|'empty'|'error';recordingDraftError?:string;generatedDraft?:string;transcriptResultId?:string;framePreparing?:boolean;withoutFrames?:boolean}
 export function uploadImage(id:string,file:File,onProgress:(fraction:number)=>void,onRequest:(xhr:XMLHttpRequest)=>void):Promise<AttachmentView> {
   return new Promise((resolve,reject)=>{
     const xhr=new XMLHttpRequest();onRequest(xhr);

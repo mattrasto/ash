@@ -5,7 +5,7 @@ import {createWriteStream} from 'node:fs';
 import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import { join } from 'node:path';
-import { Uuid, isVideoAttachment, type AttachmentView } from '@ash/shared';
+import { RecordingOrigin,Uuid, isVideoAttachment, type AttachmentView } from '@ash/shared';
 import {installRecording} from './recording.ts';
 
 async function main() {
@@ -50,7 +50,8 @@ if(config.candidatePreview)win.webContents.setWebRTCIPHandlingPolicy('disable_no
 let canRestart=()=>true;
 let updating=false;
 win.webContents.on('will-prevent-unload',event=>{if(updating)event.preventDefault();});
-if(!config.candidatePreview){const disposeRecording=installRecording(win,config);canRestart=()=>!disposeRecording.busy();win.on('closed',disposeRecording);}
+let recordingOrigin:RecordingOrigin|undefined;
+if(!config.candidatePreview){const disposeRecording=installRecording(win,{...config,origin:threadId=>recordingOrigin?.threadId===threadId?recordingOrigin:{threadId}});canRestart=()=>!disposeRecording.busy();win.on('closed',disposeRecording);}
 function trusted(event:Electron.IpcMainInvokeEvent) {
   if(config.candidatePreview)throw new Error('Native bridge unavailable in renderer previews.');
   if(event.sender!==win.webContents || event.senderFrame!==win.webContents.mainFrame || new URL(event.senderFrame.url).origin!==new URL(config.url).origin)throw new Error('Invalid media request');
@@ -106,7 +107,9 @@ if(config.returnToThread){
     const runtime=JSON.parse(readFileSync(join(owner.root,'runtime.json'),'utf8')) as {instanceId:string;generation:string;controlUrl?:string};
     const parent=JSON.parse(readFileSync(join(owner.root,'server.json'),'utf8')) as {token:string};
     if(runtime.instanceId!==owner.id||runtime.generation!==owner.generation||!runtime.controlUrl)throw Error('Controlling Ash is not running.');
-    const response=await fetch(runtime.controlUrl+'/open?thread='+Uuid.parse(target.threadId)+(config.background?'&background=true':''),{method:'POST',headers:{authorization:'Bearer '+parent.token},signal:AbortSignal.timeout(10000)});
+    const preview=JSON.parse(readFileSync(join(config.root,'server.json'),'utf8')).candidatePreview;
+    const origin=RecordingOrigin.parse({threadId:target.threadId,workspaceId:preview?.workspaceId,previewTree:preview?.tree});
+    const response=await fetch(runtime.controlUrl+'/open?thread='+Uuid.parse(target.threadId)+'&origin='+encodeURIComponent(JSON.stringify(origin))+(config.background?'&background=true':''),{method:'POST',headers:{authorization:'Bearer '+parent.token},signal:AbortSignal.timeout(10000)});
     if(!response.ok)throw Error('Controlling Ash could not open the Thread.');
   })().catch(error=>dialog.showErrorBox('Back to Thread',error.message));}}]},{role:'windowMenu'}]));
 }
@@ -116,7 +119,7 @@ ipcMain.on('app:restart-ready',(event,requestId:unknown,ready:unknown)=>{
   process.send?.({type:'restart-ready',requestId,ready:ready&&canRestart()});
 });
 process.on('message',(message:unknown)=>{
-  const event=message as {type?:string;threadId?:string;requestId?:string};
+  const event=message as {type?:string;threadId?:string;requestId?:string;origin?:unknown};
   if(event.type==='prepare-restart'){
     if(!canRestart())process.send?.({type:'restart-ready',requestId:event.requestId,ready:false});
     else win.webContents.send('app:prepare-restart',event.requestId);
@@ -129,7 +132,7 @@ process.on('message',(message:unknown)=>{
   if(event.type==='capture'&&config.background&&config.candidatePreview)void win.webContents.capturePage().then(image=>process.send?.({type:'captured',requestId:event.requestId,png:image.toPNG().toString('base64')}));
   if(event.type==='refresh')win.webContents.reload();
   if(event.type==='open'){
-    if(event.threadId&&!config.candidatePreview){const id=Uuid.safeParse(event.threadId);if(id.success)win.webContents.send('adapt:thread',id.data);}
+    if(event.threadId&&!config.candidatePreview){const id=Uuid.safeParse(event.threadId);if(id.success){const origin=RecordingOrigin.safeParse(event.origin);recordingOrigin=origin.success&&origin.data.threadId===id.data?origin.data:undefined;win.webContents.send('adapt:thread',id.data);}}
     if(!config.background){win.show();win.focus();}
   }
 });

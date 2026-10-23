@@ -4,6 +4,7 @@ import { jevRouter } from './platform/models/jev-router.ts';
 import { ensureRoutingInstruction } from './modules/instructions/model-routing.ts';
 import { ThreadVisibility } from './modules/visibility/service.ts';
 import {adaptRuntime} from './modules/adapt/tools.ts';
+import {RecordingEvidence} from './modules/adapt/evidence.ts';
 import { Adapt } from './modules/adapt/service.ts';
 import { AdaptSources } from './modules/adapt/source.ts';
 import { AdaptError,ProviderFailure } from './modules/adapt/contract.ts';
@@ -99,7 +100,7 @@ const filesystemConfiguration=async()=>{
 await permissions.seed();if(!config.candidatePreview)await filesystemConfiguration().catch(()=>undefined);
 const codingBinding=config.candidatePreview?undefined:modelSession?managedCodex(await readOpenAIKey(instance.checkout)):deterministicCoding(join(instance.root,'adapt','fixture'));
 const applications=config.candidatePreview?undefined:new AdaptApplications(product,decisions,localApplication(instance));
-const adapt=new Adapt(product,new AdaptSources(instance.checkout,join(instance.root,'adapt','sources')),codingBinding,decisions,imageStorage,config.candidatePreview?undefined:localPreview(instance),modelSession?async()=>{const info=await modelSession.info();if(info.session?.expiresAt){try{await modelSession.reserve();}catch{throw new ProviderFailure(false,'coding_session_unavailable','The bounded live session is expired or has used its job allowance. Start a new session.');}return Date.parse(info.session.expiresAt);}return null;}:undefined,applications);
+const adapt=new Adapt(product,new AdaptSources(instance.checkout,join(instance.root,'adapt','sources')),codingBinding,decisions,imageStorage,config.candidatePreview?undefined:localPreview(instance),modelSession?async()=>{const info=await modelSession.info();if(info.session?.expiresAt){try{await modelSession.reserve();}catch{throw new ProviderFailure(false,'coding_session_unavailable','The bounded live session is expired or has used its job allowance. Start a new session.');}return Date.parse(info.session.expiresAt);}return null;}:undefined,applications,new RecordingEvidence(video));
 await ensureRoutingInstruction(product);
 const modelRouting=model.routingConfiguration?new ModelRouting(product,model,jevRouter(jevKey)):undefined;
 const bundledSceneRoot=fileURLToPath(new URL('./scenes/',import.meta.url));

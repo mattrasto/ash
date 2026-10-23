@@ -1,4 +1,5 @@
 import { mediaActivity } from '../visibility/state.ts';
+import {isDeepStrictEqual} from 'node:util';
 import {randomUUID,createHash} from 'node:crypto';
 import {Prisma,type PrismaClient,type Attachment,type Run} from '@prisma/client';
 import {VideoPlan,VideoModelRequest,VideoModelResponse,VideoUnderstandingPayload,VideoMetadata,RunState,VIDEO_ANALYSIS_LIMITS,
@@ -110,8 +111,15 @@ export class VideoAnalysis {
     const run=await this.db.run.findUniqueOrThrow({where:{id:owner.runId}}),state=RunState.parse(run.state);
     const call=state.tools?.calls.find(c=>c.id===owner.callId);
     if(run.status!=='running'||!call)throw new ModelFailure('video_tool_scope','The video tool call is no longer active.');
-    const rootId=randomUUID(),now=new Date();
-    await this.db.$transaction(async tx=>{
+    const plans=await this.db.artifact.findMany({where:{runId:run.id,payload:{path:['type'],equals:'video_analysis'}},orderBy:{createdAt:'asc'}});
+    const previous=plans.find(row=>row.sourceId===call.callArtifactId)??plans.find(row=>hash(VideoPlan.parse(row.payload))===hash(plan));
+    if(previous){
+      plan=VideoPlan.parse(previous.payload);cacheKey=hash(plan);
+      const completed=await this.db.artifact.findFirst({where:{sourceId:previous.id,payload:{path:['type'],equals:'video_understanding'}},orderBy:{createdAt:'asc'}});
+      if(completed)return {payload:VideoUnderstandingPayload.parse(completed.payload),artifactId:completed.id,runId:run.id};
+    }
+    const rootId=previous?.id??randomUUID(),now=new Date();
+    if(!previous)await this.db.$transaction(async tx=>{
       await tx.$queryRawUnsafe('SELECT id FROM runs WHERE id=$1::uuid FOR UPDATE',run.id);
       if(!await tx.run.findFirst({where:{id:run.id,status:'running'}}))throw new ModelFailure('video_interrupted','Video analysis stopped.');
       await tx.artifact.create({data:{id:rootId,layer:'act',sourceId:call.callArtifactId,runId:run.id,threadId:run.threadId,actor:'ash',payload:json(plan),createdAt:now,updatedAt:now}});
@@ -214,6 +222,17 @@ export class VideoAnalysis {
     const request=VideoModelRequest.parse({type:'video_model_request',attachmentId:plan.attachmentId,provider:plan.provider,model:plan.model,...input,
       responseSchema:VIDEO_RESPONSE_SCHEMA,
       options:{api:'interactions',store:false,thinkingLevel:'low',maxOutputTokens:plan.limits.maxOutputTokens,timeoutMs:plan.limits.requestTimeoutMs,responseSchemaVersion:2}});
+    const saved=await this.db.artifact.findMany({where:{runId:run.id,sourceId:rootId,payload:{path:['type'],equals:'video_model_request'}}});
+    const previous=saved.find(row=>{const value=VideoModelRequest.parse(row.payload);return value.operation===request.operation&&value.media?.start===request.media?.start;});
+    if(previous){
+      if(!isDeepStrictEqual(VideoModelRequest.parse(previous.payload),request))throw new ModelFailure('video_request_changed','The saved video request cannot be reconstructed. No new analysis was dispatched.');
+      requestIds.push(previous.id);
+      const response=await this.db.artifact.findFirst({where:{sourceId:previous.id,payload:{path:['type'],equals:'video_model_response'}}});
+      if(!response)throw new ModelFailure('video_outcome_unknown','A prior video request has no saved response. It will not be repeated automatically; inspect the retained source or retry explicitly.');
+      const result=VideoModelResponse.parse(response.payload).result;
+      if(!result)throw new ModelFailure('video_invalid_result','The saved analysis did not contain a complete structured result.');
+      return result;
+    }
     const id=randomUUID(),now=new Date(),path=request.media?await this.storage.checkedFile(plan.attachmentId,request.media.file,signal):undefined;
     signal.throwIfAborted();await this.db.$transaction(async tx=>{
       if(!await tx.run.findFirst({where:{id:run.id,status:'running'}}))throw new ModelFailure('video_interrupted','Video analysis stopped.');

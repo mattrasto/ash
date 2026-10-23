@@ -6,9 +6,9 @@ import {pipeline} from 'node:stream/promises';
 import type {FileHandle} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
-import {Uuid,VIDEO_LIMITS,type RecordingState,type RecordingFile} from '@ash/shared';
+import {Uuid,RecordingOrigin,VIDEO_LIMITS,type RecordingState,type RecordingFile} from '@ash/shared';
 
-export function installRecording(win:BrowserWindow,config:{root:string;url:string;background:boolean}) {
+export function installRecording(win:BrowserWindow,config:{root:string;url:string;background:boolean;origin?:(threadId:string)=>RecordingOrigin}) {
   const root=join(config.root,'files','recordings');
   let active:{id:string;threadId:string;file:FileHandle;displayId:number;source:string;mic:boolean;started:number|null;deadline:number;phase:RecordingState['phase'];sourceLost?:boolean}|undefined;
   let overlay:BrowserWindow|undefined,closing=false,quitting=false,beginning=false;
@@ -18,7 +18,7 @@ export function installRecording(win:BrowserWindow,config:{root:string;url:strin
   async function directory(){await mkdir(root,{recursive:true,mode:0o700});for(const path of [config.root,join(config.root,'files'),root]){const s=await lstat(path);if(!s.isDirectory()||s.isSymbolicLink())throw Error('Invalid recording storage.');}}
   function current(id:unknown){if(!active||active.id!==Uuid.parse(id))throw Error('This recording is no longer active.');return active;}
   const path=(id:string)=>join(root,Uuid.parse(id));
-  async function saved(id:string):Promise<RecordingFile>{await directory();const dir=path(id),s=await lstat(dir);if(!s.isDirectory()||s.isSymbolicLink())throw Error('Recording unavailable.');const metadata=JSON.parse(await readFile(join(dir,'recording.json'),'utf8')) as RecordingFile;Uuid.parse(metadata.id);Uuid.parse(metadata.threadId);if(metadata.id!==id)throw Error('Recording unavailable.');const file=await lstat(join(dir,'capture.webm'));if(!file.isFile()||file.isSymbolicLink()||file.nlink!==1)throw Error('Recording unavailable.');return {...metadata,size:file.size};}
+  async function saved(id:string):Promise<RecordingFile>{await directory();const dir=path(id),s=await lstat(dir);if(!s.isDirectory()||s.isSymbolicLink())throw Error('Recording unavailable.');const metadata=JSON.parse(await readFile(join(dir,'recording.json'),'utf8')) as RecordingFile;Uuid.parse(metadata.id);Uuid.parse(metadata.threadId);if(metadata.origin)RecordingOrigin.parse(metadata.origin);if(metadata.id!==id)throw Error('Recording unavailable.');const file=await lstat(join(dir,'capture.webm'));if(!file.isFile()||file.isSymbolicLink()||file.nlink!==1)throw Error('Recording unavailable.');return {...metadata,size:file.size};}
   async function persist(file:RecordingFile){const dir=path(file.id),tmp=join(dir,'recording.tmp');await writeFile(tmp,JSON.stringify(file),{mode:0o600});await rename(tmp,join(dir,'recording.json'));}
   function state():RecordingState|null {if(!active)return null;const elapsedMs=active.started===null?0:Math.max(0,performance.now()-active.started),remainingMs=active.started===null?VIDEO_LIMITS.recordingMs:Math.max(0,active.deadline-performance.now());return {id:active.id,threadId:active.threadId,source:active.source,phase:active.phase,mic:active.mic,elapsedMs,remainingMs,warning:active.started!==null&&remainingMs<=VIDEO_LIMITS.warningMs};}
   function update(){const value=state();if(!win.isDestroyed())win.webContents.send('recording:state',value);if(overlay&&!overlay.isDestroyed())overlay.webContents.send('recording:state',value);}
@@ -48,7 +48,7 @@ export function installRecording(win:BrowserWindow,config:{root:string;url:strin
     await directory();const id=randomUUID(),dir=path(id);await mkdir(dir,{mode:0o700});const file=await open(join(dir,'capture.webm'),'wx',0o600),display=screen.getDisplayMatching(win.getBounds());
     active={id,threadId:thread as string,file,displayId:display.id,source:`Display ${screen.getAllDisplays().findIndex(d=>d.id===display.id)+1}`,mic,started:null,deadline:0,phase:'starting'};
     win.webContents.setBackgroundThrottling(false);
-    try{await persist({id,threadId:thread as string,filename:`screen-${new Date().toISOString().replace(/[:.]/g,'-')}.webm`,size:0,createdAt:new Date().toISOString(),incomplete:true});await showOverlay();update();return {id};}catch(error){await file.close();await rm(dir,{recursive:true,force:true});cleared();throw error;}
+    try{await persist({id,threadId:thread as string,filename:`screen-${new Date().toISOString().replace(/[:.]/g,'-')}.webm`,size:0,createdAt:new Date().toISOString(),incomplete:true,origin:config.origin?.(thread as string)??{threadId:thread as string}});await showOverlay();update();return {id};}catch(error){await file.close();await rm(dir,{recursive:true,force:true});cleared();throw error;}
     }finally{beginning=false;}
   });
   ipcMain.handle('recording:ready',async(event,id:unknown,mic:unknown)=>{trusted(event);const capture=current(id);if(typeof mic!=='boolean'||capture.phase!=='starting')throw Error('Recording start was cancelled.');capture.mic=mic;capture.started=performance.now();capture.deadline=capture.started+VIDEO_LIMITS.recordingMs;capture.phase='recording';update();});
@@ -77,7 +77,7 @@ export function installRecording(win:BrowserWindow,config:{root:string;url:strin
   ipcMain.handle('recording:upload',async(event,id:unknown)=>{
     trusted(event);const key=Uuid.parse(id);if(uploaded.has(key))return uploaded.get(key);
     const task=(async()=>{const value=await saved(key);if(active?.id===key)throw Error('Recording has not finished.');const file=await open(join(path(key),'capture.webm'),constants.O_RDONLY|constants.O_NOFOLLOW);
-      try{const response=await fetch(new URL(`/api/attachments/${key}`,config.url),{method:'PUT',headers:{'content-type':'application/x-ash-video','x-image-filename':encodeURIComponent(value.filename),'x-recording-incomplete':String(value.incomplete),'x-recording-source':'screen'},body:file.createReadStream() as any,duplex:'half',signal:AbortSignal.timeout(240000)} as RequestInit);
+      try{const response=await fetch(new URL(`/api/attachments/${key}`,config.url),{method:'PUT',headers:{'content-type':'application/x-ash-video','x-image-filename':encodeURIComponent(value.filename),'x-recording-incomplete':String(value.incomplete),'x-recording-source':'screen','x-recording-origin':encodeURIComponent(JSON.stringify(value.origin??{threadId:value.threadId}))},body:file.createReadStream() as any,duplex:'half',signal:AbortSignal.timeout(240000)} as RequestInit);
         if(!response.ok){const problem=await response.json().catch(()=>({}));throw Error(problem.error??'Video upload failed. Retry or save the local recording.');}return response.json();
       }finally{await file.close().catch(()=>{});}})();uploaded.set(key,task);try{return await task;}finally{uploaded.delete(key);}
   });

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { modelContentText, type CapturedContext } from '@ash/shared';
-  let {captured,onSource,onChange}:{captured:CapturedContext;onSource:(id:string)=>void;onChange?:(id:string)=>void}=$props();
+  let {captured,onSource,onChange,artifactId}:{captured:CapturedContext;artifactId?:string;onSource:(id:string)=>void;onChange?:(id:string)=>void}=$props();
   let copyStatus=$state('');
   const omitted=$derived(captured.selection.omissions ?? {history:captured.selection.omitted.filter(item=>item.reason==='context-limit').length,notCompleted:captured.selection.omitted.filter(item=>item.reason==='not-completed').length,superseded:captured.selection.omitted.filter(item=>item.reason==='superseded').length});
   async function copy() {try{await window.ashMedia.copyText(captured.messages.map(message=>`${message.role}:\n${modelContentText(message.content)}`).join('\n\n'));copyStatus='Copied';}catch{copyStatus='Could not copy context.';}}
@@ -18,7 +18,7 @@
       {@const source=captured.selection.artifacts.find(item=>item.messageIndex===index)}
       <div class="item"><strong>{index+1}. {instruction?`${instruction.scope??'global'} instructions`:captured.selection.composition?.messageIndex===index?'Composition rules':message.role==='assistant'?'Ash history':message.role==='user'?(captured.purpose?.startsWith('thread_')?'Thread evidence':captured.purpose?.startsWith('engine_')?'Incoming evidence':modelContentText(message.content).startsWith('External source:')?'External source':'User history'):message.role}</strong><p>{modelContentText(message.content)}</p>
         {#if source}<button class="ash-button source" onclick={()=>onSource(source.id)}>Open source message</button><code>{source.id}</code>{/if}
-        {#if Array.isArray(message.content)}{#each message.content as block}{#if block.type==='image'}<img class="captured-image" src={`/api/attachments/${block.attachmentId}/model`} alt={block.description}/><small>Pixels supplied · {block.image.width} × {block.image.height}</small><code>{block.image.hash}</code>{/if}{/each}{/if}
+        {#if Array.isArray(message.content)}{#each message.content as block}{#if block.type==='image'}<img class="captured-image" src={block.frame&&artifactId?`/api/attachments/${block.attachmentId}/frame/${artifactId}/${block.image.hash}`:`/api/attachments/${block.attachmentId}/model`} alt={block.description}/><small>Pixels supplied · {block.image.width} × {block.image.height}</small><code>{block.image.hash}</code>{/if}{/each}{/if}
       </div>
     {/each}
   </details>

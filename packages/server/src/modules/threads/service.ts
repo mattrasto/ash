@@ -2,7 +2,7 @@ import { ModelRoutingRequest, RoutingState, ChangeRouting } from '@ash/shared';
 import { ModelRouting, retryRoutingRequest } from './model-routing.ts';
 import { randomUUID, createHash } from 'node:crypto';
 import { Prisma, type Artifact, type PrismaClient, type Run } from '@prisma/client';
-import { InputPayload, MessagePayload, RequestPayload, CodingRequest, RunState, ModelExecution, isActive, isVideoAttachment, AttachmentMetadata, type ModelMode, type ToolLimits, DEFAULT_TOOL_LIMITS, IncomingPayload, ActPlan } from '@ash/shared';
+import { InputPayload, MessagePayload, RequestPayload, CodingRequest, RunState, ModelExecution, isActive, isVideoAttachment, AttachmentMetadata, type RecordingReview,type ModelMode, type ToolLimits, DEFAULT_TOOL_LIMITS, IncomingPayload, ActPlan } from '@ash/shared';
 import type { Adapt } from '../adapt/service.ts';
 import { selectContext, ContextLimitError, type ScopedInstruction } from '../context/select.ts';
 import { memberships } from '../organization/service.ts';
@@ -224,15 +224,16 @@ export class Threads {
     if (row.requestHash !== hash) throw new ThreadError(409, 'This submission key was already used for different content.');
     return row;
   }
-  async submit(threadId: string, requestKey: string, text: string, mode: ModelMode, attachmentIds:string[]=[]) {
-    return this.accept(threadId, requestKey, {kind:'send',text,mode,...(attachmentIds.length?{attachmentIds}:{})});
+  async submit(threadId: string, requestKey: string, text: string, mode: ModelMode, attachmentIds:string[]=[],recordings?:RecordingReview[]) {
+    return this.accept(threadId, requestKey, {kind:'send',text,mode,...(attachmentIds.length?{attachmentIds}:{}),...(recordings?.length?{recordings}:{})});
   }
-  async submitMessage(threadId:string,requestKey:string,text:string,mode:ModelMode,attachmentIds:string[]) {
+  async submitMessage(threadId:string,requestKey:string,text:string,mode:ModelMode,attachmentIds:string[],recordings?:RecordingReview[]) {
+    if(recordings?.some(r=>!attachmentIds.includes(r.attachmentId))||new Set(recordings?.map(r=>r.attachmentId)).size!==(recordings?.length??0))throw new ThreadError(400,'Recording review must match the submitted attachments.');
     const rows=await this.db.attachment.findMany({where:{id:{in:attachmentIds}}});
     const onlyVideos=!text&&attachmentIds.length>0&&rows.length===attachmentIds.length&&rows.every(row=>'durationSeconds' in AttachmentMetadata.parse(row.metadata));
-    if(!onlyVideos||(await this.db.thread.findUnique({where:{id:threadId}}))?.interactionMode==='adapt')return this.submit(threadId,requestKey,text,mode,attachmentIds);
+    if(!onlyVideos||(await this.db.thread.findUnique({where:{id:threadId}}))?.interactionMode==='adapt')return this.submit(threadId,requestKey,text,mode,attachmentIds,recordings);
     if(this.stopping)throw new ThreadError(503,'The backend is stopping.');
-    const hash=createHash('sha256').update(JSON.stringify({threadId,text,mode,attachmentIds})).digest('hex');
+    const hash=createHash('sha256').update(JSON.stringify({threadId,text,mode,attachmentIds,...(recordings?.length?{recordings}:{})})).digest('hex');
     return this.db.$transaction(async tx=>{
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${requestKey},0))`;
       await tx.$queryRaw`SELECT id FROM threads WHERE id=${threadId}::uuid FOR UPDATE`;
@@ -242,8 +243,8 @@ export class Threads {
       const thread=await tx.thread.findUnique({where:{id:threadId}});if(!thread)throw new ThreadError(404,'Thread not found.');
       if(await tx.run.findFirst({where:{threadId,status:{in:['queued','running']}}}))throw new ThreadError(409,'A response is already active in this thread.');
       await retainImages(tx,attachmentIds);const now=new Date(),surfaceId=randomUUID();
-      await tx.artifact.create({data:{id:requestKey,layer:'input',threadId,actor:'user',payload:InputPayload.parse({type:'message_input',text,attachmentIds,submissionHash:hash}),createdAt:now,updatedAt:now}});
-      await tx.artifact.create({data:{id:surfaceId,layer:'surface',sourceId:requestKey,threadId,actor:'user',payload:MessagePayload.parse({type:'message',initial_thread_id:threadId,speaker:'user',content:attachmentIds.map(attachmentId=>({type:'video',attachmentId}))}),createdAt:now,updatedAt:now}});
+      await tx.artifact.create({data:{id:requestKey,layer:'input',threadId,actor:'user',payload:InputPayload.parse({type:'message_input',text,attachmentIds,...(recordings?.length?{recordings}:{}),submissionHash:hash}),createdAt:now,updatedAt:now}});
+      await tx.artifact.create({data:{id:surfaceId,layer:'surface',sourceId:requestKey,threadId,actor:'user',payload:MessagePayload.parse({type:'message',initial_thread_id:threadId,speaker:'user',...(recordings?.length?{recordings}:{}),content:attachmentIds.map(attachmentId=>({type:'video',attachmentId}))}),createdAt:now,updatedAt:now}});
       await referenceImages(tx,requestKey,attachmentIds);await referenceImages(tx,surfaceId,attachmentIds);
       await tx.thread.update({where:{id:threadId},data:{updatedAt:now}});
       return {id:requestKey,requestKey,status:'stored',inputArtifactId:requestKey,threadId};
@@ -254,7 +255,7 @@ export class Threads {
     if (!previous?.threadId) throw new ThreadError(404, 'Thread Run not found.');
     return this.accept(previous.threadId, requestKey, {kind:'retry',previousId:id,mode});
   }
-  private async accept(threadId: string, requestKey: string, command: {kind:'send';text:string;mode:ModelMode;attachmentIds?:string[]} | {kind:'retry';previousId:string;mode:ModelMode}) {
+  private async accept(threadId: string, requestKey: string, command: {kind:'send';text:string;mode:ModelMode;attachmentIds?:string[];recordings?:RecordingReview[]} | {kind:'retry';previousId:string;mode:ModelMode}) {
     if (this.stopping) throw new ThreadError(503, 'The backend is stopping.');
     const hash = createHash('sha256').update(JSON.stringify({threadId,...command})).digest('hex');
     const existing = await this.db.run.findUnique({where:{requestKey}});
@@ -278,11 +279,12 @@ export class Threads {
           let request: RequestPayload | CodingRequest;
           if (command.kind === 'send') {
             const attachmentIds=command.attachmentIds??[];
+            if(command.recordings?.some(r=>!attachmentIds.includes(r.attachmentId))||new Set(command.recordings?.map(r=>r.attachmentId)).size!==(command.recordings?.length??0))throw new ThreadError(400,'Recording review must match the submitted attachments.');
             const attachments=await retainImages(tx,attachmentIds);
             inputId = randomUUID();
-            await tx.artifact.create({data:{id:inputId,layer:'input',sourceId:null,threadId,runId:null,actor:'user',payload:InputPayload.parse({type:attachmentIds.length?'message_input':'text_input',text:command.text,...(attachmentIds.length?{attachmentIds}:{})}),createdAt:now,updatedAt:now}});
+            await tx.artifact.create({data:{id:inputId,layer:'input',sourceId:null,threadId,runId:null,actor:'user',payload:InputPayload.parse({type:attachmentIds.length?'message_input':'text_input',text:command.text,...(attachmentIds.length?{attachmentIds,...(command.recordings?.length?{recordings:command.recordings}:{})}:{})}),createdAt:now,updatedAt:now}});
             const surfaceId=randomUUID();
-            await tx.artifact.create({data:{id:surfaceId,layer:'surface',sourceId:inputId,threadId,runId:null,actor:'user',payload:MessagePayload.parse({type:'message',initial_thread_id:threadId,speaker:'user',content:[...(command.text?[{type:'text',text:command.text}]:[]),...attachmentIds.map(attachmentId=>({type:isVideoAttachment(attachments.find(a=>a.id===attachmentId)!)?'video':'image',attachmentId}))]}),createdAt:now,updatedAt:now}});
+            await tx.artifact.create({data:{id:surfaceId,layer:'surface',sourceId:inputId,threadId,runId:null,actor:'user',payload:MessagePayload.parse({type:'message',initial_thread_id:threadId,speaker:'user',...(command.recordings?.length?{recordings:command.recordings}:{}),content:[...(command.text?[{type:'text',text:command.text}]:[]),...attachmentIds.map(attachmentId=>({type:isVideoAttachment(attachments.find(a=>a.id===attachmentId)!)?'video':'image',attachmentId}))]}),createdAt:now,updatedAt:now}});
             await referenceImages(tx,inputId,attachmentIds);await referenceImages(tx,surfaceId,attachmentIds);
             const instruction = await tx.instruction.findUniqueOrThrow({where:{key:'response'}});
             const instructions:ScopedInstruction[] = [{document:instruction,scope:'global',ownerId:'response'}];

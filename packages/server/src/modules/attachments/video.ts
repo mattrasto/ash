@@ -9,14 +9,14 @@ import sharp from 'sharp';
 import {VideoMetadata,VideoFile,ImageFile,VIDEO_LIMITS} from '@ash/shared';
 import {AttachmentError} from './storage.ts';
 
-export async function mediaCommand(binary:string,args:string[],timeout=180000,signal?:AbortSignal) {
+export async function mediaCommand(binary:string,args:string[],timeout=180000,signal?:AbortSignal,includeStderr=false) {
   return new Promise<string>((resolve,reject)=>{
     const child=spawn(binary,args,{stdio:['ignore','pipe','pipe'],env:{PATH:process.env.PATH},signal});let output='',errors='';
     const timer=setTimeout(()=>child.kill('SIGKILL'),timeout);
     child.stdout.on('data',chunk=>{if(output.length<1000000)output+=String(chunk);else child.kill('SIGKILL');});
-    child.stderr.on('data',chunk=>{errors=(errors+String(chunk)).slice(-4000);});
+    child.stderr.on('data',chunk=>{if(includeStderr){if(errors.length<1000000)errors+=String(chunk);else child.kill('SIGKILL');}else errors=(errors+String(chunk)).slice(-4000);});
     child.on('error',error=>{clearTimeout(timer);reject(error);});
-    child.on('close',code=>{clearTimeout(timer);if(code===0)resolve(output);else reject(new AttachmentError(400,'The video could not be decoded or prepared for playback.'));});
+    child.on('close',code=>{clearTimeout(timer);if(code===0)resolve(includeStderr?output+errors:output);else reject(new AttachmentError(400,'The video could not be decoded or prepared for playback.'));});
   });
 }
 export async function fileHash(path:string){const hash=createHash('sha256');for await(const bytes of createReadStream(path))hash.update(bytes);return hash.digest('hex');}
@@ -40,7 +40,9 @@ export async function processVideo(path:string,temporaryRoot:string) {
     if(!Number.isFinite(duration)||duration<=0)throw new AttachmentError(400,'The video has no playable duration.');
     const thumbnailPath=join(dir,'thumbnail.png');
     await mediaCommand(ffmpeg!,['-nostdin','-v','error','-i',playbackPath,'-ss',String(Math.min(.5,duration/2)),'-frames:v','1','-vf','scale=320:320:force_original_aspect_ratio=decrease','-y',thumbnailPath],20000);
-    const thumb=await sharp(await readFile(thumbnailPath)).webp({quality:80}).toBuffer({resolveWithObject:true});
+    // A short clip may have no frame at its midpoint; the first frame still makes a valid thumbnail.
+    const thumbnailBytes=await readFile(thumbnailPath).catch(async()=>{await mediaCommand(ffmpeg!,['-nostdin','-v','error','-i',playbackPath,'-frames:v','1','-vf','scale=320:320:force_original_aspect_ratio=decrease','-y',thumbnailPath],20000);return readFile(thumbnailPath);});
+    const thumb=await sharp(thumbnailBytes).webp({quality:80}).toBuffer({resolveWithObject:true});
     const rawSize=(await stat(path)).size,playbackSize=(await stat(playbackPath)).size;
     if(rawSize>VIDEO_LIMITS.perFile||playbackSize>VIDEO_LIMITS.perFile)throw new AttachmentError(413,'Each video must be at most 2 GiB.');
     const rawFormat=formats.includes('webm')?'video/webm':formats.includes('mov')&&await isQuickTime(path)?'video/quicktime':'video/mp4';

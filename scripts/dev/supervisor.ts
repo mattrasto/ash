@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { randomInt } from 'node:crypto';
 import { createServer as createViteServer, type ViteDevServer } from 'vite';
-import { Instance, ServerConfig } from '../../packages/shared/src/index.ts';
+import { Instance, ServerConfig, RecordingOrigin } from '../../packages/shared/src/index.ts';
 import { atomic, json, processRef, stopProcess, fingerprint, childEnvironment } from './io.ts';
 import { buildMain, rendererConfig } from './build.ts';
 import type { Runtime } from './lifecycle.ts';
@@ -69,8 +69,8 @@ async function remember(child: ChildProcess) {
   state.children.push(ref); await save();
   return ref;
 }
-async function launchClient(options: { windowed?: boolean; background?: boolean;threadId?:string } = {}) {
-  if (electronChild && electronChild.exitCode === null && !electronChild.killed) {electronChild.send({type:'open',threadId:(options as {threadId?:string}).threadId});return;}
+async function launchClient(options: { windowed?: boolean; background?: boolean;threadId?:string;origin?:RecordingOrigin } = {}) {
+  if (electronChild && electronChild.exitCode === null && !electronChild.killed) {electronChild.send({type:'open',threadId:options.threadId,origin:options.origin});return;}
   const mainPath = await buildMain(instance.checkout, join(instance.root, 'build'));
   const installed=await readActive(instance);
   await atomic(join(instance.root, 'client.json'), { root: instance.root, label: instance.label+(installed?' · UI '+installed.current.slice(0,7):''),installedUI:installed?.current, instanceId: instance.id,
@@ -100,7 +100,7 @@ async function launchClient(options: { windowed?: boolean; background?: boolean;
   await ready;
   if(!config.candidatePreview&&await releases.needsRecovery()){await checkClientHealth();await releases.confirmRecovery();}
   if(debugging){state.debuggingPort=Number((await readFile(join(instance.root,'electron','DevToolsActivePort'),'utf8')).split('\n')[0]);await save();}
-  if(options.threadId)child.send({type:'open',threadId:options.threadId});
+  if(options.threadId)child.send({type:'open',threadId:options.threadId,origin:options.origin});
 }
 async function startServices() {
   if(config.candidatePreview?.releaseId)await releases.serveVerifiedPreview(config.candidatePreview.ownerInstancePath,config.candidatePreview.releaseId);
@@ -163,7 +163,7 @@ const control = createServer(async (request, response) => {
     const url = new URL(request.url!, 'http://127.0.0.1');
     if (url.pathname === '/stop') { response.end('{"stopping":true}'); void shutdown('stopped'); }
     else if (url.pathname === '/open') {
-      await launchClient({ ...(url.searchParams.has('thread')&&/^[0-9a-f-]{36}$/.test(url.searchParams.get('thread')!)?{threadId:url.searchParams.get('thread')!}:{}), ...(url.searchParams.has('windowed') ? {windowed:true} : {}), ...(url.searchParams.has('background') ? {background:true} : {}) });
+      await launchClient({ ...(url.searchParams.has('origin')?{origin:RecordingOrigin.parse(JSON.parse(url.searchParams.get('origin')!))}:{}), ...(url.searchParams.has('thread')&&/^[0-9a-f-]{36}$/.test(url.searchParams.get('thread')!)?{threadId:url.searchParams.get('thread')!}:{}), ...(url.searchParams.has('windowed') ? {windowed:true} : {}), ...(url.searchParams.has('background') ? {background:true} : {}) });
       response.end('{"opened":true}');
     }
     else if(url.pathname==='/capture'&&background&&config.candidatePreview){

@@ -8,10 +8,12 @@ import { runtime } from '../../scripts/dev/lifecycle.ts';
 test('adapt-desktop: Thread mode, evidence and drafts use the shared work surface',async({ash,instance},testInfo)=>{
   const {page}=ash;await page.emulateMedia({reducedMotion:'reduce'});
   const message=page.getByRole('textbox',{name:'Message',exact:true}),mode=page.getByRole('button',{name:'Adapt',exact:true});
+  const recordButton=page.getByRole('button',{name:'Record screen',exact:true});await expect(recordButton).toHaveCount(0);
   await message.fill('Keep this draft while changing modes.');await message.evaluate(el=>el.setAttribute('data-adapt-editor','original'));
   await mode.focus();await mode.press('Enter');await expect(mode).toHaveAttribute('aria-pressed','true');
   await expect(message).toHaveValue('Keep this draft while changing modes.');await expect(message).toHaveAttribute('data-adapt-editor','original');
   await expect(page.getByRole('region',{name:'Adapt workspace',exact:true})).toBeVisible();
+  await expect(recordButton).toBeVisible();await message.focus();await page.keyboard.press('Tab');await expect(recordButton).toBeFocused();await page.keyboard.press('Tab');await expect(page.getByRole('button',{name:'Attach images or videos',exact:true})).toBeFocused();
   await message.fill('Save a source change for this offline fixture.');await message.press('Enter');
   const changes=page.getByRole('button',{name:'Changes',exact:true});await expect(changes).toBeEnabled({timeout:25000});
   await page.getByRole('button',{name:'Run preview',exact:true}).click();
@@ -46,7 +48,7 @@ test('adapt-desktop: Thread mode, evidence and drafts use the shared work surfac
   await page.screenshot({path:testInfo.outputPath('adapt-narrow.png')});
   await page.keyboard.press('Escape');await expect(page.getByLabel('Development inspector',{exact:true})).toHaveCount(0);
   await mode.click();await expect(mode).toHaveAttribute('aria-pressed','false');await expect(message).toHaveValue('A follow-up draft that must survive inspection.');
-  await expect(page.getByRole('region',{name:'Adapt workspace',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'Adapt workspace',exact:true})).toHaveCount(0);await expect(recordButton).toHaveCount(0);
 });
 
 test('adapt-decision-timeline: answered questions stay before later messages',async({ash})=>{

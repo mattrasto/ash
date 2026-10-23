@@ -59,3 +59,5 @@ export * from './contracts/visibility.ts';
 
 export * from './contracts/model-routing.ts';
 export * from './contracts/adapt.ts';
+
+export {RecordingOrigin,RecordingReview,VideoFrame} from './contracts/attachments.ts';

@@ -11,6 +11,12 @@ export interface Scenario {
 
 // Product rules stay in specs/. These IDs identify executable checks, not new requirements.
 const inventory: Omit<Scenario, 'group' | 'file'>[] = [
+  {id:'adapt-recording-context',title:'Recorded pixels, measured frame times and reviewed intent reach coding',suite:'workflow',requirements:['VID-R20','VID-R21','VID-R23','VID-A22','VID-A24','VID-A26'],fixture:'scratchpad / empty'},
+  {id:'adapt-recording-failures',title:'Unknown paid outcomes and cancelled recording reads do not replay',suite:'workflow',requirements:['VID-R22','VID-R24','VID-A25','VID-A27'],fixture:'scratchpad / empty'},
+  {id:'adapt-recording-desktop',title:'Screenshot retry and explicit omission preserve reviewed drafts',suite:'workflow',requirements:['VID-R24','VID-A26','VID-A27','DS-V07','DS-V10'],fixture:'scratchpad / empty'},
+  {id:'adapt-recording-tools-recovery',title:'Coding retrieves recording evidence and resumes saved results after restart',suite:'workflow',requirements:['VID-R22','VID-A23','VID-A25'],fixture:'scratchpad / empty'},
+  {id:'adapt-recording-scope-handoff',title:'Automatic recording handoff preserves pixels and denies foreign evidence',suite:'workflow',requirements:['VID-R22','VID-A22','VID-A26','ADAPT-R14'],fixture:'scratchpad / empty'},
+
  {id:'adapt-compiler-assets',title:'Protected compilation allows renderer assets and denies host-file asset transforms',suite:'boundary',requirements:['ADAPT-R09','ADAPT-R11','ADAPT-V08'],fixture:'none'},
  {id:'adapt-auto-entry',title:'Direct app change requests hand the same captured Run into Adapt',suite:'workflow',requirements:['ADAPT-R14','ADAPT-V13'],fixture:'scratchpad / empty'},
  {id:'adapt-auto-recovery',title:'Automatic coding handoff survives restart and cancellation without duplicate dispatch',suite:'workflow',requirements:['ADAPT-R14','ADAPT-R05','ADAPT-V13'],fixture:'scratchpad / empty'},
@@ -197,6 +203,7 @@ const inventory: Omit<Scenario, 'group' | 'file'>[] = [
 
 export interface TestGroup { id: string; suite: Suite; file: string; scenarios: string[]; exclusive?: boolean }
 export const testGroups: TestGroup[] = [
+  {"id":"adapt-recording","suite":"workflow","file":"tests/integration/adapt-recording.test.ts","scenarios":["adapt-recording-context","adapt-recording-tools-recovery","adapt-recording-scope-handoff","adapt-recording-failures","adapt-recording-desktop"],"exclusive":false},
   {"id": "adapt-application", "suite": "workflow", "file": "tests/integration/adapt-application.test.ts", "scenarios": ["adapt-application-authority", "adapt-application-stale", "adapt-application-recovery"], "exclusive": false},
   {"id": "adapt-parallel-apply", "suite": "workflow", "file": "tests/integration/adapt-parallel-apply.test.ts", "scenarios": ["adapt-parallel-apply", "adapt-parallel-conflict-apply"], "exclusive": true},
   {"id": "adapt-preview", "suite": "workflow", "file": "tests/integration/adapt-preview.test.ts", "scenarios": ["adapt-native-preview", "adapt-preview-protected-paths"], "exclusive": false},

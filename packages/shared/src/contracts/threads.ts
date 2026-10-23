@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { RoutingAttempt, RoutingSelection } from './model-routing.ts';
 import { ThreadChange, type ApplicationChangeView, type ThreadLifecycle } from './visibility.ts';
 import { IncomingPayload, IncomingSource, IncomingEvent, EngineOutcome, EngineStage } from './artifacts.ts';
-import { ImageBlock, VideoBlock, VideoFile, TextBlock, ModelContent, type AttachmentView } from './attachments.ts';
+import { ImageBlock, VideoBlock, VideoFile, VideoFrame, RecordingOrigin, RecordingReview, TextBlock, ModelContent, type AttachmentView } from './attachments.ts';
 import { ToolRequest, ToolWorkflow, FeatureEvidence, type ToolArtifact } from './tools.ts';
 import {VideoPlan,VideoModelRequest,VideoModelResponse,VideoUnderstandingPayload} from './video-understanding.ts';
 import { DecisionDependency, type DecisionView } from './decisions.ts';
@@ -14,7 +14,7 @@ export const ModelMode = z.enum(['normal', 'slow', 'fail', 'fail-before', 'empty
 export type ModelMode = z.infer<typeof ModelMode>;
 export const CreateThread = z.object({ id: Uuid, title: z.string().trim().min(1).max(160), topicId:Uuid.optional() }).strict();
 export const UpdateThread = ThreadChange;
-export const SendMessage = z.object({ requestKey: Uuid, text: z.string().trim().max(4000), mode: ModelMode.default('normal'), attachmentIds:z.array(Uuid).default([]) }).strict()
+export const SendMessage = z.object({ requestKey: Uuid, text: z.string().trim().max(4000), mode: ModelMode.default('normal'), attachmentIds:z.array(Uuid).default([]),recordings:z.array(RecordingReview).max(32).optional() }).strict()
   .refine(value=>value.text.length>0 || value.attachmentIds.length>0,'A message needs text or an attachment.')
   .refine(value=>new Set(value.attachmentIds).size===value.attachmentIds.length,'Duplicate attachment references.');
 export const RetryRun = z.object({ requestKey: Uuid, mode: ModelMode.default('normal') }).strict();
@@ -32,14 +32,14 @@ export const RunError = z.object({ code: z.string(), message: z.string(), detail
 export const InputPayload = z.discriminatedUnion('type',[
   IncomingPayload,
   z.object({ type: z.literal('text_input'), text: z.string() }).strict(),
-  z.object({ type: z.literal('message_input'), text: z.string(), attachmentIds:z.array(Uuid),submissionHash:z.string().optional() }).strict(),
+  z.object({ type: z.literal('message_input'), text: z.string(), attachmentIds:z.array(Uuid),recordings:z.array(RecordingReview).max(32).optional(),submissionHash:z.string().optional() }).strict(),
   z.object({ type: z.literal('image_upload'), attachmentId:Uuid, filename:z.string() }).strict(),
   z.object({ type: z.literal('video_upload'), attachmentId:Uuid, filename:z.string() }).strict(),
 ]);
 export const DescriptionPayload = z.object({type:z.literal('image_description'),attachmentId:Uuid,text:z.string()}).strict();
 export const MessagePayload = z.object({
   type: z.literal('message'), initial_thread_id: Uuid, speaker: z.enum(['user', 'ash', 'source']),
-  inputArtifactId:Uuid.optional(), source:IncomingSource.optional(),
+  inputArtifactId:Uuid.optional(), source:IncomingSource.optional(),recordings:z.array(RecordingReview).max(32).optional(),
   content: z.array(z.union([TextBlock,ImageBlock,VideoBlock])),
 }).strict().refine(value=>value.speaker!=='source'||!!value.source&&!!value.inputArtifactId,'Source entries require origin metadata and their Input identity.');
 export const OpenAIOptions = z.object({
@@ -65,7 +65,7 @@ const requestContent = {
     maxCharacters: z.number().int().positive().optional(),
     itemWindow:z.number().int().positive().optional(), omittedItems:z.number().int().nonnegative().optional(),
     images:z.array(z.object({id:Uuid,artifactId:Uuid,representation:z.enum(['image','description']),reason:z.enum(['recent','history-window','image-budget','text-only']),summaryRunId:Uuid.nullable()}).strict()).optional(),
-    videos:z.array(z.object({id:Uuid,artifactId:Uuid,original:VideoFile,representation:z.enum(['metadata','caption-transcript']),reason:z.enum(['understanding-unavailable','generated-evidence']),summaryRunId:Uuid.nullable().optional(),resultArtifactId:Uuid.optional()}).strict()).optional(),
+    videos:z.array(z.object({id:Uuid,artifactId:Uuid,original:VideoFile,representation:z.enum(['metadata','caption-transcript']),reason:z.enum(['understanding-unavailable','generated-evidence']),summaryRunId:Uuid.nullable().optional(),resultArtifactId:Uuid.optional(),frames:z.array(VideoFrame).max(4).optional(),origin:RecordingOrigin.optional(),review:RecordingReview.optional(),frameError:z.string().max(500).optional()}).strict()).optional(),
   }).strict(),
 };
 export const RequestPayload = z.discriminatedUnion('provider', [

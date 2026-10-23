@@ -142,7 +142,7 @@ The shared executor retains its final `model_output` as `response_artifact_id` w
 
 ## Image storage and description Runs
 
-`attachments` owns one upload Input, immutable filename/metadata, the latest description Run/result text, creation time and optional expiry. Metadata contains original/model/thumbnail descriptors (SHA-256, MIME type, bytes and displayed dimensions), plus the transform version. Storage paths derive from the instance root, attachment UUID and descriptor hash; payloads never accept arbitrary filesystem paths.
+`attachments` owns one upload Input, immutable filename/source metadata, the latest description Run/result text, creation time and optional expiry. Metadata contains original/model/thumbnail descriptors (SHA-256, MIME type, bytes and displayed dimensions), plus the transform version. Storage paths derive from the instance root, attachment UUID and descriptor hash; payloads never accept arbitrary filesystem paths.
 
 `artifact_attachments` gives every Input, Surface, description record and captured request a restrictive FK reference to its image. Requests retain references even when they use only a description. Submission locks attachments, verifies availability/budgets, clears expiry and inserts references in the same transaction as acceptance. Original bytes and descriptors never change. [IMG-R09](../specs/features/images.md#rules) owns lifetime; [implementation](features/images.md#storage-and-execution) owns publication and cleanup.
 
@@ -152,7 +152,7 @@ Structured request messages embed immutable image descriptors, detail settings a
 
 ## Video attachments
 
-[Video attachments and recording](features/recording-feedback.md) reuse `attachments` and `artifact_attachments`; image metadata remains backward-readable. Video metadata adds original/playback/thumbnail descriptors, duration and audio availability. A `video_upload` Input owns the asset and a threadless caption/transcript Summary Run. Surface messages use `{type: "video", attachmentId}` blocks. Captured chat requests retain `selection.videos` source descriptors, then-current analysis identity and restrictive asset references; model-visible text contains bounded caption/transcript or a pending/unavailable marker.
+[Video attachments and recording](features/recording-feedback.md) reuse `attachments` and `artifact_attachments`; image metadata remains backward-readable. Video metadata adds original/playback/thumbnail descriptors, duration and audio availability. Optional frame descriptors, measured times and known capture origin reuse that metadata. Only `frames`/`frameError` are mutable for preparation retries; `attachment_source_immutable` protects the remaining fields. Captured requests retain their original descriptors when this cache changes. A `video_upload` Input owns the asset and a threadless caption/transcript Summary Run. Surface messages use `{type: "video", attachmentId}` blocks. Captured chat requests retain `selection.videos` source descriptors, then-current analysis identity and restrictive asset references; model-visible text contains bounded caption/transcript or a pending/unavailable marker.
 
 A video-only submission has an Input and mirrored Surface without a response Run. Its submission UUID is the Input ID; `message_input.submissionHash` preserves the submitted-content identity. A submission-key advisory lock serializes these receipts with normal response submissions, so duplicate delivery reuses the recorded input and changed content is rejected. No application audit log or additional table is introduced.
 

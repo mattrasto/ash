@@ -16,7 +16,7 @@ export function threadRoutes(app: FastifyInstance, threads: Threads) {
   app.post<{Params:{id:string}}>('/api/threads/:id', request => threads.updateThread(Uuid.parse(request.params.id),UpdateThread.parse(request.body)));
   app.post<{Params:{id:string}}>('/api/threads/:id/messages', async request => {
     const command = SendMessage.parse(request.body);
-    return threads.submitMessage(Uuid.parse(request.params.id),command.requestKey,command.text,command.mode,command.attachmentIds);
+    return threads.submitMessage(Uuid.parse(request.params.id),command.requestKey,command.text,command.mode,command.attachmentIds,command.recordings);
   });
   app.post<{Params:{id:string}}>('/api/runs/:id/retry', async request => {
     const command = RetryRun.parse(request.body);

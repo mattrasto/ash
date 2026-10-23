@@ -12,7 +12,7 @@ Ask Ash to make an app change in an ordinary Thread. The assistant can enter **A
 
 **Apply… → Prepare update** creates a frozen local UI build. Protected compilation and persisted-chat checks run before an application Decision appears. **Apply and restart** uses that exact build with the current backend, native shell and daily data. **Restore previous version…** prepares a separate restore approval. See [local application](#local-application) for scope and recovery.
 
-The native **Adapt → Back to Thread** menu (`⌘⇧B`) returns to the controlling Thread. Record there using the existing screen recorder, review its generated caption/transcript, and send a correction. Capture retains its starting Thread even if navigation changes. Screenshot attachments also reach Codex as pixels. Video reaches this harness through the captured caption/transcript; deeper video-tool delegation is not integrated yet. Dictation-only capture is deferred.
+The native **Adapt → Back to Thread** menu (`⌘⇧B`) returns to the controlling Thread. Record there using the existing screen recorder, review its generated action items, and send a correction. Capture retains its starting Thread even if navigation changes. Screenshot attachments also reach Codex as pixels. Recordings supply timestamped initial screenshots and captured narration, with reviewed message text taking precedence. The agent can retrieve further frames/transcript or ask about a video interval. [Visual recording implementation and validation](../plans/recording-visual-context.md). Dictation-only capture is deferred.
 
 ## Boundaries
 
@@ -37,7 +37,7 @@ One hosted environment is reused per Workspace generation; each Ash Run has a pr
 
 Source archives are capped at 96 MiB, including scene artwork, and uploads split them into 4 MiB files. Keep the complete Git tree so checkpoint reconstruction remains exact. Trusted bootstrap explicitly installs development dependencies, skips Electron/Playwright downloads and retains install diagnostics. Network access is restricted to npm, Prisma binaries and GitHub release download domains. Exported patch/tree/check evidence is bounded and reconstructed locally before becoming a checkpoint. Agent-reported checks do not authorize Apply.
 
-Managed work exposes only ordinary `ash_ask_user` calls to Ash Decisions; internal harness shell/file tools run in its preauthorized sandbox. Assistant output and usage are captured, private reasoning is not. Session closure is available; this hosted API has no force-destroy VM endpoint. Cancellation therefore does not claim physical VM teardown.
+Managed work routes ordinary `ash_ask_user` calls to Decisions and scoped `read_video_evidence`/`ask_video` calls to recording evidence; internal harness shell/file tools run in its preauthorized sandbox. Assistant output and usage are captured, private reasoning is not. Session closure is available; this hosted API has no force-destroy VM endpoint. Cancellation therefore does not claim physical VM teardown.
 
 Interactive coding has no artificial call/time cap. Disposable live sessions reserve one allowance per coding Run and stop on their saved deadline; that allowance counts jobs, not the harness's internal model calls. The local broker reconciles cancellation while awake. Paid verification is separate from routine deterministic tests.
 

@@ -5,11 +5,12 @@ import { mkdir,mkdtemp,open,rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Readable } from 'node:stream';
 import { ImageMetadata, AttachmentMetadata, VIDEO_LIMITS, isVideoAttachment, IMAGE_LIMITS, RequestPayload, RunState, DescriptionPayload, imageDescription,
-  VideoUnderstandingPayload, type AttachmentView, type ModelExecution } from '@ash/shared';
+  VideoMetadata,RecordingOrigin,VideoUnderstandingPayload, type AttachmentView, type ModelExecution } from '@ash/shared';
 import { ModelFailure, type ModelAdapter } from '../../platform/models/adapter.ts';
 import { runView } from '../threads/views.ts';
 import { ImageStorage, AttachmentError, processImage } from './storage.ts';
 import {processVideo,fileHash} from './video.ts';
+import {extractFrames,frameTimes} from '../video/frames.ts';
 import {VideoAnalysis} from '../video/service.ts';
 import {deterministicVideoProvider} from '../../platform/models/gemini-video.ts';
 
@@ -79,7 +80,7 @@ export class Attachments {
     this.uploads.set(id,task);
     try{return check(await task);}finally{this.uploads.delete(id);}
   }
-  async uploadVideo(id:string,filename:string,stream:Readable,incomplete=false,recorded=false) {
+  async uploadVideo(id:string,filename:string,stream:Readable,incomplete=false,recorded=false,origin?:RecordingOrigin) {
     if(this.stopping)throw new AttachmentError(503,'The backend is stopping.');
     filename=filename.split(/[\\/]/).at(-1)!.replace(/[\x00-\x1f\x7f]/g,'').trim().slice(0,160)||'Video';
     const prior=this.uploads.get(id);
@@ -90,14 +91,15 @@ export class Attachments {
       try {
         let size=0;try{for await(const chunk of stream){size+=chunk.length;if(size>VIDEO_LIMITS.perFile)throw new AttachmentError(413,'Each video must be at most 2 GiB.');await file.writeFile(chunk);}await file.sync();}finally{await file.close();}
         const hash=await fileHash(path),existing=prior?await prior:await this.db.attachment.findUnique({where:{id},include}).then(row=>row?view(row):null);
-        if(existing){if(!isVideoAttachment(existing)||existing.filename!==filename||existing.metadata.original.hash!==hash||!!existing.metadata.incomplete!==incomplete||!!existing.metadata.recorded!==recorded)throw new AttachmentError(409,'This upload ID was already used for another attachment.');return this.get(id);}
+        if(existing){if(!isVideoAttachment(existing)||existing.filename!==filename||existing.metadata.original.hash!==hash||!!existing.metadata.incomplete!==incomplete||!!existing.metadata.recorded!==recorded||JSON.stringify(existing.metadata.origin)!==JSON.stringify(origin))throw new AttachmentError(409,'This upload ID was already used for another attachment.');return this.get(id);}
         const processed=await processVideo(path,tmp);
         try {
           await this.storage.remove(id);await this.storage.publish(id,processed.blobs);
+          const metadata=VideoMetadata.parse({...processed.metadata,...(incomplete?{incomplete:true}:{}),...(recorded?{recorded:true}:{}),...(origin?{origin}:{}),...await this.initialFrames(id,processed.metadata)});
           const row=await this.db.$transaction(async tx=>{
             const now=new Date(),inputId=randomUUID();
             await tx.artifact.create({data:{id:inputId,layer:'input',actor:'user',payload:{type:'video_upload',attachmentId:id,filename},createdAt:now,updatedAt:now}});
-            const attachment=await tx.attachment.create({data:{id,filename,inputArtifactId:inputId,metadata:json({...processed.metadata,...(incomplete?{incomplete:true}:{}),...(recorded?{recorded:true}:{})}),createdAt:now,expiresAt:new Date(now.getTime()+IMAGE_LIMITS.draftLifetimeMs)}});
+            const attachment=await tx.attachment.create({data:{id,filename,inputArtifactId:inputId,metadata:json(metadata),createdAt:now,expiresAt:new Date(now.getTime()+IMAGE_LIMITS.draftLifetimeMs)}});
             await referenceImages(tx,inputId,[id]);await this.video.create(tx,attachment,randomUUID());return tx.attachment.findUniqueOrThrow({where:{id},include});
           });if(this.autoDispatch)this.video.dispatch(row.summaryRunId!);return view(row);
         }finally{await processed.dispose();}
@@ -105,6 +107,27 @@ export class Attachments {
     })();
     if(!prior)this.uploads.set(id,task);
     try{return await task;}finally{if(!prior)this.uploads.delete(id);}
+  }
+  private frameJobs=new Map<string,Promise<AttachmentView>>();
+  private async initialFrames(id:string,metadata:VideoMetadata){
+    try{return {frames:await extractFrames(this.storage,id,metadata,frameTimes(0,metadata.durationSeconds),AbortSignal.timeout(90000))};}
+    catch{return {frameError:'Screenshots could not be prepared. Retry screenshots or explicitly send the video without them.'};}
+  }
+  async prepareFrames(id:string):Promise<AttachmentView>{
+    if(this.stopping)throw new AttachmentError(503,'The backend is stopping.');
+    const pending=this.frameJobs.get(id);if(pending)return pending;
+    const job=(async()=>{
+      const attachment=await this.get(id);if(!isVideoAttachment(attachment))throw new AttachmentError(400,'Choose a video.');
+      if(attachment.metadata.frames?.length)return attachment;
+      const prepared=await this.initialFrames(id,attachment.metadata);
+      await this.db.$transaction(async tx=>{
+        await tx.$queryRaw`SELECT id FROM attachments WHERE id=${id}::uuid FOR UPDATE`;
+        const current=await tx.attachment.findUnique({where:{id}});
+        if(!current||(current.expiresAt&&current.expiresAt.getTime()<=Date.now()))throw new AttachmentError(404,'Video not found or upload expired.');
+        const metadata={...VideoMetadata.parse(current.metadata),...prepared};if('frames' in prepared)delete metadata.frameError;
+        await tx.attachment.update({where:{id},data:{metadata:json(metadata)}});
+      });return this.get(id);
+    })();this.frameJobs.set(id,job);try{return await job;}finally{this.frameJobs.delete(id);}
   }
   private async acceptUpload(id:string,filename:string,bytes:Buffer,hash:string) {
     const existing=await this.db.attachment.findUnique({where:{id},include});
@@ -239,7 +262,7 @@ export class Attachments {
     await this.storage.sweepUnpublished(new Set((await this.db.attachment.findMany({select:{id:true}})).map(row=>row.id)),now.getTime());
   }
   async stop() {
-    this.stopping=true;await Promise.allSettled(this.uploads.values());await this.recover();
+    this.stopping=true;await Promise.allSettled([...this.uploads.values(),...this.frameJobs.values()]);await this.recover();
     for(const job of this.jobs.values())job.controller.abort();
     await this.video.stop();
     await Promise.allSettled([...this.jobs.values()].map(job=>job.promise));

@@ -1,5 +1,5 @@
-import type {AttachmentView} from './attachments.ts';
-export interface RecordingFile {id:string;threadId:string;filename:string;size:number;createdAt:string;incomplete:boolean}
+import type {RecordingOrigin,AttachmentView} from './attachments.ts';
+export interface RecordingFile {id:string;threadId:string;filename:string;size:number;createdAt:string;incomplete:boolean;origin?:RecordingOrigin}
 export interface RecordingState {id:string;threadId:string;source:string;phase:'starting'|'recording'|'finishing';mic:boolean;elapsedMs:number;remainingMs:number;warning:boolean}
 export type RecordingControl='stop'|'discard';
 export interface RecordingBridge {

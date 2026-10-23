@@ -68,6 +68,7 @@ Coverage identifies observable checks, not a claim that every clause or accessib
 | `design-presence` | DS-R05, R09, R13; DS-V05, V07–09, V12 | Surface and dropdown close/reopen reversal, draft continuity, settled mask cleanup, no replay on edits, immediate reduced motion and forced-color native select |
 | `design-replacement` | DS-R09, R11, R12; DS-V06–07 | Inert copies without IDs/form names, rapid replacement, live draft and nested scroll preservation, keyboard scrollbar, track-to-drag continuity, thumb grab offset and reduced-motion replacement |
 | `adapt-parallel-conflict-apply` | DS-R03–05, R08–13; DS-V02, V07–08, V10 | Minimum-size conflict review, shared status/buttons, preserved feedback draft and resolution handoff |
+| `adapt-recording-desktop` | DS-R03–05, R08–13; DS-V02, V07–08, V10 | Narrow composer with screenshot failure, keyboard retry/omission, retained edited draft across reload, reachable Send and captured frame inspection |
 | `adapt-desktop` | DS-R03–05, R08–13; DS-V02, V07–08, V10 | Existing Thread editor/draft retained across mode changes; shared evidence inspector, preview controls and minimum-size layout |
 | `adapt-local-apply`, `adapt-local-restore` | DS-R03–05, R08–13; DS-V02, V07–08, V10 | Existing Decision controls, optional version details, narrow application inspector, native restart and retained Thread drafts |
 | `chat-layout` | DS-R03–05, R07, R12; DS-V10 | Reviewed fixed-phase scene screenshots at normal/minimum window sizes with reduced motion |

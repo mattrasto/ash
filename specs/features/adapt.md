@@ -10,7 +10,7 @@ Discuss a change in a Thread, delegate coding to an isolated managed harness, in
 
 Persist Thread mode and isolated Workspace identity; capture context and execution routing per Run; connect managed Codex through replaceable harness/environment adapters; retain progress, questions and source checkpoints. Normal conversation, recording drafts and inspection remain available. Native previews and local application support renderer/UI changes using a trusted backend and Electron shell. Signed delivery and database-changing self-modification follow later phases.
 
-Engineering: [implementation and verification](../../docs/features/adapt.md).
+Engineering: [implementation and verification](../../docs/features/adapt.md). [Visual recording context](recording-feedback.md#adapt-recording-feedback) is implemented; [validation status](../../docs/plans/recording-visual-context.md#validation-status).
 
 ## Rules
 

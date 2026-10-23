@@ -12,6 +12,7 @@ import {ServerConfig,RequestPayload,isVideoAttachment,modelContentText,type Atta
 import {mediaCommand} from '../../packages/server/src/modules/attachments/video.ts';
 import {ImageStorage} from '../../packages/server/src/modules/attachments/storage.ts';
 import {Attachments} from '../../packages/server/src/modules/attachments/service.ts';
+import {extractFrames,frameTimes} from '../../packages/server/src/modules/video/frames.ts';
 import {VideoAnalysis} from '../../packages/server/src/modules/video/service.ts';
 import {deterministicVideoProvider} from '../../packages/server/src/platform/models/gemini-video.ts';
 import {deterministicModel} from '../../packages/server/src/platform/models/deterministic.ts';
@@ -100,6 +101,7 @@ test('video attachments and synthetic recording lifecycle without provider or de
         navigator.mediaDevices.getUserMedia=async()=>output.stream;
     });}
     await scenarioStep(t,'recording-lifecycle',async()=>{
+      assert.equal(await page.getByRole('button',{name:'Record screen',exact:true}).count(),0);await page.getByRole('button',{name:'Adapt',exact:true}).click();await page.getByRole('button',{name:'Record screen',exact:true}).waitFor();
       await synthetic();await app!.evaluate(()=>{const original=performance.now.bind(performance);(globalThis as any).__recordingOffset=0;performance.now=()=>original()+(globalThis as any).__recordingOffset;});
       await page.getByLabel('Message',{exact:true}).fill('Keep this existing draft.');const origin=await page.evaluate(()=>localStorage.getItem('ash-chat-selected')!);await page.getByRole('button',{name:'Record screen',exact:true}).click();await page.locator('.recording-status strong').filter({hasText:'Recording'}).waitFor();
       await until(()=>page.locator('.recording-status').innerText(),text=>text.includes('Mic on'));
@@ -108,11 +110,15 @@ test('video attachments and synthetic recording lifecycle without provider or de
       await app!.evaluate(()=>{(globalThis as any).__recordingOffset=19*60*1000;});await page.getByRole('button',{name:'Extend by 10 minutes',exact:true}).waitFor();await page.getByRole('button',{name:'Extend by 10 minutes',exact:true}).click();
       await page.getByRole('button',{name:'New Thread',exact:true}).first().click();await until(()=>page.locator('h1').innerText(),value=>value==='Untitled');
       await until(()=>page.getByLabel('Message',{exact:true}).inputValue(),value=>value==='');
+      assert.equal(await page.getByRole('button',{name:'Stop recording',exact:true}).count(),0);assert.equal(await page.locator('.recording-status').getByRole('button',{name:'Stop',exact:true}).isEnabled(),true);
       await until(()=>page.getByTestId('draft-image').count(),count=>count===0);
       await app!.evaluate(()=>{(globalThis as any).__recordingOffset=30*60*1000;});await page.getByText('Recording stopped at its deadline and was saved to the draft.',{exact:true}).waitFor();
       assert.equal(await page.getByTestId('draft-image').count(),0);
       // The recording stays bound to its Thread even if automatic naming changes its title.
-      await page.locator('.sidebar .row').filter({has:page.locator(`[data-thread-actions="${origin}"]`)}).locator('button.select').click();await until(()=>page.getByTestId('draft-image').count(),n=>n===1);await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),x=>x);
+      await page.locator('.sidebar .row').filter({has:page.locator(`[data-thread-actions="${origin}"]`)}).locator('button.select').click();await until(()=>page.getByTestId('draft-image').count(),n=>n===1);
+      const captured=await until(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('ash-chat-images')??'{}')[localStorage.getItem('ash-chat-selected')!]?.[0]?.attachment as AttachmentView|undefined),value=>!!value);
+      if(captured&&isVideoAttachment(captured)&&captured.metadata.frameError){const savedStorage=new ImageStorage(instance.root);await writeFile(join(evidence,'failed-frame-playback.webm'),await savedStorage.read(captured.id,captured.metadata.playback));await extractFrames(savedStorage,captured.id,captured.metadata,frameTimes(0,captured.metadata.durationSeconds),new AbortController().signal);assert.fail(captured.metadata.frameError);}
+      await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),x=>x);
       await until(()=>readdir(join(instance.root,'files','recordings')),files=>files.length===0);await until(()=>page.getByLabel('Message',{exact:true}).inputValue(),value=>value.includes('- Review this recording.'));
       const generated=await page.getByLabel('Message',{exact:true}).inputValue();assert.match(generated,/^Keep this existing draft\.\n\n- Review this recording\./);assert.ok(!generated.includes('Summarize the action items'));
       assert.ok(await page.getByLabel('Message',{exact:true}).evaluate((el:HTMLTextAreaElement)=>el.clientHeight>35&&el.scrollHeight<=el.clientHeight+2));
@@ -124,8 +130,10 @@ test('video attachments and synthetic recording lifecycle without provider or de
       await page.screenshot({path:join(evidence,'recording-draft.png')});await page.getByRole('button',{name:/^Remove screen-/}).click();
       // The in-thread Stop control finalizes a playable draft through the same capture path.
       await synthetic();await page.getByRole('button',{name:'Record screen',exact:true}).click();await until(()=>page.locator('.recording-status strong').innerText(),text=>text==='Recording');await sleep(1200);
+      await page.getByRole('button',{name:'Adapt',exact:true}).click();await until(()=>page.getByRole('button',{name:'Stop recording',exact:true}).count(),n=>n===0);
       await page.screenshot({path:join(evidence,'recording-controls.png')});await page.locator('.recording-status').getByRole('button',{name:'Stop',exact:true}).click();await page.getByText('Recording saved to the draft.',{exact:true}).waitFor();
       await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),x=>x);assert.equal(await page.getByTestId('draft-image').count(),1);assert.equal(await page.locator('.recording-status').count(),0);
+      await page.getByRole('button',{name:'Adapt',exact:true}).click();await page.getByRole('button',{name:'Record screen',exact:true}).waitFor();
       await page.locator('.draft-thumb').click();await until(()=>page.locator('.stage video').evaluate((video:HTMLVideoElement)=>video.readyState),value=>value>=2);assert.equal(await page.locator('.stage video').evaluate((video:HTMLVideoElement)=>video.videoWidth),320);await page.getByRole('dialog').press('Escape');await page.getByRole('button',{name:/^Remove screen-/}).click();
       await synthetic();await page.getByRole('button',{name:'Record screen',exact:true}).click();await until(()=>page.locator('.recording-status strong').innerText(),text=>text==='Recording');await page.getByRole('button',{name:'Discard',exact:true}).click();await page.getByText('Recording discarded.',{exact:true}).waitFor();assert.equal(await page.getByTestId('draft-image').count(),0);
       // Normal quit finalizes capture, and the journal restores the draft on reopen.
@@ -191,16 +199,19 @@ test('video attachments and synthetic recording lifecycle without provider or de
     await scenarioStep(t,'recording-upload-recovery',async()=>{
       const thread=await page.evaluate(()=>localStorage.getItem('ash-chat-selected')!);
       await page.getByLabel('Message',{exact:true}).fill('Keep this recovery draft.');
+      const captureOrigin={threadId:thread,workspaceId:randomUUID(),previewTree:'a'.repeat(40)};
+      await app!.evaluate((_electron,origin)=>{(process as NodeJS.EventEmitter).emit('message',{type:'open',threadId:origin.threadId,origin});},captureOrigin);
       // Feed synthetic bytes through the native journal; the upload result has no durable composer acknowledgement.
       const capture=await page.evaluate(async({thread,bytes})=>{
         const {id}=await window.ashRecording.begin(thread,false);await window.ashRecording.ready(id,false);
         await window.ashRecording.append(id,Uint8Array.from(bytes).buffer);return window.ashRecording.finish(id);
       },{thread,bytes:[...bytes]});
+      assert.deepEqual(capture.origin,captureOrigin);
       const captureDir=join(instance.root,'files','recordings',capture.id),storage=new ImageStorage(instance.root);
       const failedVideo=new VideoAnalysis(db,storage,{...deterministicVideoProvider,async analyze(){throw new ModelFailure('fixture_analysis_failure','Synthetic recording analysis failure.');}});
       try{
         const uploader=new Attachments(db,storage,deterministicModel,true,failedVideo);
-        const asset=await uploader.uploadVideo(capture.id,capture.filename,createReadStream(join(captureDir,'capture.webm')),false,true);
+        const asset=await uploader.uploadVideo(capture.id,capture.filename,createReadStream(join(captureDir,'capture.webm')),false,true,capture.origin);
         await until(()=>api<AttachmentView>('attachments/'+asset.id),value=>value.summaryRun?.status==='failed');
         const runId=asset.summaryRun!.id;
         assert.equal((await page.evaluate(id=>window.ashRecording.upload(id),capture.id)).id,capture.id);

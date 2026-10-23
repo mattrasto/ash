@@ -4,11 +4,12 @@ import type { AdaptApplicationView,AdaptRefreshRequest,AdaptRefreshResult } from
 export interface SourceSnapshot {revision:string;tree:string;archive:Buffer}
 export interface EnvironmentLease {id:string;generation:number}
 export interface HarnessSession {id:string}
-export interface CodingInput {text:string;images:string[]}
+export type CodingInput = Array<{type:'text';text:string}|{type:'image';url:string}>;
+export interface EvidenceCall {id:string;turnId:string;name:'read_video_evidence'|'ask_video';arguments:unknown}
 export interface RequiredInput {id:string;turnId:string;question:string;reason:string}
 export interface HarnessObservation {
   status:'working'|'waiting'|'completed'|'failed'|'cancelled';text:string;questions:RequiredInput[];
-  model?:ModelExecution;error?:string;
+  evidence?:EvidenceCall[];model?:ModelExecution;error?:string;
 }
 export interface EnvironmentProvider {
   readonly id:string;
@@ -23,6 +24,7 @@ export interface CodingHarness {
   submit(session:HarnessSession,input:CodingInput,key:string):Promise<void>;
   observe(session:HarnessSession):Promise<HarnessObservation>;
   answer(session:HarnessSession,question:RequiredInput,value:unknown,key:string):Promise<void>;
+  evidenceResult(session:HarnessSession,call:EvidenceCall,content:CodingInput,key:string):Promise<void>;
   cancel(session:HarnessSession,key:string):Promise<void>;
   checkpoint(session:HarnessSession):Promise<{patch:string;tree:string;checks:string}>;
   close(session:HarnessSession):Promise<void>;
