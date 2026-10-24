@@ -19,6 +19,7 @@
     "build": "node --import tsx scripts/dev/build.ts",
     "test": "pnpm test:boundary",
     "test:workflow": "node --import tsx scripts/dev/test-workflow.ts",
+    "test:audit": "node --import tsx scripts/dev/audit-inventory.ts",
     "verify": "node --import tsx scripts/dev/verify.ts",
     "db:generate": "pnpm --filter @ash/server exec prisma generate --schema prisma/schema.prisma",
     "postinstall": "pnpm db:generate",

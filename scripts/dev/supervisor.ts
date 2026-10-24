@@ -5,15 +5,16 @@ import { watch, type FSWatcher } from 'node:fs';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { randomInt } from 'node:crypto';
-import { createServer as createViteServer, type ViteDevServer } from 'vite';
+import type { ViteDevServer } from 'vite';
 import { Instance, ServerConfig, RecordingOrigin } from '../../packages/shared/src/index.ts';
 import { atomic, json, processRef, stopProcess, fingerprint, childEnvironment } from './io.ts';
-import { buildMain, rendererConfig } from './build.ts';
+import { measure, testEvent } from './telemetry.ts';
 import type { Runtime } from './lifecycle.ts';
 import {RendererReleaseHost} from './renderer-release-host.ts';
 import {readActive} from './release-store.ts';
 
 const instance = Instance.parse(await json(process.argv[2]));
+testEvent({id:`${process.pid}-bootstrap`,kind:'phase',name:'services.bootstrap',context:instance.id,status:'passed',at:Date.now(),durationMs:Math.round(performance.now())});
 const config = ServerConfig.parse(await json(join(instance.root, 'server.json')));
 const require = createRequire(join(instance.checkout, 'package.json'));
 const headless = process.argv.includes('--headless');
@@ -71,6 +72,7 @@ async function remember(child: ChildProcess) {
 }
 async function launchClient(options: { windowed?: boolean; background?: boolean;threadId?:string;origin?:RecordingOrigin } = {}) {
   if (electronChild && electronChild.exitCode === null && !electronChild.killed) {electronChild.send({type:'open',threadId:options.threadId,origin:options.origin});return;}
+  const { buildMain } = await import('./build.ts');
   const mainPath = await buildMain(instance.checkout, join(instance.root, 'build'));
   const installed=await readActive(instance);
   await atomic(join(instance.root, 'client.json'), { root: instance.root, label: instance.label+(installed?' · UI '+installed.current.slice(0,7):''),installedUI:installed?.current, instanceId: instance.id,
@@ -102,11 +104,7 @@ async function launchClient(options: { windowed?: boolean; background?: boolean;
   if(debugging){state.debuggingPort=Number((await readFile(join(instance.root,'electron','DevToolsActivePort'),'utf8')).split('\n')[0]);await save();}
   if(options.threadId)child.send({type:'open',threadId:options.threadId,origin:options.origin});
 }
-async function startServices() {
-  if(config.candidatePreview?.releaseId)await releases.serveVerifiedPreview(config.candidatePreview.ownerInstancePath,config.candidatePreview.releaseId);
-  else if(config.candidatePreview?.rendererBuild)releases.serveCompiledPreview(config.candidatePreview.rendererBuild);
-  else if(config.candidatePreview)throw Error('Reopen the Adapt preview to compile it with protected filesystem access.');
-  else if(!config.candidatePreview)await releases.initialize();
+async function startBackend() {
   const server = spawn(process.execPath, ['--import', require.resolve('tsx'), join(instance.checkout, 'packages/server/src/main.ts'), join(instance.root, 'server.json'), ...(modelSessionId ? [modelSessionId] : [])], {
     cwd: instance.checkout, detached: true, stdio: ['ignore', log.fd, log.fd, 'ipc'], env: childEnvironment(join(instance.root, 'tmp')),
   });
@@ -124,29 +122,47 @@ async function startServices() {
   const response = await fetch(`${state.serverUrl}/health`, { headers: { authorization: `Bearer ${config.token}` }, signal: AbortSignal.timeout(5000) });
   const health = await response.json() as { instanceId: string; generation: string; schemaVersion: number };
   if (!response.ok || health.instanceId !== instance.id || health.generation !== instance.generation || health.schemaVersion !== instance.schemaVersion) throw new Error('Backend readiness identity mismatch');
+  return server;
+}
+async function startServices() {
+  if(config.candidatePreview?.releaseId)await releases.serveVerifiedPreview(config.candidatePreview.ownerInstancePath,config.candidatePreview.releaseId);
+  else if(config.candidatePreview?.rendererBuild)releases.serveCompiledPreview(config.candidatePreview.rendererBuild);
+  else if(config.candidatePreview)throw Error('Reopen the Adapt preview to compile it with protected filesystem access.');
+  else if(!config.candidatePreview)await releases.initialize();
+  const preparation = [
+    measure('services.backend', startBackend, instance.id),
+    measure('source.fingerprint', () => fingerprint(instance.checkout), instance.id),
+    measure('services.modules', () => Promise.all([import('vite'), import('./build.ts')]), instance.id),
+  ] as const;
+  const [server, source, [{ createServer: createViteServer }, { rendererConfig }]] = await Promise.all(preparation).catch(async error => {
+    // Drain launched work before shutdown so no late child can escape recovery.
+    await Promise.allSettled(preparation);throw error;
+  });
   // Keep the browser-storage origin stable. Only a new instance may choose another port.
-  for (let attempt = 0; attempt < 12; attempt++) {
-    const renderer=rendererConfig(instance.checkout, join(instance.root, 'build'));
-    vite = await createViteServer({ ...renderer,plugins:[{name:'ash-local-ui-release',configureServer(server){server.middlewares.use(releases.middleware);}},...renderer.plugins??[]], server: {
-      // Tests use production transitions rather than the Svelte HMR wrapper.
-      hmr: instance.profile !== 'test',
-      host: '127.0.0.1', port: frontendPort ?? randomInt(20000, 60000), strictPort: true, cors: false,
-      fs: { strict: true, allow: config.candidatePreview?[join(config.candidatePreview.checkout,'packages/client/src/renderer'),join(config.candidatePreview.checkout,'packages/client/index.html'),join(instance.checkout,'packages/shared'),join(instance.checkout,'node_modules'),join(instance.root,'build/vite-cache')]:[join(instance.checkout, 'packages'), join(instance.checkout, 'node_modules'), join(instance.root, 'build/vite-cache')] },
-      proxy: { '/api': { target: state.serverUrl, headers: { authorization: `Bearer ${config.token}` } } },
-    } });
-    try { await vite.listen(); break; }
-    catch (e) {
-      await vite.close();
-      if (!/in use|EADDRINUSE/.test((e as Error).message) || attempt === 11) throw e;
-      if (frontendPort !== undefined) throw new Error(`Preview port ${frontendPort} is in use. Stop its listener and start the preview again; the port is retained to preserve drafts and client preferences.`);
+  await measure('services.frontend', async () => {
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const renderer=rendererConfig(instance.checkout, join(instance.root, 'build'));
+      vite = await createViteServer({ ...renderer,plugins:[{name:'ash-local-ui-release',configureServer(server){server.middlewares.use(releases.middleware);}},...renderer.plugins??[]], server: {
+        // Feature tests need production transition semantics, not the pinned Svelte HMR wrapper.
+        hmr: instance.profile !== 'test',
+        host: '127.0.0.1', port: frontendPort ?? randomInt(20000, 60000), strictPort: true, cors: false,
+        fs: { strict: true, allow: config.candidatePreview?[join(config.candidatePreview.checkout,'packages/client/src/renderer'),join(config.candidatePreview.checkout,'packages/client/index.html'),join(instance.checkout,'packages/shared'),join(instance.checkout,'node_modules'),join(instance.root,'build/vite-cache')]:[join(instance.checkout, 'packages'), join(instance.checkout, 'node_modules'), join(instance.root, 'build/vite-cache')] },
+        proxy: { '/api': { target: state.serverUrl, headers: { authorization: `Bearer ${config.token}` } } },
+      } });
+      try { await vite.listen(); break; }
+      catch (e) {
+        await vite.close();
+        if (!/in use|EADDRINUSE/.test((e as Error).message) || attempt === 11) throw e;
+        if (frontendPort !== undefined) throw new Error(`Preview port ${frontendPort} is in use. Stop its listener and start the preview again; the port is retained to preserve drafts and client preferences.`);
+      }
     }
-  }
-  const address = vite!.httpServer!.address();
-  if (!address || typeof address === 'string') throw new Error('Missing frontend address');
-  state.webUrl = `http://127.0.0.1:${address.port}`;
-  frontendPort = address.port;
-  await atomic(frontendPath, {port:frontendPort});
-  state.source = await fingerprint(instance.checkout);
+    const address = vite!.httpServer!.address();
+    if (!address || typeof address === 'string') throw new Error('Missing frontend address');
+    state.webUrl = `http://127.0.0.1:${address.port}`;
+    frontendPort = address.port;
+    await atomic(frontendPath, {port:frontendPort});
+  }, instance.id);
+  state.source = source;
   if (!headless) await launchClient();
   state.phase = 'ready'; await save();
   server.once('exit', () => { if (!stopping && !restarting) void shutdown('failed', 'Backend exited unexpectedly'); });

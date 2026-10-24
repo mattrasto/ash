@@ -23,7 +23,7 @@ import {startInstance,disposeInstance,runtime} from '../../scripts/dev/lifecycle
 import {buildMain} from '../../scripts/dev/build.ts';
 import {connectProduct} from '../../packages/server/src/platform/db/client.ts';
 import {TopicRetrieval} from '../../packages/server/src/modules/context/retrieval.ts';
-import {scenarioStep} from '../support/node-scenarios.ts';
+import {scenarioStep,scenarioSelected} from '../support/node-scenarios.ts';
 
 async function until<T>(read:()=>Promise<T>,accept:(value:T)=>boolean,timeout=30000){const end=Date.now()+timeout;do{const value=await read();if(accept(value))return value;await sleep(50);}while(Date.now()<end);throw Error('Timed out waiting for video state.');}
 test('video attachments and synthetic recording lifecycle without provider or device access',{timeout:240000},async t=>{
@@ -70,11 +70,13 @@ test('video attachments and synthetic recording lifecycle without provider or de
       assert.equal((await api<AttachmentView>(`attachments/${video.id}`)).expiresAt,null);
       assert.ok(await db.artifactAttachment.findUnique({where:{artifactId_attachmentId:{artifactId:run.state.request_artifact_id,attachmentId:video.id}}}));
     });
+    if (!scenarioSelected('videos-desktop')) await api('threads',{id:randomUUID(),title:'Recording fixture'});
     const live=(await runtime(instance))!,entry=await buildMain(checkout,join(instance.root,'build')),configPath=join(instance.root,'video-test-client.json');
     await atomic(configPath,{root:instance.root,label:instance.label,instanceId:instance.id,url:live.webUrl,windowed:true,background:true});
     const launch=()=>launchElectron({executablePath:createRequire(join(checkout,'package.json'))('electron'),args:[entry],cwd:checkout,env:{...childEnvironment(join(instance.root,'tmp')),ASH_CLIENT_CONFIG:configPath} as Record<string,string>,timeout:30000});
     app=await launch();let page=await app.firstWindow();const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
     await page.getByTestId('connection').filter({hasText:'Connected'}).waitFor();
+    if (!scenarioSelected('videos-desktop')) {await page.getByRole('button',{name:'Recording fixture',exact:true}).click();await page.getByRole('heading',{name:'Recording fixture',exact:true}).waitFor();}
     await scenarioStep(t,'videos-desktop',async()=>{
       await page.getByRole('button',{name:'New Thread',exact:true}).first().click();await until(()=>page.getByRole('button',{name:'Attach images or videos',exact:true}).isEnabled(),x=>x);await page.getByLabel('Choose images or videos',{exact:true}).setInputFiles({name:'walkthrough.mp4',mimeType:'video/mp4',buffer:bytes});
       await until(()=>page.getByRole('button',{name:'Send message',exact:true}).isEnabled(),x=>x).catch(async error=>{throw Error(error.message+' Draft: '+await page.locator('.draft-images').innerText().catch(()=>'(none)'))});

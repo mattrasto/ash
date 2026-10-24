@@ -1,34 +1,99 @@
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
+import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Instance } from '../../packages/shared/src/index.ts';
+import { type Instance, SCHEMA_VERSION } from '../../packages/shared/src/index.ts';
 import { BASE_INSTRUCTION_ID, BASE_INSTRUCTIONS, IMAGE_INSTRUCTION_ID, IMAGE_INSTRUCTIONS } from '../../packages/server/src/modules/instructions/defaults.ts';
-import { connect, databaseUrl, type Cluster } from './database.ts';
+import { assertDatabaseOwner, connect, databaseUrl, type Cluster } from './database.ts';
 import { exec, childEnvironment } from './io.ts';
+import { measure } from './telemetry.ts';
+
+// Process-local receipts only: provisioning still deploys every fresh database.
+const deployed = new Map<string, string>();
+async function migrationInputs(checkout: string) {
+  const root = join(checkout, 'packages/server/prisma');
+  const directories = (await readdir(join(root, 'migrations'), { withFileTypes: true })).filter(entry => entry.isDirectory()).map(entry => entry.name).sort();
+  const migrations = await Promise.all(directories.map(async name => ({ name,
+    checksum: createHash('sha256').update(await readFile(join(root, 'migrations', name, 'migration.sql'))).digest('hex'),
+  })));
+  const hash = createHash('sha256').update(JSON.stringify(migrations));
+  for (const path of [join(root, 'schema.prisma'), join(root, 'migrations/migration_lock.toml'), join(checkout, 'pnpm-lock.yaml')]) hash.update(await readFile(path));
+  return { migrations, hash: hash.digest('hex') };
+}
 
 // Called only after the development provisioner has checked this database's owner.
-export async function migrateProduct(instance: Instance, cluster: Cluster) {
-  const require = createRequire(join(instance.checkout, 'packages/server/package.json'));
-  const url = new URL(databaseUrl(cluster, instance.database));
-  url.searchParams.set('options', `-c role=${instance.ownerRole}`);
+export async function migrateProduct(instance: Instance, cluster: Cluster, options: { reuseCurrent?: boolean } = {}) {
+  const inputs = instance.profile === 'test' ? await migrationInputs(instance.checkout) : undefined;
+  const receipt = `${instance.root}:${instance.generation}`;
   const inspection = connect(cluster,instance.database);
-  let baseline = false;
+  let baseline = false, current = false;
   try {
     const [marker] = await inspection`SELECT instance_id, generation FROM dev_meta`;
     if (marker.instance_id !== instance.id || marker.generation !== instance.generation) throw new Error('Database identity mismatch before migration');
     const [table] = await inspection`SELECT to_regclass('public._prisma_migrations') AS name`;
     baseline = !table.name || !(await inspection`SELECT migration_name FROM _prisma_migrations LIMIT 1`).length;
+    if (options.reuseCurrent && inputs && !baseline && deployed.get(receipt) === inputs.hash) {
+      current = await measure('database.current', async () => {
+        const rows = await inspection`SELECT migration_name, checksum, finished_at, rolled_back_at FROM _prisma_migrations ORDER BY migration_name`;
+        return rows.length === inputs.migrations.length && rows.every((row, index) =>
+          row.finished_at !== null && row.rolled_back_at === null && row.migration_name === inputs.migrations[index].name && row.checksum === inputs.migrations[index].checksum);
+      }, instance.id);
+    }
   } finally { await inspection.end(); }
+  if (!current) await deployProduct(instance, cluster, baseline);
+  await configureProduct(instance, cluster);
+  if (inputs) deployed.set(receipt, inputs.hash);
+  return current ? 'current' : 'deployed';
+}
+
+// Only a newly created, owned database may run bootstrap as a real migration.
+export async function initializeProduct(instance: Instance, cluster: Cluster) {
+  if (!await assertDatabaseOwner(instance, cluster)) throw new Error('Fresh database ownership is missing');
+  const inputs = instance.profile === 'test' ? await migrationInputs(instance.checkout) : undefined;
+  const inspection = connect(cluster, instance.database);
+  try {
+    const [objects] = await inspection`SELECT EXISTS (
+      SELECT 1 FROM pg_class WHERE relnamespace = 'public'::regnamespace
+      UNION ALL SELECT 1 FROM pg_proc WHERE pronamespace = 'public'::regnamespace
+      UNION ALL SELECT 1 FROM pg_type WHERE typnamespace = 'public'::regnamespace
+    ) AS present`;
+    if (objects.present) throw new Error('Fresh migration requires an empty public schema');
+    await inspection.unsafe('REVOKE CREATE ON SCHEMA public FROM PUBLIC');
+  } finally { await inspection.end(); }
+  await deployProduct(instance, cluster, false);
+  const db = connect(cluster, instance.database);
+  try {
+    await db.begin(async tx => {
+      await tx.unsafe(`SET LOCAL ROLE "${instance.ownerRole}"`);
+      await tx.unsafe('INSERT INTO dev_meta VALUES ($1,$2,$3)', [instance.id, instance.generation, SCHEMA_VERSION]);
+      await tx.unsafe('INSERT INTO dev_scratch VALUES (1,$1,0)', [instance.fixture === 'empty' ? '' : 'A little space to try things out.']);
+      await tx.unsafe(`GRANT USAGE ON SCHEMA public TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT SELECT ON dev_meta, dev_scratch TO "${instance.runtimeRole}"`);
+      await tx.unsafe(`GRANT UPDATE ON dev_scratch TO "${instance.runtimeRole}"`);
+    });
+  } finally { await db.end(); }
+  await configureProduct(instance, cluster);
+  if (inputs) deployed.set(`${instance.root}:${instance.generation}`, inputs.hash);
+}
+
+async function deployProduct(instance: Instance, cluster: Cluster, baseline: boolean) {
+  const require = createRequire(join(instance.checkout, 'packages/server/package.json'));
+  const url = new URL(databaseUrl(cluster, instance.database));
+  url.searchParams.set('options', `-c role=${instance.ownerRole}`);
   const environment = {...childEnvironment(join(instance.root,'tmp')), ASH_MIGRATION_DATABASE_URL:url.toString()};
   try {
     if (baseline) await exec(process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', 'resolve', '--applied', '202610090000_dev_bootstrap', '--schema', 'prisma/schema.prisma'], {cwd:join(instance.checkout,'packages/server'),timeout:60_000,env:environment});
-    await exec(process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', 'deploy', '--schema', 'prisma/schema.prisma'], {
+    await measure('database.deploy', () => exec(process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', 'deploy', '--schema', 'prisma/schema.prisma'], {
       cwd:join(instance.checkout,'packages/server'), timeout:60_000,
       env:environment,
-    });
+    }), instance.id);
   } catch (error) {
     const diagnostic = (error as {stderr?:string}).stderr ?? '';
     throw new Error(`Product migration failed; existing data was not reset. ${diagnostic.replaceAll(url.toString(),'[database]').replaceAll(cluster.password,'[redacted]')}`);
   }
+}
+
+async function configureProduct(instance: Instance, cluster: Cluster) {
   const db = connect(cluster,instance.database);
   try {
     await db.begin(async tx => {

@@ -73,7 +73,7 @@ test('design-rails: Real overflow and sidebar movement preserve the live workspa
 
 test('design-reading: Links stay readable and nested editors retain wheel scrolling',async({ash})=>{
   const {page,app}=ash;await resize(page,app,740,650);
-  const message=page.getByLabel('Message',{exact:true});await message.fill('[Learn more](https://example.com)');await message.press('Enter');await expect(page.getByTestId('run-status')).toHaveText('completed');
+  await expect(page.getByTestId('run-status')).toHaveText('completed');
   const link=page.getByRole('link',{name:'Learn more',exact:true});
   await expect(link).toHaveCSS('color','rgb(52, 70, 77)');await expect(link).toHaveCSS('text-decoration-color','rgb(114, 174, 238)');
   await link.focus();await expect(link).toBeFocused();

@@ -93,9 +93,10 @@ test('Filesystem tools: scoped observations and desktop inspection', { timeout: 
     });
     await scenarioStep(t, 'TOOL-03', async () => {
       {
-      const value = service(batchModel([call('missing.tool', {}), { ...read(), arguments: '{' }, call('filesystem.read', { path: root, startLine: 0, maxLines: 1 })]), fs, { ...DEFAULT_TOOL_LIMITS, consecutiveErrors: 5 });
+      // Generic unknown-tool/JSON rejection belongs to TOOL-02; retain filesystem schema validation here.
+      const value = service(batchModel([call('filesystem.read', { path: root, startLine: 0, maxLines: 1 })]), fs, { ...DEFAULT_TOOL_LIMITS, consecutiveErrors: 5 });
       const { run } = await start(value); await settle(value, run.id);
-      assert.deepEqual((await results(run.id)).map(result => result.status), ['error', 'error', 'error']);
+      assert.deepEqual((await results(run.id)).map(result => result.status), ['error']);
       assert.ok(RunState.parse((await db.run.findUniqueOrThrow({ where: { id: run.id } })).state).tools!.calls.every(call => !call.startedAt));
       }
       const cases = [join(root, '../outside/secret.ts'), join(root, 'escape/secret.ts'), join(root, 'private/secret.ts'), join(root, '.env'), root + 'suffix/file', join(root, 'src/a.ts') + '\0'];
@@ -155,8 +156,12 @@ test('Filesystem tools: scoped observations and desktop inspection', { timeout: 
         // Raise only this fixture's deadline to isolate the evidence cap from the independent timeout.
         const tools=fs.tools.map(tool=>({...tool,definition:{...tool.definition,limits:{...tool.definition.limits,timeoutMs:30000}}}));
         const runtime={...fs,tools,availability:async()=>({...await fs.availability!('', ''),definitions:tools.map(tool=>tool.definition)})};
-        const broadService=service(batchModel([call('filesystem.search',{path:broad,query:'no-match',pattern:null})]),runtime),listing=await start(broadService);await settle(broadService,listing.run.id,1500);
+        const broadService=service(batchModel([call('filesystem.search',{path:broad,query:'no-match',pattern:null})]),runtime),listing=await start(broadService);
+        // Poll the persisted status without repeatedly loading the growing 512-check evidence payload.
+        await until(async()=>(await db.run.findUniqueOrThrow({where:{id:listing.run.id},select:{status:true}})).status,status=>!['queued','running'].includes(status),1500);
         const exhausted=(await results(listing.run.id))[0];assert.equal(exhausted.status,'error');assert.equal(exhausted.error.code,'access_evidence_limit');
+        const evidence=RunState.parse((await db.run.findUniqueOrThrow({where:{id:listing.run.id}})).state);
+        assert.equal(evidence.tools!.calls[0].checks?.length,512,'The full access-evidence bound remains exercised');
       } finally {await rm(broad,{recursive:true});}
       }
     });

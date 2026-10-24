@@ -1,10 +1,10 @@
 import { measure, recordResource } from './telemetry.ts';
 import postgres from 'postgres';
-import { migrateProduct } from './product-database.ts';
+import { initializeProduct } from './product-database.ts';
 import { join } from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { type Instance, SCHEMA_VERSION } from '../../packages/shared/src/index.ts';
+import { type Instance } from '../../packages/shared/src/index.ts';
 import { atomic, exec, exists, id, json, secret, withLock } from './io.ts';
 
 export interface Cluster { id: string; password: string; port: number; containerId?: string; composeHash?: string }
@@ -104,19 +104,7 @@ export async function provision(instance: Instance, cluster: Cluster) {
     await admin.unsafe(`REVOKE ALL ON DATABASE ${ident(instance.database)} FROM PUBLIC`);
     await admin.unsafe(`GRANT CONNECT ON DATABASE ${ident(instance.database)} TO ${ident(instance.runtimeRole)}`);
   } finally { await admin.end(); }
-  const db = connect(cluster, instance.database);
-  try {
-    await db.unsafe(`SET ROLE ${ident(instance.ownerRole)}`);
-    await db.unsafe('REVOKE CREATE ON SCHEMA public FROM PUBLIC');
-    await db`CREATE TABLE dev_meta (instance_id text PRIMARY KEY, generation text NOT NULL, schema_version integer NOT NULL)`;
-    await db`INSERT INTO dev_meta VALUES (${instance.id}, ${instance.generation}, ${SCHEMA_VERSION})`;
-    await db`CREATE TABLE dev_scratch (id integer PRIMARY KEY CHECK (id = 1), note text NOT NULL, count integer NOT NULL DEFAULT 0)`;
-    await db`INSERT INTO dev_scratch VALUES (1, ${instance.fixture === 'empty' ? '' : 'A little space to try things out.'}, 0)`;
-    await db.unsafe(`GRANT USAGE ON SCHEMA public TO ${ident(instance.runtimeRole)}`);
-    await db.unsafe(`GRANT SELECT ON dev_meta, dev_scratch TO ${ident(instance.runtimeRole)}`);
-    await db.unsafe(`GRANT UPDATE ON dev_scratch TO ${ident(instance.runtimeRole)}`);
-  } finally { await db.end(); }
-  await measure('database.migrate', () => migrateProduct(instance, cluster), instance.id);
+  await measure('database.migrate', () => initializeProduct(instance, cluster), instance.id);
   await writeFile(join(instance.root, 'files/note.txt'), '', { mode: 0o600 });
   await atomic(join(instance.root, 'server.json'), { instance, databaseUrl: databaseUrl(cluster, instance.database, instance.runtimeRole, password), token: secret(), ...(instance.profile === 'test' && process.env.ASH_TEST_TIMING === 'accelerated' ? {testTiming:'accelerated'} : {}) });
 }

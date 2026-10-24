@@ -1,3 +1,4 @@
+import type { Preset } from './support/presets.ts';
 export type Suite = 'boundary' | 'workflow' | 'desktop';
 export interface Scenario {
   id: string;
@@ -7,6 +8,7 @@ export interface Scenario {
   file: string;
   requirements: string[];
   fixture: 'none' | 'scratchpad' | 'scratchpad / empty';
+  preset?: Preset;
 }
 
 // Product rules stay in specs/. These IDs identify executable checks, not new requirements.
@@ -51,7 +53,7 @@ const inventory: Omit<Scenario, 'group' | 'file'>[] = [
  {id:'scene-replacement',title:'Complete scene swaps, rejected assets, lifecycle and fallback preserve playback',suite:'desktop',requirements:['SCN-06','SCN-07','SCN-11','SCN-13','SCN-15'],fixture:'scratchpad'},
  {id:'scene-resolution',title:'Native artwork resolution and bounded effect/grading buffers survive lighting and resize',suite:'desktop',requirements:['SCN-04','SCN-07','SCN-13','SCN-15'],fixture:'scratchpad'},
  {id:'scene-phase-motion',title:'Worker-prepared rotating lighting transitions release temporary native frames',suite:'desktop',requirements:['SCN-07','SCN-08','SCN-13','DS-R13'],fixture:'scratchpad'},
- {id:'design-reading',title:'Readable links and native nested editor scrolling at minimum window size',suite:'desktop',requirements:['DS-R01','DS-R03','DS-R11','DS-R12','DS-V07','DS-V10','DS-V11'],fixture:'scratchpad'},
+ {id:'design-reading',title:'Readable links and native nested editor scrolling at minimum window size',suite:'desktop',requirements:['DS-R01','DS-R03','DS-R11','DS-R12','DS-V07','DS-V10','DS-V11'],fixture:'scratchpad',preset:{name:'conversation_ready',message:'[Learn more](https://example.com)'}},
  {id:'design-dismissal',title:'Outside dismissal preserves layer ownership and guarded drafts; close controls align',suite:'desktop',requirements:['DS-R03','DS-R04','DS-R10','DS-V04','DS-V05'],fixture:'scratchpad'},
  {id:'design-rails',title:'Sidebars animate layout while real overflow and live editing remain intact',suite:'desktop',requirements:['DS-R09','DS-R11','DS-R12','DS-R13','DS-V07','DS-V08'],fixture:'scratchpad'},
  {id:'design-controls',title:'Shared field states, grouped popups and dialog focus',suite:'desktop',requirements:['DS-R01','DS-R02','DS-R03','DS-R04','DS-R06','DS-R08','DS-R10','DS-V02','DS-V03','DS-V04'],fixture:'scratchpad'},
@@ -136,7 +138,7 @@ const inventory: Omit<Scenario, 'group' | 'file'>[] = [
   { id: 'TOOL-22', title: 'Byte reservations wait without aborting valid work', suite: 'workflow', requirements: ['TOOL-R09', 'TOOL-A06', 'TOOL-A10'], fixture: 'scratchpad / empty' },
   { id: 'TOOL-23', title: 'Excessive argument nesting returns an error without stopping valid calls', suite: 'workflow', requirements: ['TOOL-A05'], fixture: 'scratchpad / empty' },
   { id:'topics-settings-desktop',title:'Settings preserve ownership and unsaved drafts',suite:'desktop',requirements:['TOP-R01','TOP-R02','TOP-R04','INST-R07','INST-R09'],fixture:'scratchpad' },
-  { id:'context-inspection-desktop',title:'Captured context remains inspectable after edits',suite:'desktop',requirements:['CTX-R08','CTX-R09'],fixture:'scratchpad' },
+  { id:'context-inspection-desktop',title:'Captured context remains inspectable after edits',suite:'desktop',requirements:['CTX-R08','CTX-R09'],fixture:'scratchpad',preset:{name:'conversation_ready',message:'First context inspection answer'} },
   { id:'topics-organization',title:'Manual Topics and membership preserve threads',suite:'workflow',requirements:['TOP-R01','TOP-R02','TOP-R03','TOP-R04'],fixture:'scratchpad / empty' },
   { id:'instructions-editing',title:'Instruction ownership and concurrent saves remain independent',suite:'workflow',requirements:['INST-R01','INST-R02','INST-R03','INST-R07','INST-R09'],fixture:'scratchpad / empty' },
   { id:'instructions-applicability',title:'Only applicable response instructions enter context',suite:'workflow',requirements:['INST-R05','INST-R06','INST-R09'],fixture:'scratchpad / empty' },
@@ -154,6 +156,7 @@ const inventory: Omit<Scenario, 'group' | 'file'>[] = [
   { id: 'workflow-setup', title: 'Concurrent setup in real detached worktrees', suite: 'workflow', requirements: ['DEV-01', 'DEV-03'], fixture: 'scratchpad' },
   { id: 'workflow-isolation', title: 'Database and file writes stay isolated', suite: 'workflow', requirements: ['DEV-02', 'DEV-05'], fixture: 'scratchpad' },
   { id: 'workflow-restart', title: 'Repeated launch reuses the runtime and preserves data', suite: 'workflow', requirements: ['DEV-04'], fixture: 'scratchpad' },
+  { id: 'workflow-migrations', title: 'Repeated test migrations preserve data and reject stale or failed history', suite: 'workflow', requirements: ['DEV-04', 'DEV-07'], fixture: 'scratchpad / empty' },
   { id: 'workflow-desktop', title: 'Desktop state and hot reload stay isolated', suite: 'workflow', requirements: ['DEV-02', 'DEV-11'], fixture: 'scratchpad' },
   { id: 'workflow-reset', title: 'Reset clears owned state and rotates credentials', suite: 'workflow', requirements: ['DEV-07'], fixture: 'scratchpad / empty' },
   { id: 'workflow-crash', title: 'Crash recovery preserves unrelated processes', suite: 'workflow', requirements: ['DEV-03', 'DEV-06'], fixture: 'scratchpad / empty' },
@@ -197,11 +200,12 @@ const inventory: Omit<Scenario, 'group' | 'file'>[] = [
   { id: 'workflow-port', title: 'Saved frontend port conflicts preserve browser storage', suite: 'workflow', requirements: ['DEV-03', 'DEV-04'], fixture: 'scratchpad' },
   { id: 'chat-persistence', title: 'Keyboard messages and drafts survive desktop reopening', suite: 'desktop', requirements: ['DEV-04'], fixture: 'scratchpad' },
   { id: 'desktop-background', title: 'Hidden windows support interaction without native focus', suite: 'desktop', requirements: ['DEV-11'], fixture: 'scratchpad' },
-  { id: 'chat-layout', title: 'Thread layout at normal and minimum window sizes', suite: 'desktop', requirements: ['DEV-11','DS-R03','DS-R04','DS-R05','DS-R07','DS-R12','DS-V10'], fixture: 'scratchpad' },
+  { id: 'chat-layout', title: 'Thread layout at normal and minimum window sizes', suite: 'desktop', requirements: ['DEV-11','DS-R03','DS-R04','DS-R05','DS-R07','DS-R12','DS-V10'], fixture: 'scratchpad', preset:{name:'conversation_ready',message:'Hello Ash.'} },
+  { id: 'verification-presets', title: 'Preset recipes preserve real captures and independent disposable state', suite: 'workflow', requirements: ['DEV-04','DEV-07','DEV-11'], fixture: 'scratchpad / empty' },
 ];
 
 
-export interface TestGroup { id: string; suite: Suite; file: string; scenarios: string[]; exclusive?: boolean }
+export interface TestGroup { id: string; purpose?: string; suite: Suite; file: string; scenarios: string[]; exclusive?: boolean; quick?: boolean }
 export const testGroups: TestGroup[] = [
   {"id":"adapt-recording","suite":"workflow","file":"tests/integration/adapt-recording.test.ts","scenarios":["adapt-recording-context","adapt-recording-tools-recovery","adapt-recording-scope-handoff","adapt-recording-failures","adapt-recording-desktop"],"exclusive":false},
   {"id": "adapt-application", "suite": "workflow", "file": "tests/integration/adapt-application.test.ts", "scenarios": ["adapt-application-authority", "adapt-application-stale", "adapt-application-recovery"], "exclusive": false},
@@ -212,22 +216,27 @@ export const testGroups: TestGroup[] = [
   {"id": "adapt", "suite": "workflow", "file": "tests/integration/adapt.test.ts", "scenarios": ["adapt-capture", "adapt-decisions-restart", "adapt-cancel-parallel", "adapt-recovery", "adapt-checkpoint-boundary", "adapt-preview-follow"], "exclusive": false},
   {"id": "adapt-desktop", "suite": "desktop", "file": "tests/e2e/adapt.spec.ts", "scenarios": ["adapt-desktop", "adapt-decision-timeline"]},
 
+  {id:'chat-desktop',purpose:'Live message UX, interruption and navigation',suite:'workflow',file:'tests/integration/threads.test.ts',scenarios:['chat-desktop']},
+  {id:'images-desktop',purpose:'Live image composition, rendering and inspection',suite:'workflow',file:'tests/integration/images.test.ts',scenarios:['images-desktop']},
+  {id:'videos-desktop',purpose:'Live video attachment composition and playback',suite:'workflow',file:'tests/integration/video.test.ts',scenarios:['videos-desktop']},
+  {id:'video-understanding-desktop',purpose:'Saved video citations and evidence playback',suite:'workflow',file:'tests/integration/video-understanding.test.ts',scenarios:['video-understanding-desktop']},
+  {id:'presets',suite:'workflow',file:'tests/integration/presets.test.ts',scenarios:['verification-presets']},
   {"id": "artifacts", "suite": "workflow", "file": "tests/integration/artifacts.test.ts", "scenarios": ["engine-filter-route", "engine-presentation-context", "engine-permission-decisions", "engine-provider-capture", "engine-recovery-capacity", "engine-context-bounds"], "exclusive": false},
   {"id": "combined-context", "suite": "workflow", "file": "tests/integration/combined-context.test.ts", "scenarios": ["combined-context"], "exclusive": false},
   {"id": "filesystem-tools", "suite": "workflow", "file": "tests/integration/filesystem-tools.test.ts", "scenarios": ["TOOL-01", "TOOL-03", "TOOL-04", "TOOL-05", "TOOL-19", "TOOL-20", "TOOL-21", "TOOL-24", "TOOL-15", "TOOL-16"], "exclusive": false},
-  {"id": "images", "suite": "workflow", "file": "tests/integration/images.test.ts", "scenarios": ["images-snapshot", "visibility-media-locks", "images-boundaries", "images-description-retry", "images-cleanup", "images-desktop"], "exclusive": false},
+  {"id": "images", "suite": "workflow", "file": "tests/integration/images.test.ts", "scenarios": ["images-snapshot", "visibility-media-locks", "images-boundaries", "images-description-retry", "images-cleanup"], "exclusive": false},
   {"id": "model-routing", "suite": "workflow", "file": "tests/integration/model-routing.test.ts", "scenarios": ["model-routing-execution", "model-routing-recovery"], "exclusive": false},
   {"id": "openai", "suite": "workflow", "file": "tests/integration/openai.test.ts", "scenarios": ["openai-credentials", "openai-capture", "openai-outcomes", "openai-desktop", "openai-budget", "openai-interactive"], "exclusive": false},
   {"id": "permissions-decisions", "suite": "workflow", "file": "tests/integration/permissions-decisions.test.ts", "scenarios": ["permissions-defaults", "permissions-filesystem-authoring", "permissions-policy", "permissions-reviewed-overrides", "permissions-policy-migration", "permissions-traversal-boundaries", "permissions-review-authoring", "permissions-authoring-priorities", "permissions-change-sets", "decisions-lifecycle", "decisions-chat-race", "decisions-scheduling-wake", "permissions-default-code", "permissions-decisions-stretch", "decisions-resumption"], "exclusive": false},
-  {"id": "threads", "suite": "workflow", "file": "tests/integration/threads.test.ts", "scenarios": ["chat-schema", "chat-organization", "chat-delivery", "chat-context", "chat-cancellation", "chat-retries", "chat-concurrency", "chat-restart", "chat-limits", "chat-ownership", "chat-instructions", "chat-desktop"], "exclusive": false},
+  {"id": "threads", "suite": "workflow", "file": "tests/integration/threads.test.ts", "scenarios": ["chat-schema", "chat-organization", "chat-delivery", "chat-context", "chat-cancellation", "chat-retries", "chat-concurrency", "chat-restart", "chat-limits", "chat-ownership", "chat-instructions"], "exclusive": false},
   {"id": "tools", "suite": "workflow", "file": "tests/integration/tools.test.ts", "scenarios": ["TOOL-02", "TOOL-23", "TOOL-06", "TOOL-07", "TOOL-08", "TOOL-09", "TOOL-10", "TOOL-11", "TOOL-12", "TOOL-13", "TOOL-14", "TOOL-17", "TOOL-22", "TOOL-18"], "exclusive": false},
   {"id": "topic-tools", "suite": "workflow", "file": "tests/integration/topic-tools.test.ts", "scenarios": ["topic-tool-integration"], "exclusive": false},
   {"id": "topics-context", "suite": "workflow", "file": "tests/integration/topics-context.test.ts", "scenarios": ["topics-organization", "instructions-editing", "instructions-applicability", "context-snapshots", "topic-retrieval", "topic-isolation", "context-limits", "context-compatibility"], "exclusive": false},
-  {"id": "video-understanding", "suite": "workflow", "file": "tests/integration/video-understanding.test.ts", "scenarios": ["video-background-context", "video-tools-scope-evidence", "video-processing-bounds", "video-recovery-failure", "video-understanding-desktop"], "exclusive": false},
-  {"id": "video", "suite": "workflow", "file": "tests/integration/video.test.ts", "scenarios": ["videos-storage", "videos-thread", "videos-desktop", "recording-lifecycle", "recording-startup-cancel", "recording-upload-recovery", "recording-viewer-retry"], "exclusive": false},
+  {"id": "video-understanding", "suite": "workflow", "file": "tests/integration/video-understanding.test.ts", "scenarios": ["video-background-context", "video-tools-scope-evidence", "video-processing-bounds", "video-recovery-failure"], "exclusive": false},
+  {"id": "video", "suite": "workflow", "file": "tests/integration/video.test.ts", "scenarios": ["videos-storage", "videos-thread", "recording-lifecycle", "recording-startup-cancel", "recording-upload-recovery", "recording-viewer-retry"], "exclusive": false},
   {"id": "visibility-decisions", "suite": "workflow", "file": "tests/integration/visibility-decisions.test.ts", "scenarios": ["visibility-waiting-decisions", "visibility-combined-upgrades"], "exclusive": false},
   {"id": "visibility", "suite": "workflow", "file": "tests/integration/visibility.test.ts", "scenarios": ["visibility-migration", "visibility-lifecycle", "visibility-naming-conflicts", "visibility-history", "visibility-recovery-context", "visibility-migrated-controls"], "exclusive": false},
-  {"id": "workflow", "suite": "workflow", "file": "tests/integration/workflow.test.ts", "scenarios": ["workflow-setup", "workflow-isolation", "workflow-restart", "workflow-port", "workflow-desktop", "workflow-reset", "workflow-crash", "workflow-identity", "workflow-native", "workflow-disposal", "workflow-config", "workflow-recreate", "workflow-cleanup"], "exclusive": true},
+  {"id": "workflow", "suite": "workflow", "file": "tests/integration/workflow.test.ts", "scenarios": ["workflow-setup", "workflow-isolation", "workflow-restart", "workflow-port", "workflow-migrations", "workflow-desktop", "workflow-reset", "workflow-crash", "workflow-identity", "workflow-native", "workflow-disposal", "workflow-config", "workflow-recreate", "workflow-cleanup"], "exclusive": true},
   {"id": "engine-desktop", "suite": "desktop", "file": "tests/e2e/artifacts.spec.ts", "scenarios": ["engine-desktop"]},
   {"id": "engine-internal-desktop", "suite": "desktop", "file": "tests/e2e/artifacts.spec.ts", "scenarios": ["engine-internal-desktop"]},
   {"id": "chat-persistence", "suite": "desktop", "file": "tests/e2e/chat.spec.ts", "scenarios": ["chat-persistence"]},
@@ -254,7 +263,10 @@ export const testGroups: TestGroup[] = [
   {"id": "visibility-decisions-desktop", "suite": "desktop", "file": "tests/e2e/visibility.spec.ts", "scenarios": ["visibility-decisions-desktop"]},
   {"id": "visibility-desktop", "suite": "desktop", "file": "tests/e2e/visibility.spec.ts", "scenarios": ["visibility-desktop"]},
   {"id": "visibility-recording-recovery", "suite": "desktop", "file": "tests/e2e/visibility.spec.ts", "scenarios": ["visibility-recording-recovery"]},
-  {"id": "boundary", "suite": "boundary", "file": "tests/boundary/*.test.ts", "scenarios": ["adapt-compiler-assets", "adapt-managed-protocol", "boundary-paths", "boundary-locks", "boundary-environment", "boundary-process", "boundary-fingerprint", "verification-cli", "verification-evidence"]},
+  {id:'boundary',purpose:'Storage, process and environment guards',suite:'boundary',file:'tests/boundary/ownership.test.ts',scenarios:['boundary-paths','boundary-locks','boundary-environment','boundary-process','boundary-fingerprint'],quick:true},
+  {id:'verification',purpose:'Verifier selection, failure, cancellation and evidence contracts',suite:'boundary',file:'tests/boundary/verification.test.ts',scenarios:['verification-cli','verification-evidence']},
+  {id:'adapt-compiler',purpose:'Protected renderer compilation boundaries',suite:'boundary',file:'tests/boundary/adapt-compiler.test.ts',scenarios:['adapt-compiler-assets']},
+  {id:'adapt-protocol',purpose:'Managed coding protocol boundaries',suite:'boundary',file:'tests/boundary/adapt-protocol.test.ts',scenarios:['adapt-managed-protocol']},
   {id:'scene-workflow',suite:'workflow',file:'tests/integration/scene-workflow.test.ts',scenarios:['scene-event-workflow','scene-event-interruption','scene-unavailable'],exclusive:false},
   {id:'scenes',suite:'workflow',file:'tests/integration/scenes.test.ts',scenarios:['scene-persistence'],exclusive:false},
   ...['scene-desktop','scene-replacement','scene-resolution','scene-phase-motion'].map(id=>({id,suite:'desktop' as const,file:'tests/e2e/scenes.spec.ts',scenarios:[id]})),
@@ -281,7 +293,7 @@ export function scenario(id: string) {
 export function selectScenarios(profile: string, requested?: string, requestedGroups?: string) {
   if (!['quick', 'full'].includes(profile)) throw new Error(`Unknown profile: ${profile}; use quick or full`);
   if (requested === '' || requestedGroups === '') throw new Error('No implemented scenario or group selected; use --list');
-  if (!requested && !requestedGroups) return scenarios.filter(s => profile === 'full' || s.suite === 'boundary');
+  if (!requested && !requestedGroups) return scenarios.filter(s => profile === 'full' || testGroups.some(g => g.id === s.group && g.quick));
   const groups = new Set<string>();
   for (const token of requested?.split(',') ?? []) {
     const matched = scenarios.filter(s => s.id === token || s.requirements.includes(token));
@@ -294,6 +306,53 @@ export function selectScenarios(profile: string, requested?: string, requestedGr
   }
   return scenarios.filter(s => groups.has(s.group));
 }
+
+// Audited pilots only. Unknown ownership or new consumers defer automatic iteration.
+export const impactComponents = [
+  {id:'model-routing',contract:'Routing decisions, recovery and settings',
+    files:['packages/server/src/modules/threads/model-routing.ts','packages/client/src/renderer/features/threads/ModelSettings.svelte'],
+    consumers:['packages/server/src/modules/threads/service.ts','packages/server/src/main.ts','packages/client/src/renderer/features/threads/Chat.svelte'],
+    scenarios:['model-routing-execution','model-routing-recovery','model-routing-desktop'],reviewAbove:3},
+  {id:'message-rendering',contract:'Message formatting, citations and streaming DOM',
+    files:['packages/client/src/renderer/features/threads/Markdown.svelte','packages/client/src/renderer/features/threads/markdown.ts','packages/client/src/renderer/features/threads/streaming.ts'],
+    consumers:['packages/client/src/renderer/features/threads/Message.svelte'],
+    scenarios:['chat-layout','design-reading','chat-desktop','images-desktop','videos-desktop','video-understanding-desktop','engine-desktop','engine-internal-desktop'],reviewAbove:8},
+];
+export const coverageReviews: Array<{scenarios:[string,string];hashes:[string,string];reason:string}> = [
+  {
+    "scenarios": [
+      "TOOL-19",
+      "TOOL-12"
+    ],
+    "hashes": [
+      "8c038ea3062f3d24670ff2adebd10cb0349b8c8bead810feee8b7e9091541277",
+      "42d1a214bae80a4dacc593eb8e1acd379c550b22db9eb3fb2f8263665f85a193"
+    ],
+    "reason": "Filesystem configuration failure preserves ordinary chat and denies dispatch; incomplete provider call arguments fail the Run without execution."
+  },
+  {
+    "scenarios": [
+      "TOOL-23",
+      "TOOL-06"
+    ],
+    "hashes": [
+      "cff03676914a192015b16e380ba8da3a7adb2378ec20a8b367c41e12f57c3cea",
+      "fcf00a1508766eb664023d0a05d1cc749f1a8183181a86e1cf99fd2269d95d07"
+    ],
+    "reason": "Argument-depth admission differs from output size, handler failures and execution/authorization deadlines."
+  },
+  {
+    "scenarios": [
+      "chat-desktop",
+      "openai-desktop"
+    ],
+    "hashes": [
+      "7de285d48cfe17c3ed9fa3602ee990e66345ff398ebc676295ed7102a30494d5",
+      "90e631ea9e538d51feb0b95da9be4f38dccb12bcf243988a2b571a269d728352"
+    ],
+    "reason": "Desktop interaction/reconnect coverage differs from provider disclosure, usage inspection and expired-session refusal."
+  }
+];
 
 export const manualChecks = [{
   id: 'desktop-experience',

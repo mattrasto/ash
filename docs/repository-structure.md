@@ -70,10 +70,10 @@ ash/
 │       ├── package.json
 │       └── src/contracts/            # Cross-process requests, responses, events
 ├── scripts/
-│   ├── dev/                          # Workspace launcher, provisioning, reset and verification
+│   ├── dev/                          # Lifecycle, provisioning, selection and DAG verification
 │   └── ...                           # DBML export and other repository tooling
 ├── tests/
-│   ├── scenarios.ts                 # Requirement links and manual procedures
+│   ├── scenarios.ts                 # Scenario/group registry, preset declarations and manual procedures
 │   ├── boundary/                    # Ownership invariants and CLI contracts
 │   ├── integration/                 # Database, model and real-worktree journeys
 │   ├── e2e/

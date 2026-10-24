@@ -36,7 +36,7 @@ async function launchDesktop(instance: Instance) {
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-    await page.getByTestId('connection').filter({ hasText: 'Connected' }).waitFor({ timeout: 15_000 });
+    await measure('desktop.connected', () => page.getByTestId('connection').filter({ hasText: 'Connected' }).waitFor({ timeout: 15_000 }), instance.id);
     const network = new PollingRoutes(page);
     const close = async () => { try { await network.dispose(); } finally { await app.close(); } };
     return { app, page, errors, network, close };

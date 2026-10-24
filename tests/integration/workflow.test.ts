@@ -14,6 +14,8 @@ import { scenarioStep } from '../support/node-scenarios.ts';
 import { ServerConfig, type Instance, type PreviewInfo } from '../../packages/shared/src/index.ts';
 import { connect, ensureCluster, type Cluster } from '../../scripts/dev/database.ts';
 import { makeWorktree } from '../helpers/worktree.ts';
+import { checkMigrationReuse } from '../helpers/migrations.ts';
+import { checkStartupPreparationFailure } from '../helpers/startup.ts';
 
 const source = process.cwd();
 async function state(instance: Instance) { const response = await request(instance, '/api/state'); assert.equal(response.status, 200); return response.json() as Promise<{note: string; count: number; fileNote: string}>; }
@@ -78,6 +80,7 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       await startInstance(wa,a.id,{headless:true});
       assert.equal((await runtime(a))!.webUrl,url);
     });
+    await scenarioStep(t, 'workflow-migrations', () => checkMigrationReuse(wa, a));
     await scenarioStep(t, 'workflow-desktop', async () => {
       const da = await desktop(a); apps.push(da.app);
       const db = await desktop(b); apps.push(db.app);
@@ -130,6 +133,7 @@ test('parallel worktrees, desktop state, reset, credentials and lifecycle', { ti
       const before = (await runtime(a))!;
       process.kill(before.supervisor.pid, 'SIGKILL');
       for (let i=0; i<30 && await alive(before.supervisor); i++) await sleep(100);
+      await checkStartupPreparationFailure(wa,a);
       await startInstance(wa, a.id, {headless:true});
       assert.equal((await state(a)).count, 0); assert.equal((await state(b)).note, 'Feature B');
       assert.equal(await (await fetch(`http://127.0.0.1:${foreignPort}`)).text(), 'foreign');

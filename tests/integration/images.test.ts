@@ -1,8 +1,9 @@
 import { launchElectron } from '../support/electron.ts';
-import { scenarioStep } from '../support/node-scenarios.ts';
+import { scenarioStep, onlyScenario } from '../support/node-scenarios.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { request as httpRequest } from 'node:http';
 import { mkdtemp,mkdir,rm,readFile,writeFile,access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -35,8 +36,19 @@ test('persisted images, description Runs and desktop workflow (no external calls
   const settle=(thread:string,run:string)=>until(()=>threads.readThread(thread),view=>view.runs.some(r=>r.id===run&&!['queued','running'].includes(r.status)));
   async function request(path:string,body?:object){const live=(await runtime(instance))!;return fetch(`${live.serverUrl}/api/${path}`,{method:body?'POST':'GET',headers:{authorization:`Bearer ${cfg.token}`,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});}
   async function api<T>(path:string,body?:object):Promise<T>{const result=await request(path,body);assert.equal(result.status,200,await result.clone().text());return result.json();}
-  async function upload(filename:string,data=bytes,uploadId=randomUUID()){
-    const live=(await runtime(instance))!;return fetch(`${live.serverUrl}/api/attachments/${uploadId}`,{method:'PUT',headers:{authorization:`Bearer ${cfg.token}`,'content-type':'application/octet-stream','x-image-filename':encodeURIComponent(filename)},body:new Uint8Array(data)});
+  async function upload(filename:string,data=bytes,declaredLength?:number){
+    const live=(await runtime(instance))!;
+    return new Promise<{status:number}>((resolve,reject)=>{
+      // Separate early Content-Length rejection from the real streamed-byte limit.
+      // A bulk fetch write can fail after the server has already sent its 413 response.
+      const request=httpRequest(`${live.serverUrl}/api/attachments/${randomUUID()}`,{method:'PUT',signal:AbortSignal.timeout(15000),headers:{
+        authorization:`Bearer ${cfg.token}`,'content-type':'application/octet-stream','x-image-filename':encodeURIComponent(filename),
+        ...(declaredLength===undefined?{'transfer-encoding':'chunked'}:{'content-length':String(declaredLength)}),
+      }},response=>{
+        response.once('error',reject);response.once('end',()=>resolve({status:response.statusCode??0}));response.resume();
+      });
+      request.once('error',reject);request.end(declaredLength===undefined?data:undefined);
+    });
   }
   // The attachment and its Run can be read on opposite sides of the completion commit.
   const captionDone=(asset:string)=>until(()=>images.get(asset),a=>!!a.summaryRun&&!['queued','running'].includes(a.summaryRun.status)&&(a.summaryRun.status!=='completed'||a.summary!==null));
@@ -82,6 +94,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       const count=await db.attachment.count();
       assert.equal((await upload('fake.png',Buffer.from('<svg>not a PNG</svg>'))).status,400);
       assert.equal((await upload('too-large.png',Buffer.alloc(10*1024*1024+1))).status,413);
+      assert.equal((await upload('too-large.png',Buffer.alloc(0),10*1024*1024+1)).status,413);
       assert.equal(await db.attachment.count(),count);
       const denied=await request(`threads/${thread}/messages`,{requestKey:randomUUID(),text:'No foreign images',attachmentIds:[randomUUID()]});assert.equal(denied.status,409);
       const duplicate=await request(`threads/${thread}/messages`,{requestKey:randomUUID(),text:'No duplicates',attachmentIds:[attachment.id,attachment.id]});assert.equal(duplicate.status,400);
@@ -131,6 +144,7 @@ test('persisted images, description Runs and desktop workflow (no external calls
       if(submission.status==='fulfilled'){assert.equal((await images.get(race.id)).expiresAt,null);assert.ok(await storage.read(race.id,race.metadata.original));threads.dispatch(submission.value.id);await settle(thread,submission.value.id);}
       else assert.match(String(submission.reason),/expired or is unavailable/);
     });
+    if (onlyScenario('images-desktop')) await api('threads', {id:randomUUID(),title:'Frozen image context'});
     await scenarioStep(t, 'images-desktop',async()=>{
       const live=(await runtime(instance))!,entry=await buildMain(instance.checkout,join(instance.root,'build')),path=join(instance.root,'images-test-client.json');
       await atomic(path,{root:instance.root,label:instance.label,instanceId:instance.id,url:live.webUrl,windowed:true,background:true});

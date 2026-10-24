@@ -7,9 +7,11 @@ import { startInstance, disposeInstance } from '../../scripts/dev/lifecycle.ts';
 import { desktop } from './desktop.ts';
 import { redact } from './results.ts';
 import type { Instance } from '../../packages/shared/src/index.ts';
+import { scenario } from '../scenarios.ts';
+import { preparePreset, type PresetState } from './presets.ts';
 
 type Desktop = Awaited<ReturnType<typeof desktop>>;
-export const test = base.extend<{ instance: Instance; ash: Desktop }>({
+export const test = base.extend<{ instance: Instance; given: PresetState; ash: Desktop }>({
   instance: async ({}, use, testInfo) => {
     const ws = await workspace(process.cwd(), await devRoot());
     const instanceId = id();
@@ -37,7 +39,12 @@ export const test = base.extend<{ instance: Instance; ash: Desktop }>({
       if (cleanupError || diagnosticError) throw new Error([cleanupError, diagnosticError].filter(Boolean).join('\n'));
     }
   },
-  ash: async ({ instance }, use, testInfo) => {
+  given: async ({ instance }, use, testInfo) => {
+    const preset = scenario(testInfo.title.split(':')[0]).preset;
+    // Fresh provisioning already supplies blank_slate; populated recipes finish before app boot.
+    await use(preset ? await preparePreset(instance, preset) : { name: 'blank_slate' });
+  },
+  ash: async ({ instance, given }, use, testInfo) => {
     const ash = await desktop(instance);
     // Exclude network/DOM snapshots: they may capture authenticated requests. The trace retains actions and screenshots.
     try {

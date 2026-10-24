@@ -75,13 +75,15 @@ export async function startInstance(ws: Workspace, instanceId: string, options: 
       await stopUnlocked(instance);
     }
     if (prior) await recover(instance, prior);
-    await measure('database.migrate', () => migrateProduct(instance, cluster), instance.id);
+    await measure('database.migrate', () => migrateProduct(instance, cluster, { reuseCurrent: true }), instance.id);
     const log = await open(join(instance.root, 'logs/supervisor.log'), 'a', 0o600);
     const require = createRequire(join(ws.checkout, 'package.json'));
     const child = spawn(process.execPath, ['--import', require.resolve('tsx'), join(ws.checkout, 'scripts/dev/supervisor.ts'), join(instance.root, 'instance.json'),
       ...(options.modelSessionId ? ['--model-session',options.modelSessionId] : []),
       ...(options.debugging ? ['--debugging'] : []), ...(options.headless ? ['--headless'] : []), ...(options.windowed ? ['--windowed'] : []), ...(options.background ? ['--background'] : [])],
-    { cwd: ws.checkout, detached: true, stdio: ['ignore', log.fd, log.fd], env: childEnvironment(join(instance.root, 'tmp')) });
+    { cwd: ws.checkout, detached: true, stdio: ['ignore', log.fd, log.fd], env: { ...childEnvironment(join(instance.root, 'tmp')),
+      ...(process.env.ASH_TEST_EVIDENCE ? { ASH_TEST_EVIDENCE: process.env.ASH_TEST_EVIDENCE, ASH_TEST_NODE_ID: process.env.ASH_TEST_NODE_ID } : {}),
+    } });
     child.unref(); await log.close();
     const ref = await processRef(child.pid!);
     for (let i = 0; i < 600; i++) {

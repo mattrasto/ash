@@ -1,5 +1,5 @@
 import { launchElectron } from '../support/electron.ts';
-import { scenarioStep } from '../support/node-scenarios.ts';
+import { scenarioStep, onlyScenario } from '../support/node-scenarios.ts';
 import test from 'node:test';
 import { checkStreaming } from '../helpers/streaming.ts';
 import { checkDiagram } from '../helpers/schema.ts';
@@ -204,6 +204,11 @@ test('persisted deterministic thread and Artifact inspection', {timeout:180_000}
         assert.equal(captured.messages[0].content,original.text);
       } finally {await admin`UPDATE instructions SET text=${original.text},updated_at=now() WHERE key='response'`;await admin.end();}
     });
+    if (onlyScenario('chat-desktop')) {
+      // Navigation needs a second thread, not the backend scenarios' assertions.
+      const target = await newThread('Persisted repair checklist');
+      const run = await send(target, 'Make a repair checklist');await settled(target, run.id);
+    }
     await scenarioStep(t, 'chat-desktop',async()=>{
       const running=(await runtime(instance))!;
       const entry=await buildMain(instance.checkout,join(instance.root,'build'));

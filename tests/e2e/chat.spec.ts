@@ -48,13 +48,14 @@ test('chat-layout: Thread layout at normal and minimum window sizes', async ({ a
   await page.getByRole('combobox',{name:'Scene lighting'}).selectOption('day');
   await expect(page.locator('[data-scene-status="ready"]')).toHaveCount(1);
   await expect(page.locator('.scene-host canvas')).toHaveAttribute('data-cloud-state','ready');
-  await page.getByLabel('Message', { exact: true }).fill('Hello Ash.');
-  await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await expect(page.getByTestId('run-status')).toHaveText('completed');
   await expect(page.getByTestId('message')).toHaveCount(2);
   await page.getByLabel('Message', { exact: true }).fill('A saved draft');
   await expect(page.getByRole('heading',{name:'Hello Ash.',exact:true})).toBeVisible();
   await expect(page.getByTestId('thread-event')).toHaveCount(1);
+  // This baseline shows the beginning of the conversation, independent of initial follow mode.
+  await page.locator('.transcript').hover();
+  await page.mouse.wheel(0, -1000);
   await page.mouse.move(1, 1);
   for (const [width, height] of [[1040, 830], [740, 650]]) {
     await app.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setContentSize(size[0], size[1]), [width, height]);

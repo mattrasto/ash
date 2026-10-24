@@ -24,7 +24,7 @@ import {devRoot,json,exec,sleep} from '../../scripts/dev/io.ts';
 import {workspace,createInstance} from '../../scripts/dev/workspace.ts';
 import {startInstance,disposeInstance,runtime} from '../../scripts/dev/lifecycle.ts';
 import {desktop} from '../support/desktop.ts';
-import {scenarioStep} from '../support/node-scenarios.ts';
+import {scenarioStep,onlyScenario} from '../support/node-scenarios.ts';
 async function until<T>(read:()=>Promise<T>,accept:(v:T)=>boolean,timeout=30000){const end=Date.now()+timeout;do{const v=await read();if(accept(v))return v;await sleep(25);}while(Date.now()<end);throw Error('Video understanding fixture timed out.');}
 const call=(name:string,args:unknown):ToolCall=>({name,callId:randomUUID(),arguments:JSON.stringify(args)});
 test('video understanding persists background context, shared tools and inspectable evidence without external calls',{timeout:240000},async t=>{
@@ -151,6 +151,18 @@ test('video understanding persists background context, shared tools and inspecta
       await db.attachment.update({where:{id:orphan.id},data:{expiresAt:new Date(Date.now()-1)}});await attachments.cleanup();
       assert.equal(await db.attachment.findUnique({where:{id:orphan.id}}),null);
     });
+    if (onlyScenario('video-understanding-desktop')) {
+      // Construct saved media evidence through real services; no other test runs.
+      hold=false;release();
+      asset=await attachments.uploadVideo(randomUUID(),'mock.mp4',createReadStream(fixture),false,true);await done(asset.summaryRun!.id);
+      thread=randomUUID();await plain.createThread(thread,'Video understanding fixture');
+      await permissions.seed();
+      const model:ModelAdapter={...deterministicModel,async *stream(request){
+        if(!request.tools?.previousOutputIds.length)yield {kind:'output' as const,calls:[call('ask_video',{attachmentId:asset.id,question:'What is the final requested color?'}),call('describe_video',{attachmentId:asset.id,startSeconds:.4,endSeconds:1.2,fps:5})]};
+        else yield 'Mock video answer [recorded evidence](ash-source:'+request.tools.results[0].result.references[0].citationId+').';
+      }};
+      answerRun=await threads(model,true,true).submit(thread,randomUUID(),'Describe this video and find its final color.','normal',[asset.id]);await done(answerRun.id);
+    }
     await scenarioStep(t,'video-understanding-desktop',async()=>{
       await startInstance(ws,instance.id,{headless:true});browser=await desktop(instance);const {page}=browser;
       await page.getByRole('button',{name:'Video understanding fixture',exact:true}).first().click();

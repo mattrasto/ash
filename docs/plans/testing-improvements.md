@@ -4,6 +4,48 @@ Authorized, 2026-10-22 · Implemented · Verified on frozen feature source, 2026
 
 Shorten feedback during feature work and reduce repeated full verification caused by harness failures. Deliver two stages: focused verification and reliable fixtures, then cheaper setup, shorter test timings and bounded concurrency. Ordinary development follows the updated [testing policy](../testing.md).
 
+Current execution and measurements: [selection, DAG and setup follow-up](testing-selection-and-presets.md#fresh-provisioning-concurrency-and-quick-checks). The checkpoints and original acceptance targets below retain their historical workloads and limits.
+
+## Historical migration-reuse checkpoint
+
+Implemented, 2026-10-23 · Benchmark checkpoint `ca43fa5` · Upload correction `294aab1` · Integration not authorized
+
+Repeated test startup now reuses a successful migration deployment only after checking unchanged inputs, database identity and complete migration history. Seeds and grants still run. [Guards and fixture rules](../testing.md#infrastructure) own the behavior; new phase measurements distinguish bundling, Electron launch and connection readiness. Product code and ordinary timing are unchanged.
+
+### Feedback measurements
+
+Same Mac, Node 24.19.0, Electron 42.11.3, Playwright 1.58.2, two workers and accelerated disposable-test timing. Source remained frozen within each run. The three full benchmarks share `ca43fa5`; later upload-only correction samples are separate. Elapsed verifier time includes prerequisites and cleanup; the measurement wrapper adds 0.3–0.7s where recorded.
+
+| Selection | Before | After | Samples before / after |
+| --- | --- | --- | --- |
+| Full verification | 7m 22s | 7m 25s median; 6m 41s–8m 52s | 1 merged gate / 3 |
+| Quick | 20.5s | 19.2s median; 19.3s slowest | 1 / 3 |
+| Routing integration and desktop | 34.8s | 31.6s | 1 / 1 |
+| Visibility deadline and recovery | 53.9s | 53.7s | 1 / 1 |
+| Chat layout | 24.3s | 24.8s median; 24.9s slowest | 1 / 3 |
+
+The full workload grew from 147 to 148 scenarios: all original IDs, requirements and groups remain, plus `workflow-migrations` (11.4s median). Quick and focused samples use unchanged relevant paths across the fixture checkpoints. Layout is 0.4s above its single reference; these sparse, differently loaded samples cannot establish a general no-regression result. Quick meets the 20-second target; the full median misses seven minutes by 25s.
+
+Five matched migration pairs measured 557ms median for explicit deployment versus 33ms for validated reuse, including seed/grant work: 94% less time at that boundary. In full runs, the 48 repeated test-startup migration spans fell from 606ms median in the merged gate to 34ms pooled across three runs. This is not an additive wall-time saving: phases overlap, and the new regression adds work.
+
+Host contention limits the full-run comparison. One-minute load reached 34 during the slowest passing run; unrelated Ash work, browsers and system processes were active. None were stopped. Invocation-scoped idle-sleep prevention avoided the earlier known sleep condition but does not eliminate contention. No overall full-suite speedup is established.
+
+### Reliability and failure cost
+
+All three benchmark gates passed 148/148 on their first attempt, with valid fingerprints and successful cleanup. Native recording, real motion, isolation, recovery and existing interruption contracts remain covered. Separate app exploration at normal timing preserved transcript and draft through backend/desktop restart and opened saved response inspection; its disposable instance was removed.
+
+| Retained failed attempt | Diagnosis and verification |
+| --- | --- |
+| First full attempt: filesystem evidence check timed out during extreme load | Polling repeatedly loaded its growing evidence payload. Poll only persisted status, then validate all 512 records. The 513-file traversal and existing 30s deadline remain. Ten subsequent individual first-attempt passes include one paired run that failed elsewhere. |
+| First correction check: optional evidence field caused a type error | Corrected the assertion; subsequent type checks passed. |
+| Fifth paired reliability run: oversized upload lost its HTTP response (`ECONNRESET`) | Bulk `fetch` reproduced 12 transport failures in 80 probes. Chunked streaming returned real HTTP 413 in 40/40 probes. The corrected fixture checks both declared length and oversized bytes; all three focused runs passed without retries. |
+
+Failed/interrupted verification invocations consumed 4m 04s. From the filesystem failure event to corrected focused feedback took 4m 40s; from its original full invocation to a passing full gate took 14m 41s. Upload diagnosis, correction and focused rerun took 6m 01s from failure event to pass. Probe failures and interrupted/missing results remain in evidence; they are excluded from successful timing samples, not erased. All recorded cleanup passed.
+
+Workflow checks still take a 4m 42s median and desktop checks 2m 20s. Each full run provisions 50 isolated databases, waits for services 68 times and launches Electron 46 times. Main/preload bundling totals only 0.7–1.0s across 42 calls, so caching it is unjustified. Next investigation should target fresh provisioning and service startup without sharing mutable state; raising concurrency on this contended host is unsupported. Slow recording, visibility, image and Topic journeys still require behavioral observation.
+
+Local diagnostics: `~/.ash-dev/evidence/testing-feedback-01a16a31/comparison.json` indexes baselines, benchmarks, failed attempts, probes, app exploration and the separate final gate. This bounded follow-up does not repeat the historical benchmark below.
+
 ## Baseline
 
 Audit revision: `d43a883`. The latest passing full run covered 147 scenarios: 114 workflow, 26 desktop and 7 boundary scenarios. Its command durations totaled 13m 38s: workflow 7m 35s, desktop 5m 45s, types 11.5s, build 2.3s and boundary checks 3.9s. Local evidence: `~/.ash-dev/evidence/493b2ac9f9c9ea33df420831/report.json`.
@@ -112,6 +154,12 @@ Run this comparison once for the harness change. Ordinary feature work uses focu
 
 Handoff: a compact before/after table, preserved coverage, first-attempt outcomes, remaining slow groups and any unmet target. Update `docs/testing.md` with implemented commands and selection behavior. Follow the existing [Git integration requirements](../development.md#git-integration); this plan does not authorize integration.
 
+## Next experiments
+
+The [selection and preset plan](testing-selection-and-presets.md) owns the initial duplication audit, safeguards against broad/stale groups, reusable starting states and staged acceptance criteria. Deduplicate and establish the workload baseline first; increase concurrency last.
+
+Separate later candidate: **warm type checking**. One recent 19.2s quick run spent 12.0s in type checking and 6.9s in boundary checks. Measure TypeScript and Svelte checking separately, then test compiler-managed [incremental state](https://www.typescriptlang.org/tsconfig/incremental.html) in an isolated worktree cache. Validate invalidation on source, configuration, dependency and compiler changes; preserve verifier failure/cancellation checks. Measure this independently from preset and selection changes.
+
 ## Deferred work
 
-Product refactors have a separate [launchpad](code-refactor-launchpad.md). Hosted CI, automatic impact analysis, caching passing test results and broad architecture changes are outside this plan.
+Product refactors have a separate [launchpad](code-refactor-launchpad.md). Hosted CI, caching passing test results and broad architecture changes are outside this plan.

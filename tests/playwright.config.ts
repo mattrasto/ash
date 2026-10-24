@@ -1,9 +1,13 @@
 import { defineConfig } from '@playwright/test';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+
+const outputOwner = process.env.ASH_TEST_NODE_ID;
 
 export default defineConfig({
   testDir: './e2e',
-  outputDir: join(process.env.ASH_TEST_EVIDENCE ?? 'out/verification', 'desktop'),
+  // Each runner clears its output directory at startup; graph nodes must own separate roots.
+  outputDir: join(process.env.ASH_TEST_EVIDENCE ?? 'out/verification', 'desktop', outputOwner ? createHash('sha256').update(outputOwner).digest('hex') : 'direct'),
   workers: Number(process.env.ASH_TEST_WORKERS ?? 1),
   fullyParallel: false,
   retries: 0,

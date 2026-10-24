@@ -5,13 +5,16 @@ import {rendererConfig} from './renderer-config.ts';
 export {rendererConfig} from './renderer-config.ts';
 import { fileURLToPath } from 'node:url';
 import {cp,mkdir} from 'node:fs/promises';
+import { measure } from './telemetry.ts';
 
 export async function buildMain(checkout: string, output: string) {
-  await bundle({ entryPoints: [join(checkout, 'packages/client/src/main/index.ts')], outfile: join(output, 'main.cjs'),
-    bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: ['electron'], logLevel: 'warning' });
-  await bundle({ entryPoints: [join(checkout, 'packages/client/src/preload/index.ts')], outfile: join(output, 'preload.cjs'),
-    bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: ['electron'], logLevel: 'warning' });
-  return join(output, 'main.cjs');
+  return measure('desktop.bundle', async () => {
+    await bundle({ entryPoints: [join(checkout, 'packages/client/src/main/index.ts')], outfile: join(output, 'main.cjs'),
+      bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: ['electron'], logLevel: 'warning' });
+    await bundle({ entryPoints: [join(checkout, 'packages/client/src/preload/index.ts')], outfile: join(output, 'preload.cjs'),
+      bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: ['electron'], logLevel: 'warning' });
+    return join(output, 'main.cjs');
+  }, checkout);
 }
 export async function buildAll(checkout: string, output: string) {
   await mkdir(join(output,'scenes'),{recursive:true});

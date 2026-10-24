@@ -148,7 +148,7 @@ test('topics-settings-desktop: Sidebar Topics and fixed Settings preserve owners
 
 test('context-inspection-desktop: Captured instructions and scope survive later edits',async({ash})=>{
   const {page}=ash;
-  await page.getByLabel('Message',{exact:true}).fill('First context inspection answer');await page.getByLabel('Message',{exact:true}).press('Enter');await expect(page.getByTestId('run-status')).toHaveText('completed');
+  await expect(page.getByTestId('run-status')).toHaveText('completed');
   await page.getByRole('button',{name:'Settings',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Settings'});
   await dialog.getByLabel('Instruction text').fill('Frozen global instructions');await dialog.getByRole('button',{name:'Save instructions',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('Instructions saved');await dialog.getByRole('button',{name:'Close Settings',exact:true}).click();await expect(dialog).toHaveCount(0);
   await page.getByLabel('Message',{exact:true}).fill('Second answer');await page.getByLabel('Message',{exact:true}).press('Enter');await expect(page.getByTestId('message')).toHaveCount(4);await expect(page.getByTestId('run-status').last()).toHaveText('completed');
